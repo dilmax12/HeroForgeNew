@@ -12,6 +12,7 @@ import { onboardingManager } from '../utils/onboardingSystem';
 import { eventManager } from '../utils/eventSystem';
 import { logActivity } from '../utils/activitySystem';
 import { trackMetric } from '../utils/metricsSystem';
+import { rankSystem } from '../utils/rankSystem';
 
 interface HeroState {
   heroes: Hero[];
@@ -69,6 +70,12 @@ interface HeroState {
   getLeaderboards: () => any;
   getHeroRanking: (heroId: string) => any;
   calculateHeroScore: (heroId: string) => number;
+  
+  // === SISTEMA DE RANKS v2.2 ===
+  promoteHero: (heroId: string) => boolean;
+  getHeroRankProgress: (heroId: string) => any;
+  getRankLeaderboard: () => any[];
+  markCelebrationViewed: (heroId: string, celebrationIndex: number) => void;
   
   // === GETTERS ===
   getSelectedHero: () => Hero | undefined;
@@ -230,6 +237,9 @@ export const useHeroStore = create<HeroState>()(
           updatedAt: timestamp
         };
         
+        // Inicializar dados de rank
+        newHero.rankData = rankSystem.initializeRankData(newHero);
+        
         set(state => ({
           heroes: [...state.heroes, newHero],
           selectedHeroId: newHero.id
@@ -382,6 +392,13 @@ export const useHeroStore = create<HeroState>()(
         // Verificar achievements
         get().checkAchievements(heroId);
         
+        // Atualizar dados de rank após completar missão
+        const finalHero = get().heroes.find(h => h.id === heroId);
+        if (finalHero) {
+          const newRankData = rankSystem.updateRankData(finalHero, finalHero.rankData);
+          get().updateHero(heroId, { rankData: newRankData });
+        }
+        
         // Update daily goals progress
         get().updateDailyGoalProgress(heroId, 'quest-completed', 1);
         if (quest.difficulty === 'épica') {
@@ -456,6 +473,13 @@ export const useHeroStore = create<HeroState>()(
         
         get().updateHero(heroId, updates);
         
+        // Atualizar dados de rank após ganhar XP
+        const updatedHero = get().heroes.find(h => h.id === heroId);
+        if (updatedHero) {
+          const newRankData = rankSystem.updateRankData(updatedHero, updatedHero.rankData);
+          get().updateHero(heroId, { rankData: newRankData });
+        }
+        
         // Update daily goals progress
         get().updateDailyGoalProgress(heroId, 'xp-gained', xp);
         if (newLevel > hero.progression.level) {
@@ -498,6 +522,13 @@ export const useHeroStore = create<HeroState>()(
             gold: Math.max(0, hero.progression.gold + gold)
           }
         });
+        
+        // Atualizar dados de rank após mudanças no herói
+        const updatedHero = get().heroes.find(h => h.id === heroId);
+        if (updatedHero) {
+          const newRankData = rankSystem.updateRankData(updatedHero, updatedHero.rankData);
+          get().updateHero(heroId, { rankData: newRankData });
+        }
         
         // Update daily goals progress
         if (gold > 0) {
@@ -1023,6 +1054,81 @@ export const useHeroStore = create<HeroState>()(
           }
           state.markOnboardingShown();
         }
+      },
+
+      // === SISTEMA DE RANKS v2.2 ===
+      
+      promoteHero: (heroId: string) => {
+        const hero = get().heroes.find(h => h.id === heroId);
+        if (!hero) return false;
+        
+        const progress = rankSystem.calculateProgress(hero);
+        if (!progress.canPromote) return false;
+        
+        const promotion = rankSystem.promoteHero(hero, hero.rankData);
+        if (promotion.promoted && promotion.newRank && promotion.celebration) {
+          // Atualizar dados de rank com a promoção
+          const newRankData = rankSystem.updateRankData(hero, hero.rankData);
+          get().updateHero(heroId, { rankData: newRankData });
+          
+          // Log da promoção
+          logActivity.rankPromotion({
+            heroId,
+            heroName: hero.name,
+            heroClass: hero.class,
+            newRank: promotion.newRank,
+            previousRank: progress.currentRank
+          });
+          
+          return true;
+        }
+        
+        return false;
+      },
+      
+      getHeroRankProgress: (heroId: string) => {
+        const hero = get().heroes.find(h => h.id === heroId);
+        if (!hero) return null;
+        
+        return {
+          progress: rankSystem.calculateProgress(hero),
+          rankData: hero.rankData,
+          estimate: rankSystem.estimateTimeToNextRank(hero)
+        };
+      },
+      
+      getRankLeaderboard: () => {
+        const heroes = get().heroes;
+        return heroes
+          .map(hero => rankSystem.createComparison(hero, 0))
+          .sort((a, b) => {
+            // Ordenar por rank primeiro, depois por pontos
+            const rankOrder = ['S', 'A', 'B', 'C', 'D', 'E', 'F'];
+            const aRankIndex = rankOrder.indexOf(a.rank);
+            const bRankIndex = rankOrder.indexOf(b.rank);
+            
+            if (aRankIndex !== bRankIndex) {
+              return aRankIndex - bRankIndex;
+            }
+            
+            return b.rankPoints - a.rankPoints;
+          })
+          .map((comparison, index) => ({ ...comparison, position: index + 1 }));
+      },
+      
+      markCelebrationViewed: (heroId: string, celebrationIndex: number) => {
+        const hero = get().heroes.find(h => h.id === heroId);
+        if (!hero || !hero.rankData.pendingCelebrations[celebrationIndex]) return;
+        
+        const updatedCelebrations = [...hero.rankData.pendingCelebrations];
+        updatedCelebrations.splice(celebrationIndex, 1);
+        
+        get().updateHero(heroId, {
+          rankData: {
+            ...hero.rankData,
+            pendingCelebrations: updatedCelebrations
+          }
+        });
       }
     }),
     {

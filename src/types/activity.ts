@@ -14,11 +14,13 @@ export interface ActivityData {
   dailyGoalCompleted?: string;
   combatResult?: 'victory' | 'defeat';
   enemiesDefeated?: string[];
+  newRank?: string;
+  previousRank?: string;
 }
 
 export interface Activity {
   id: string;
-  type: 'quest-completed' | 'level-up' | 'achievement-unlocked' | 'title-earned' | 'event-completed' | 'daily-goal-completed' | 'combat-victory' | 'epic-quest-completed';
+  type: 'quest-completed' | 'level-up' | 'achievement-unlocked' | 'title-earned' | 'event-completed' | 'daily-goal-completed' | 'combat-victory' | 'epic-quest-completed' | 'rank-promotion';
   timestamp: Date;
   data: ActivityData;
   message: string;

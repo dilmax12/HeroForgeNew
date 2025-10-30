@@ -79,6 +79,9 @@ export class ActivityManager {
           : `${data.enemiesDefeated?.length} inimigos`;
         return `⚔️ ${heroName} (${heroClass}) derrotou ${enemiesText} em combate!`;
       
+      case 'rank-promotion':
+        return `🏆 ${heroName} (${heroClass}) foi promovido para Rank ${data.newRank}! Uma conquista épica!`;
+      
       default:
         return `${heroName} (${heroClass}) realizou uma ação heroica!`;
     }
@@ -94,7 +97,8 @@ export class ActivityManager {
       'title-earned': '👑',
       'event-completed': '🎪',
       'daily-goal-completed': '✅',
-      'combat-victory': '⚔️'
+      'combat-victory': '⚔️',
+      'rank-promotion': '🏆'
     };
     return icons[type] || '🎮';
   }
@@ -109,7 +113,8 @@ export class ActivityManager {
       'title-earned': 'from-purple-400 to-purple-600',
       'event-completed': 'from-pink-400 to-pink-600',
       'daily-goal-completed': 'from-teal-400 to-teal-600',
-      'combat-victory': 'from-red-400 to-red-600'
+      'combat-victory': 'from-red-400 to-red-600',
+      'rank-promotion': 'from-amber-400 to-yellow-600'
     };
     return colors[type] || 'from-gray-400 to-gray-600';
   }
@@ -336,5 +341,8 @@ export const logActivity = {
     activityManager.createActivity('daily-goal-completed', data),
   
   combatVictory: (data: ActivityData) => 
-    activityManager.createActivity('combat-victory', data)
+    activityManager.createActivity('combat-victory', data),
+  
+  rankPromotion: (data: ActivityData) => 
+    activityManager.createActivity('rank-promotion', data)
 };

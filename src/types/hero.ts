@@ -2,6 +2,8 @@
  * Tipos relacionados ao sistema de heróis
  */
 
+import { HeroRankData } from './ranks';
+
 export type Attribute = 'forca' | 'destreza' | 'constituicao' | 'inteligencia' | 'sabedoria' | 'carisma';
 
 export type HeroClass = 'guerreiro' | 'mago' | 'ladino' | 'clerigo' | 'patrulheiro' | 'paladino';
@@ -306,6 +308,9 @@ export interface Hero {
   reputationFactions: ReputationFaction[];
   dailyGoals: DailyGoal[];
   achievements: Achievement[];
+  
+  // Rank System v2.2
+  rankData: HeroRankData;
 }
 
 export interface HeroCreationData {
