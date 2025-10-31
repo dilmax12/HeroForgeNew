@@ -99,6 +99,21 @@ const Layout = () => {
                   {medievalTheme.icons.ui.chart} Playtest
                 </Link>
               </li>
+              <li>
+                <Link to="/ai-avatar" className={navLinkClass('/ai-avatar')}>
+                  🎭 Avatar IA
+                </Link>
+              </li>
+              <li>
+                <Link to="/ai-missions" className={navLinkClass('/ai-missions')}>
+                  🗡️ Missões IA
+                </Link>
+              </li>
+              <li>
+                <Link to="/ai-recommendations" className={navLinkClass('/ai-recommendations')}>
+                  🧠 Recomendações IA
+                </Link>
+              </li>
             </ul>
           </nav>
         </div>

@@ -1118,7 +1118,7 @@ export const useHeroStore = create<HeroState>()(
       
       markCelebrationViewed: (heroId: string, celebrationIndex: number) => {
         const hero = get().heroes.find(h => h.id === heroId);
-        if (!hero || !hero.rankData.pendingCelebrations[celebrationIndex]) return;
+        if (!hero || !hero.rankData?.pendingCelebrations?.[celebrationIndex]) return;
         
         const updatedCelebrations = [...hero.rankData.pendingCelebrations];
         updatedCelebrations.splice(celebrationIndex, 1);
