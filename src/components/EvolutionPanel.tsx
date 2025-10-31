@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useMemo, useEffect } from 'react';
+// import { motion, AnimatePresence } from 'framer-motion'; // Temporariamente comentado
 import { useHeroStore } from '../store/heroStore';
 import { Hero } from '../types/hero';
 import { RankLevel, RankHistory, RankComparison } from '../types/ranks';
 import { RankProgressAnimation, FloatingRankBadge } from './RankAnimations';
+import { rankSystem } from '../utils/rankSystem';
 import { 
   TrendingUp, 
   Trophy, 
@@ -27,12 +28,20 @@ interface EvolutionPanelProps {
 type ViewMode = 'overview' | 'progress' | 'history' | 'leaderboard' | 'comparison';
 
 // Componentes auxiliares
-const RankCard: React.FC<{ rank: RankLevel; size?: 'small' | 'medium' | 'large'; isFloating?: boolean }> = ({ 
+const RankCard: React.FC<{ 
+  rank: RankLevel; 
+  size?: 'small' | 'medium' | 'large'; 
+  isFloating?: boolean;
+  className?: string;
+}> = ({ 
   rank, 
   size = 'medium',
-  isFloating = true
+  isFloating = true,
+  className = ''
 }) => (
-  <FloatingRankBadge rank={rank} isFloating={isFloating} />
+  <div className={className}>
+    <FloatingRankBadge rank={rank} isFloating={isFloating} />
+  </div>
 );
 
 const RankProgress: React.FC<{ progress: number; color: string; isAnimating?: boolean }> = ({ 
@@ -51,24 +60,32 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
   heroId, 
   className = '' 
 }) => {
-  const { heroes, getHeroRankProgress, getRankLeaderboard, promoteHero } = useHeroStore();
+  const { heroes, getHeroRankProgress, getRankLeaderboard, promoteHero, updateHero } = useHeroStore();
   const [viewMode, setViewMode] = useState<ViewMode>('overview');
   const [selectedHeroForComparison, setSelectedHeroForComparison] = useState<string>('');
   const [historyFilter, setHistoryFilter] = useState<RankLevel | 'all'>('all');
 
   const currentHero = heroId ? heroes.find(h => h.id === heroId) : heroes[0];
+
+  // Verificar e inicializar rankData para heróis existentes (migração)
+  useEffect(() => {
+    if (currentHero && !currentHero.rankData) {
+      const initializedRankData = rankSystem.initializeRankData(currentHero);
+      updateHero(currentHero.id, { rankData: initializedRankData });
+    }
+  }, [currentHero, updateHero]);
   const rankProgress = currentHero ? getHeroRankProgress(currentHero.id) : null;
   const leaderboard = getRankLeaderboard();
 
   const filteredHistory = useMemo(() => {
-    if (!currentHero?.rankData.history) return [];
+    if (!currentHero?.rankData?.rankHistory) return [];
     
     if (historyFilter === 'all') {
-      return currentHero.rankData.history;
+      return currentHero.rankData.rankHistory;
     }
     
-    return currentHero.rankData.history.filter(entry => entry.rank === historyFilter);
-  }, [currentHero?.rankData.history, historyFilter]);
+    return currentHero.rankData.rankHistory.filter(entry => entry.rank === historyFilter);
+  }, [currentHero?.rankData?.rankHistory, historyFilter]);
 
   const comparisonData = useMemo(() => {
     if (!currentHero || !selectedHeroForComparison) return null;
@@ -119,7 +136,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
             <div className="text-sm text-amber-300">Nível</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-amber-100">{currentHero.experience.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-amber-100">{(currentHero.xp || 0).toLocaleString()}</div>
             <div className="text-sm text-amber-300">XP Total</div>
           </div>
           <div className="text-center">
@@ -142,14 +159,14 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
       />
 
       {/* Recent Achievements */}
-      {rankProgress.rankData.history.length > 0 && (
+      {rankProgress.rankData?.rankHistory && rankProgress.rankData.rankHistory.length > 0 && (
         <div className="bg-slate-700 rounded-lg p-6">
           <h4 className="text-lg font-semibold text-slate-100 mb-4 flex items-center">
             <Award className="w-5 h-5 mr-2 text-amber-400" />
             Conquistas Recentes
           </h4>
           <div className="space-y-2">
-            {rankProgress.rankData.history.slice(-3).reverse().map((entry, index) => (
+            {rankProgress.rankData.rankHistory.slice(-3).reverse().map((entry, index) => (
               <div key={index} className="flex items-center justify-between p-3 bg-slate-600 rounded">
                 <div className="flex items-center">
                   <RankCard rank={entry.rank} size="small" />
@@ -191,17 +208,20 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
             <div className="flex justify-between text-sm">
               <span className="text-slate-300">Experiência</span>
               <span className="text-slate-400">
-                {rankProgress.progress.currentXP.toLocaleString()} / {rankProgress.progress.requiredXP.toLocaleString()}
+                {(rankProgress.progress.currentXP || 0).toLocaleString()} / {(rankProgress.progress.requiredXP || 0).toLocaleString()}
               </span>
             </div>
             <div className="w-full bg-slate-600 rounded-full h-2">
               <div 
                 className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500"
-                style={{ width: `${(rankProgress.progress.currentXP / rankProgress.progress.requiredXP) * 100}%` }}
+                style={{ width: `${((rankProgress.progress.currentXP || 0) / (rankProgress.progress.requiredXP || 1)) * 100}%` }}
               />
             </div>
             <div className="text-xs text-slate-400">
-              Faltam {(rankProgress.progress.requiredXP - rankProgress.progress.currentXP).toLocaleString()} XP
+              {rankProgress.progress.nextRank ? 
+                `Faltam ${((rankProgress.progress.requiredXP || 0) - (rankProgress.progress.currentXP || 0)).toLocaleString()} XP` :
+                'Rank máximo atingido!'
+              }
             </div>
           </div>
 
@@ -210,14 +230,20 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
             <div className="flex justify-between text-sm">
               <span className="text-slate-300">Missões</span>
               <span className="text-slate-400">
-                {rankProgress.progress.currentMissions} / {rankProgress.progress.requiredMissions}
+                {rankProgress.progress.currentMissions || 0} / {rankProgress.progress.requiredMissions || 0}
               </span>
             </div>
             <div className="w-full bg-slate-600 rounded-full h-2">
               <div 
                 className="bg-gradient-to-r from-green-500 to-emerald-500 h-2 rounded-full transition-all duration-500"
-                style={{ width: `${(rankProgress.progress.currentMissions / rankProgress.progress.requiredMissions) * 100}%` }}
+                style={{ width: `${((rankProgress.progress.currentMissions || 0) / (rankProgress.progress.requiredMissions || 1)) * 100}%` }}
               />
+            </div>
+            <div className="text-xs text-slate-400">
+              {rankProgress.progress.nextRank ? 
+                `Faltam ${(rankProgress.progress.requiredMissions || 0) - (rankProgress.progress.currentMissions || 0)} missões` :
+                'Todas as missões concluídas!'
+              }
             </div>
             <div className="text-xs text-slate-400">
               Faltam {rankProgress.progress.requiredMissions - rankProgress.progress.currentMissions} missões
@@ -383,7 +409,9 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
             <div className="text-center mb-4">
               <h5 className="text-lg font-semibold text-slate-100">{comparisonData.current.name}</h5>
               <p className="text-slate-400">{comparisonData.current.class}</p>
-              <RankCard rank={comparisonData.currentProgress?.progress.currentRank || 'F'} size="large" className="mt-2" />
+              <div className="mt-2">
+                <RankCard rank={comparisonData.currentProgress?.progress.currentRank || 'F'} size="large" />
+              </div>
             </div>
             
             <div className="space-y-3">
@@ -393,7 +421,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-300">XP Total</span>
-                <span className="text-slate-100">{comparisonData.current.experience.toLocaleString()}</span>
+                <span className="text-slate-100">{(comparisonData.current.xp || 0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-300">Missões</span>
@@ -421,7 +449,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-300">XP Total</span>
-                <span className="text-slate-100">{comparisonData.compare.experience.toLocaleString()}</span>
+                <span className="text-slate-100">{(comparisonData.compare.xp || 0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-300">Missões</span>
@@ -460,9 +488,9 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
             <Trophy className="w-6 h-6 mr-2 text-amber-400" />
             Painel de Evolução
           </h2>
-          {rankProgress.rankData.pendingCelebrations.length > 0 && (
+          {(rankProgress.rankData?.pendingCelebrations?.length || 0) > 0 && (
             <div className="bg-amber-500 text-amber-900 px-3 py-1 rounded-full text-sm font-medium">
-              {rankProgress.rankData.pendingCelebrations.length} nova(s) conquista(s)!
+              {rankProgress.rankData?.pendingCelebrations?.length || 0} nova(s) conquista(s)!
             </div>
           )}
         </div>

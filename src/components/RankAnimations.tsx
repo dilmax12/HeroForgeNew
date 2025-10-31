@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RankLevel } from '../types/rank';
+import { RankLevel } from '../types/ranks';
 import { medievalTheme, getRankGradient, getRankIcon } from '../styles/medievalTheme';
 
 interface RankPromotionAnimationProps {
@@ -31,8 +31,6 @@ export const RankPromotionAnimation: React.FC<RankPromotionAnimationProps> = ({
     }
   }, [isVisible, onComplete]);
 
-  // Usando funções do tema medieval
-
   return (
     <AnimatePresence>
       {isVisible && (
@@ -60,7 +58,7 @@ export const RankPromotionAnimation: React.FC<RankPromotionAnimationProps> = ({
                     initial={{ 
                       opacity: 0, 
                       y: 100, 
-                      x: Math.random() * window.innerWidth,
+                      x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 1000),
                       scale: 0 
                     }}
                     animate={{ 

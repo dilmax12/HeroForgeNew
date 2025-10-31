@@ -92,14 +92,13 @@ export const medievalTheme = {
   // Gradientes temáticos
   gradients: {
     ranks: {
-      'Novato': 'from-slate-400 via-slate-500 to-slate-600',
-      'Aprendiz': 'from-emerald-400 via-emerald-500 to-emerald-600',
-      'Aventureiro': 'from-blue-400 via-blue-500 to-blue-600',
-      'Veterano': 'from-bronze-400 via-bronze-500 to-bronze-600',
-      'Elite': 'from-silver-400 via-silver-500 to-silver-600',
-      'Mestre': 'from-royal-400 via-royal-500 to-royal-600',
-      'Grão-Mestre': 'from-crimson-400 via-crimson-500 to-crimson-600',
-      'Lenda': 'from-gold-300 via-gold-400 to-gold-500'
+      'F': 'from-gray-400 to-gray-600',
+      'E': 'from-emerald-400 to-emerald-600',
+      'D': 'from-blue-400 to-blue-600',
+      'C': 'from-purple-400 to-purple-600',
+      'B': 'from-amber-400 to-amber-600',
+      'A': 'from-red-400 to-red-600',
+      'S': 'from-yellow-300 via-yellow-400 to-amber-500'
     },
     
     backgrounds: {
@@ -120,17 +119,16 @@ export const medievalTheme = {
     }
   },
 
-  // Ícones temáticos por categoria
+  // Ícones temáticos
   icons: {
     ranks: {
-      'Novato': '🌱',
-      'Aprendiz': '⚔️',
-      'Aventureiro': '🗡️',
-      'Veterano': '🛡️',
-      'Elite': '👑',
-      'Mestre': '🏆',
-      'Grão-Mestre': '💎',
-      'Lenda': '⭐'
+      'F': '⚪',
+      'E': '🟢',
+      'D': '🔵',
+      'C': '🟣',
+      'B': '🟡',
+      'A': '🔴',
+      'S': '⭐'
     },
     
     classes: {

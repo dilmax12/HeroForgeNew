@@ -395,6 +395,12 @@ export const useHeroStore = create<HeroState>()(
         // Atualizar dados de rank após completar missão
         const finalHero = get().heroes.find(h => h.id === heroId);
         if (finalHero) {
+          // Verificação de migração para rankData
+          if (!finalHero.rankData) {
+            const initializedRankData = rankSystem.initializeRankData(finalHero);
+            get().updateHero(heroId, { rankData: initializedRankData });
+            finalHero.rankData = initializedRankData;
+          }
           const newRankData = rankSystem.updateRankData(finalHero, finalHero.rankData);
           get().updateHero(heroId, { rankData: newRankData });
         }
@@ -476,6 +482,12 @@ export const useHeroStore = create<HeroState>()(
         // Atualizar dados de rank após ganhar XP
         const updatedHero = get().heroes.find(h => h.id === heroId);
         if (updatedHero) {
+          // Verificação de migração para rankData
+          if (!updatedHero.rankData) {
+            const initializedRankData = rankSystem.initializeRankData(updatedHero);
+            get().updateHero(heroId, { rankData: initializedRankData });
+            updatedHero.rankData = initializedRankData;
+          }
           const newRankData = rankSystem.updateRankData(updatedHero, updatedHero.rankData);
           get().updateHero(heroId, { rankData: newRankData });
         }
@@ -526,6 +538,12 @@ export const useHeroStore = create<HeroState>()(
         // Atualizar dados de rank após mudanças no herói
         const updatedHero = get().heroes.find(h => h.id === heroId);
         if (updatedHero) {
+          // Verificação de migração para rankData
+          if (!updatedHero.rankData) {
+            const initializedRankData = rankSystem.initializeRankData(updatedHero);
+            get().updateHero(heroId, { rankData: initializedRankData });
+            updatedHero.rankData = initializedRankData;
+          }
           const newRankData = rankSystem.updateRankData(updatedHero, updatedHero.rankData);
           get().updateHero(heroId, { rankData: newRankData });
         }
@@ -1062,6 +1080,13 @@ export const useHeroStore = create<HeroState>()(
         const hero = get().heroes.find(h => h.id === heroId);
         if (!hero) return false;
         
+        // Verificar e inicializar rankData se não existir (migração)
+        if (!hero.rankData) {
+          const initializedRankData = rankSystem.initializeRankData(hero);
+          get().updateHero(heroId, { rankData: initializedRankData });
+          hero.rankData = initializedRankData;
+        }
+        
         const progress = rankSystem.calculateProgress(hero);
         if (!progress.canPromote) return false;
         
@@ -1089,6 +1114,13 @@ export const useHeroStore = create<HeroState>()(
       getHeroRankProgress: (heroId: string) => {
         const hero = get().heroes.find(h => h.id === heroId);
         if (!hero) return null;
+        
+        // Verificar e inicializar rankData se não existir (migração)
+        if (!hero.rankData) {
+          const initializedRankData = rankSystem.initializeRankData(hero);
+          get().updateHero(heroId, { rankData: initializedRankData });
+          hero.rankData = initializedRankData;
+        }
         
         return {
           progress: rankSystem.calculateProgress(hero),
@@ -1120,7 +1152,7 @@ export const useHeroStore = create<HeroState>()(
         const hero = get().heroes.find(h => h.id === heroId);
         if (!hero || !hero.rankData?.pendingCelebrations?.[celebrationIndex]) return;
         
-        const updatedCelebrations = [...hero.rankData.pendingCelebrations];
+        const updatedCelebrations = [...(hero.rankData?.pendingCelebrations || [])];
         updatedCelebrations.splice(celebrationIndex, 1);
         
         get().updateHero(heroId, {
