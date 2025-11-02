@@ -1,4 +1,5 @@
 import { aiService } from './aiService';
+
 import { StoryGenerationRequest } from '../types/ai';
 import { Hero } from '../types/hero';
 
@@ -19,11 +20,12 @@ Mantenha um tom épico mas acessível, criando narrativas que façam o jogador s
   private buildStoryPrompt(request: StoryGenerationRequest): string {
     const { hero, context, storyType } = request;
     
-    let prompt = `Crie uma história ${storyType} para o herói ${hero.name}, um ${hero.class} de nível ${hero.level}.
+    let prompt = `Crie uma história ${storyType} para o herói ${hero.name}, um ${hero.class} de nível ${hero.progression.level}.
 
-Características do herói:
+Informações do herói:
+- Nome: ${hero.name}
 - Classe: ${hero.class}
-- Nível: ${hero.level}
+- Nível: ${hero.progression.level}
 - Atributos principais: ${Object.entries(hero.attributes)
       .sort(([,a], [,b]) => b - a)
       .slice(0, 3)
@@ -77,7 +79,7 @@ Características do herói:
 
   async generateHeroDescription(hero: Hero): Promise<string> {
     try {
-      const prompt = `Crie uma descrição física detalhada para ${hero.name}, um ${hero.class} de nível ${hero.level}.
+      const prompt = `Crie uma descrição física detalhada para ${hero.name}, um ${hero.class} de nível ${hero.progression.level}.
 
 Considere:
 - Classe: ${hero.class}
@@ -105,7 +107,7 @@ A descrição deve ter 50-80 palavras e focar na aparência física, vestimentas
     try {
       const prompt = `Crie uma narrativa envolvente para uma missão ${questType} de dificuldade ${difficulty} para ${hero.name}.
 
-Herói: ${hero.name} (${hero.class}, nível ${hero.level})
+Herói: ${hero.name} (${hero.class}, nível ${hero.progression.level})
 Tipo de missão: ${questType}
 Dificuldade: ${difficulty}
 

@@ -149,7 +149,7 @@ const DAILY_GOAL_TEMPLATES: DailyGoalTemplate[] = [
 
 export function generateDailyGoals(hero: Hero): DailyGoal[] {
   const availableTemplates = DAILY_GOAL_TEMPLATES.filter(
-    template => hero.level >= template.levelRequirement
+    template => hero.progression.level >= template.levelRequirement
   );
 
   const goals: DailyGoal[] = [];
@@ -165,7 +165,7 @@ export function generateDailyGoals(hero: Hero): DailyGoal[] {
   }
 
   // Include 1-2 medium goals if hero level >= 3
-  if (hero.level >= 3) {
+  if (hero.progression.level >= 3) {
     const mediumTemplates = availableTemplates.filter(t => t.difficulty === 'medium');
     const mediumCount = Math.min(2, mediumTemplates.length);
     
@@ -178,7 +178,7 @@ export function generateDailyGoals(hero: Hero): DailyGoal[] {
   }
 
   // Include 1 hard goal if hero level >= 5
-  if (hero.level >= 5) {
+  if (hero.progression.level >= 5) {
     const hardTemplates = availableTemplates.filter(t => t.difficulty === 'hard' && t.id !== 'perfect-day');
     if (hardTemplates.length > 0) {
       const template = hardTemplates[Math.floor(Math.random() * hardTemplates.length)];
@@ -187,7 +187,7 @@ export function generateDailyGoals(hero: Hero): DailyGoal[] {
   }
 
   // Add "Perfect Day" goal if there are other goals
-  if (goals.length >= 2 && hero.level >= 3) {
+  if (goals.length >= 2 && hero.progression.level >= 3) {
     const perfectDayTemplate = DAILY_GOAL_TEMPLATES.find(t => t.id === 'perfect-day');
     if (perfectDayTemplate) {
       const perfectDayGoal = createDailyGoalFromTemplate(perfectDayTemplate, tomorrow);

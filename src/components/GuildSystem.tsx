@@ -18,7 +18,8 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
     joinGuild, 
     leaveGuild,
     acceptQuest,
-    completeQuest
+    completeQuest,
+    refreshQuests
   } = useHeroStore();
 
   const currentGuild = hero.progression.guildId ? 
@@ -42,6 +43,64 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
     if (currentGuild) {
       leaveGuild(hero.id, currentGuild.id);
       setActiveTab('browse');
+    }
+  };
+
+  const handleAcceptGuildQuest = (questId: string) => {
+    console.log('🎯 Tentando aceitar missão de guilda:', {
+      questId,
+      heroId: hero.id,
+      heroLevel: hero.progression.level,
+      activeQuests: hero.activeQuests.length,
+      maxActiveQuests: 3
+    });
+    
+    const quest = availableQuests.find(q => q.id === questId);
+    console.log('📋 Missão encontrada:', quest);
+    
+    const result = acceptQuest(hero.id, questId);
+    console.log('✅ Resultado da aceitação:', result);
+    
+    if (result) {
+      console.log('🎉 Missão aceita com sucesso!');
+    } else {
+      console.log('❌ Falha ao aceitar missão');
+    }
+  };
+
+  const handleCompleteGuildQuest = (questId: string) => {
+    console.log('🏁 Tentando completar missão de guilda:', {
+      questId,
+      heroId: hero.id,
+      heroLevel: hero.progression.level,
+      activeQuests: hero.activeQuests
+    });
+    
+    const quest = availableQuests.find(q => q.id === questId);
+    console.log('📋 Missão encontrada:', quest);
+    
+    const result = completeQuest(hero.id, questId, true); // autoResolve=true para missões de guilda
+    console.log('✅ Resultado da conclusão:', result);
+    
+    if (result !== null) {
+      // Mostrar narrativa do combate
+      if (result.log && result.log.length > 0) {
+        console.log('📖 Narrativa do Combate:');
+        result.log.forEach((line, index) => {
+          setTimeout(() => console.log(`   ${line}`), index * 500);
+        });
+      }
+      
+      if (result.victory) {
+        console.log('🎉 VITÓRIA! Missão completada com sucesso!');
+        alert(`🎉 VITÓRIA!\n\n${result.log?.join('\n') || 'Missão completada com sucesso!'}`);
+      } else {
+        console.log('💔 DERROTA! A missão falhou...');
+        alert(`💔 DERROTA!\n\n${result.log?.join('\n') || 'A missão falhou. Tente novamente quando estiver mais forte!'}`);
+      }
+    } else {
+      console.log('❌ Falha ao completar missão');
+      alert('❌ Erro ao processar a missão. Tente novamente.');
     }
   };
 
@@ -225,12 +284,20 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
 
               {/* Quadro de Missões da Guilda */}
               <div className="bg-white p-6 rounded-lg border border-gray-200">
-                <h3 className="text-xl font-bold mb-4 text-gray-800">📋 Quadro de Missões da Guilda</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-gray-800">📋 Quadro de Missões da Guilda</h3>
+                  <button
+                    onClick={() => refreshQuests(hero.progression.level)}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md font-medium transition-colors"
+                  >
+                    🔄 Atualizar Missões
+                  </button>
+                </div>
                 
-                {availableQuests.length > 0 ? (
+                {availableQuests.filter(quest => quest.isGuildQuest).length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {availableQuests.slice(0, 6).map(quest => {
-                      const isAccepted = hero.activeQuests.some(q => q.id === quest.id);
+                    {availableQuests.filter(quest => quest.isGuildQuest).slice(0, 6).map(quest => {
+                      const isAccepted = hero.activeQuests.includes(quest.id);
                       const canAccept = hero.progression.level >= quest.levelRequirement && !isAccepted;
                       
                       return (
@@ -252,21 +319,21 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
                           <div className="flex justify-between items-center text-sm mb-3">
                             <span className="text-gray-600">Nível mín: {quest.levelRequirement}</span>
                             <div className="flex space-x-3">
-                              <span className="text-yellow-600">🪙 {quest.rewards.gold}</span>
-                              <span className="text-blue-600">⭐ {quest.rewards.xp}</span>
+                              <span className="text-yellow-600">🪙 {quest.rewards?.gold || 0}</span>
+                              <span className="text-blue-600">⭐ {quest.rewards?.xp || 0}</span>
                             </div>
                           </div>
                           
                           {isAccepted ? (
                             <button
-                              onClick={() => completeQuest(hero.id, quest.id)}
+                              onClick={() => handleCompleteGuildQuest(quest.id)}
                               className="w-full bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700 transition-colors"
                             >
                               Completar Missão
                             </button>
                           ) : canAccept ? (
                             <button
-                              onClick={() => acceptQuest(hero.id, quest.id)}
+                              onClick={() => handleAcceptGuildQuest(quest.id)}
                               className="w-full bg-purple-600 text-white py-2 px-4 rounded hover:bg-purple-700 transition-colors"
                             >
                               Aceitar Missão

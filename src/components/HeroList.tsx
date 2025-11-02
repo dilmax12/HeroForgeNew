@@ -1,187 +1,135 @@
+import React, { useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { HeroGallery } from './HeroGallery';
 import { useHeroStore } from '../store/heroStore';
-import { Link } from 'react-router-dom';
+import { Hero } from '../types/hero';
+import { EXAMPLE_HERO_DATA, generateExampleHero } from '../utils/heroExample';
 
-const HeroList = () => {
-  const { heroes, deleteHero, selectHero } = useHeroStore();
+const HeroList: React.FC = () => {
+  const navigate = useNavigate();
+  const { updateHero, createHero } = useHeroStore();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedHeroForImage, setSelectedHeroForImage] = React.useState<Hero | null>(null);
 
-  if (heroes.length === 0) {
-    return (
-      <div className="text-center p-8">
-        <h2 className="text-2xl font-bold text-amber-400 mb-4">Nenhum Herói Encontrado</h2>
-        <p className="text-gray-300 mb-6">Você ainda não criou nenhum herói.</p>
-        <Link 
-          to="/create" 
-          data-testid="create-hero-button"
-          className="px-6 py-3 bg-amber-600 hover:bg-amber-700 rounded-md font-bold transition-colors"
-        >
-          Forjar Novo Herói
-        </Link>
-      </div>
-    );
-  }
+  const handleCreateHero = () => {
+    navigate('/create');
+  };
+
+  const handleCreateExampleHero = () => {
+    try {
+      createHero(EXAMPLE_HERO_DATA);
+    } catch (error) {
+      console.error('Erro ao criar herói de exemplo:', error);
+    }
+  };
+
+  const handleHeroSelect = (hero: Hero) => {
+    navigate(`/hero/${hero.id}`);
+  };
+
+  const handleHeroEdit = (hero: Hero) => {
+    // Por enquanto, navega para a página de detalhes
+    // Futuramente pode ser uma modal de edição
+    navigate(`/hero/${hero.id}`);
+  };
+
+  const handleHeroImageChange = (hero: Hero) => {
+    setSelectedHeroForImage(hero);
+    fileInputRef.current?.click();
+  };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && selectedHeroForImage) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        updateHero(selectedHeroForImage.id, { image: result });
+        setSelectedHeroForImage(null);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   return (
-    <div className="container mx-auto p-6">
-      <h2 className="text-3xl font-bold text-center mb-8 text-amber-400">Seus Heróis</h2>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {heroes.map(hero => (
-          <div 
-            key={hero.id} 
-            className="bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700 hover:border-amber-500 transition-all"
-          >
-            <div className="p-6">
-              <div className="flex items-center gap-3 mb-3">
-                <div
-                  className={`flex items-center justify-center w-12 h-12 rounded-full text-white font-bold`
-                  }
-                  style={{
-                    background:
-                      hero.class === 'guerreiro' ? '#b45309' :
-                      hero.class === 'mago' ? '#2563eb' :
-                      hero.class === 'ladino' ? '#10b981' :
-                      hero.class === 'clerigo' ? '#a78bfa' :
-                      hero.class === 'patrulheiro' ? '#22c55e' :
-                      hero.class === 'paladino' ? '#f59e0b' : '#6b7280'
-                  }}
-                >
-                  {hero.name
-                    .split(' ')
-                    .map(w => w[0]?.toUpperCase())
-                    .slice(0,2)
-                    .join('') || '?'}
-                </div>
-                <h3 className="text-xl font-bold text-white">{hero.name}</h3>
-              </div>
-              <div className="text-gray-300 mb-4">
-                <p><span className="text-amber-400">Raça:</span> {hero.race.charAt(0).toUpperCase() + hero.race.slice(1)}</p>
-                <p><span className="text-amber-400">Classe:</span> {hero.class.charAt(0).toUpperCase() + hero.class.slice(1)}</p>
-                <p><span className="text-amber-400">Nível:</span> {hero.progression.level}</p>
-                <div className="flex items-center space-x-4 mt-2 text-sm">
-                  <span className="flex items-center space-x-1">
-                    <span>🪙</span>
-                    <span>{hero.progression.gold}</span>
-                  </span>
-                  <span className="flex items-center space-x-1">
-                    <span>⭐</span>
-                    <span>{hero.progression.xp}</span>
-                  </span>
-                  <span className="flex items-center space-x-1">
-                    <span>🏆</span>
-                    <span>{hero.stats.questsCompleted}</span>
-                  </span>
-                </div>
-              </div>
-              
-              <div className="flex flex-wrap gap-2 mb-4">
-                {Object.entries(hero.derivedAttributes).map(([key, value]) => (
-                  <span 
-                    key={key} 
-                    className="px-2 py-1 bg-gray-700 rounded-md text-xs text-gray-300"
-                  >
-                    {key.charAt(0).toUpperCase() + key.slice(1)}: {value}
-                  </span>
-                ))}
-              </div>
-              
-              <div className="space-y-2 mt-4">
-                <div className="flex justify-between">
-                  <Link
-                    to={`/hero/${hero.id}`}
-                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-md text-sm font-medium transition-colors"
-                    onClick={() => selectHero(hero.id)}
-                  >
-                    Visualizar
-                  </Link>
-                  <button
-                    onClick={() => deleteHero(hero.id)}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md text-sm font-medium transition-colors"
-                  >
-                    Deletar
-                  </button>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2">
-                  <Link
-                    to="/progression"
-                    className="px-2 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-xs font-medium transition-colors text-center"
-                    onClick={() => selectHero(hero.id)}
-                  >
-                    📈 Progressão
-                  </Link>
-                  <Link
-                    to="/quests"
-                    className="px-2 py-2 bg-green-600 hover:bg-green-700 rounded-md text-xs font-medium transition-colors text-center"
-                    onClick={() => selectHero(hero.id)}
-                  >
-                    🗡️ Missões
-                  </Link>
-                  <Link
-                    to="/guilds"
-                    className="px-2 py-2 bg-purple-600 hover:bg-purple-700 rounded-md text-xs font-medium transition-colors text-center"
-                    onClick={() => selectHero(hero.id)}
-                  >
-                    🏰 Guildas
-                  </Link>
-                  <Link
-                    to="/titles"
-                    className="px-2 py-2 bg-amber-600 hover:bg-amber-700 rounded-md text-xs font-medium transition-colors text-center"
-                    onClick={() => selectHero(hero.id)}
-                  >
-                    🏆 Títulos
-                  </Link>
-                </div>
-              </div>
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800">
+      <div className="container mx-auto p-6">
+        {/* Input oculto para upload de imagem */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageUpload}
+          className="hidden"
+        />
+
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-amber-400 mb-2">⚔️ Hero Forge</h1>
+          <p className="text-gray-300">Gerencie seus heróis épicos</p>
+          
+          {/* Botão para criar herói de exemplo */}
+          <div className="mt-4">
+            <button
+              onClick={handleCreateExampleHero}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md text-sm transition-colors"
+            >
+              🧙‍♂️ Criar Herói de Exemplo
+            </button>
           </div>
-        ))}
-      </div>
-      
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        <Link
-          to="/quests"
-          className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg text-center transition-colors"
-        >
-          <div className="text-2xl mb-2">⚔️</div>
-          <div className="font-medium">Missões</div>
-        </Link>
-        <Link
-          to="/guilds"
-          className="bg-purple-600 hover:bg-purple-700 text-white p-4 rounded-lg text-center transition-colors"
-        >
-          <div className="text-2xl mb-2">🏰</div>
-          <div className="font-medium">Guildas</div>
-        </Link>
-        <Link
-          to="/titles"
-          className="bg-amber-600 hover:bg-amber-700 text-white p-4 rounded-lg text-center transition-colors"
-        >
-          <div className="text-2xl mb-2">👑</div>
-          <div className="font-medium">Títulos</div>
-        </Link>
-        <Link
-          to="/leaderboards"
-          className="bg-yellow-600 hover:bg-yellow-700 text-white p-4 rounded-lg text-center transition-colors"
-        >
-          <div className="text-2xl mb-2">🏆</div>
-          <div className="font-medium">Rankings</div>
-        </Link>
-        <Link
-          to="/playtest"
-          className="bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg text-center transition-colors"
-        >
-          <div className="text-2xl mb-2">📊</div>
-          <div className="font-medium">Playtest</div>
-        </Link>
-      </div>
-      
-      <div className="text-center mt-8">
-        <Link 
-          to="/create" 
-          className="px-6 py-3 bg-amber-600 hover:bg-amber-700 rounded-md font-bold transition-colors inline-block"
-        >
-          Forjar Novo Herói
-        </Link>
+        </div>
+
+        {/* Seção de Navegação Rápida */}
+        <div className="mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <Link
+              to="/quests"
+              className="bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white p-4 rounded-lg text-center transition-all transform hover:scale-105 border border-blue-500/30"
+            >
+              <div className="text-2xl mb-2">⚔️</div>
+              <div className="font-medium">Missões</div>
+            </Link>
+            <Link
+              to="/guilds"
+              className="bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white p-4 rounded-lg text-center transition-all transform hover:scale-105 border border-purple-500/30"
+            >
+              <div className="text-2xl mb-2">🏰</div>
+              <div className="font-medium">Guildas</div>
+            </Link>
+            <Link
+              to="/titles"
+              className="bg-gradient-to-br from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white p-4 rounded-lg text-center transition-all transform hover:scale-105 border border-amber-500/30"
+            >
+              <div className="text-2xl mb-2">👑</div>
+              <div className="font-medium">Títulos</div>
+            </Link>
+            <Link
+              to="/leaderboards"
+              className="bg-gradient-to-br from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600 text-white p-4 rounded-lg text-center transition-all transform hover:scale-105 border border-yellow-500/30"
+            >
+              <div className="text-2xl mb-2">🏆</div>
+              <div className="font-medium">Rankings</div>
+            </Link>
+            <Link
+              to="/playtest"
+              className="bg-gradient-to-br from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white p-4 rounded-lg text-center transition-all transform hover:scale-105 border border-green-500/30"
+            >
+              <div className="text-2xl mb-2">📊</div>
+              <div className="font-medium">Playtest</div>
+            </Link>
+          </div>
+        </div>
+
+        {/* Galeria de Heróis */}
+        <HeroGallery
+          onCreateHero={handleCreateHero}
+          onHeroSelect={handleHeroSelect}
+          onHeroEdit={handleHeroEdit}
+          onHeroImageChange={handleHeroImageChange}
+          showCreateButton={true}
+          cardSize="medium"
+          viewMode="grid"
+        />
       </div>
     </div>
   );

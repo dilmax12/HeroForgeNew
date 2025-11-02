@@ -283,7 +283,7 @@ export function updateFactionReputation(
 }
 
 export function checkTitleUnlock(hero: Hero, achievementId: string): Title | null {
-  const achievement = hero.achievements.find(a => a.id === achievementId);
+  const achievement = (hero.achievements || []).find(a => a.id === achievementId);
   if (!achievement || !achievement.unlocked || !achievement.rewards.title) {
     return null;
   }
@@ -324,7 +324,7 @@ export function formatTitleDisplay(hero: Hero): string {
 // === SISTEMA DE CONQUISTAS BASEADAS EM ESTATÍSTICAS ===
 
 export function updateAchievementProgress(hero: Hero): Achievement[] {
-  return hero.achievements.map(achievement => {
+  return (hero.achievements || []).map(achievement => {
     if (achievement.unlocked) return achievement;
 
     let newProgress = achievement.progress;

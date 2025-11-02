@@ -66,7 +66,7 @@ export const DynamicMissionsPanel: React.FC<DynamicMissionsPanelProps> = ({
   const handleMissionSelect = useCallback((mission: DynamicMission) => {
     setSelectedMission(mission);
     generateNPCDialogue(mission);
-  }, [generateNPCDialogue]);
+  }, [hero]);
 
   const handleAcceptMission = useCallback((mission: DynamicMission) => {
     onMissionAccept?.(mission);
@@ -76,7 +76,7 @@ export const DynamicMissionsPanel: React.FC<DynamicMissionsPanelProps> = ({
 
   useEffect(() => {
     generateMissions();
-  }, [generateMissions]);
+  }, [hero]);
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty.toLowerCase()) {

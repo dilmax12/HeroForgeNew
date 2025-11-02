@@ -118,7 +118,7 @@ const MetricsDashboard: React.FC = () => {
 
     const interval = setInterval(loadDashboard, 30000); // Atualizar a cada 30 segundos
     return () => clearInterval(interval);
-  }, [autoRefresh]);
+  }, [autoRefresh, selectedPeriod]);
 
   const formatDuration = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);

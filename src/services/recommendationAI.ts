@@ -52,7 +52,7 @@ Considere sempre:
 PERFIL DO HERÓI:
 - Nome: ${hero.name}
 - Classe: ${hero.class}
-- Nível: ${hero.level}
+- Nível: ${hero.progression.level}
 - Rank: ${hero.rank || 'F'}
 - Atributos: ${Object.entries(hero.attributes)
       .map(([attr, value]) => `${attr}: ${value}`)
@@ -153,7 +153,7 @@ ${Object.entries(hero.attributes)
   .join('\n')}
 
 Classe: ${hero.class}
-Nível: ${hero.level}
+Nível: ${hero.progression.level}
 
 Identifique 2-3 pontos fracos principais baseados nos atributos mais baixos e na classe do herói.
 Responda apenas com uma lista simples, uma fraqueza por linha.`;
@@ -182,7 +182,7 @@ Responda apenas com uma lista simples, uma fraqueza por linha.`;
     playstyleAdvice: string;
   }> {
     try {
-      const prompt = `Sugira um build otimizado para ${hero.name} (${hero.class}, nível ${hero.level}):
+      const prompt = `Sugira um build otimizado para ${hero.name} (${hero.class}, nível ${hero.progression.level}):
 
 Atributos atuais:
 ${Object.entries(hero.attributes)
@@ -215,7 +215,7 @@ Forneça em JSON:
     try {
       const prompt = `Gere 3-5 objetivos diários personalizados para ${hero.name}:
 
-Herói: ${hero.name} (${hero.class}, nível ${hero.level}, rank ${hero.rank || 'F'})
+Herói: ${hero.name} (${hero.class}, nível ${hero.progression.level}, rank ${hero.rank || 'F'})
 
 ${context ? `
 Contexto:
@@ -283,7 +283,7 @@ Responda apenas com uma lista simples, um objetivo por linha.`;
       type: 'quest',
       priority: 'high',
       title: 'Missão de Progressão',
-      description: `Como ${hero.class} de nível ${hero.level}, você deveria focar em missões que desafiem suas habilidades atuais e ofereçam boa experiência.`,
+      description: `Como ${hero.class} de nível ${hero.progression.level}, você deveria focar em missões que desafiem suas habilidades atuais e ofereçam boa experiência.`,
       reasoning: 'Progressão constante é essencial para o desenvolvimento.',
       actionSteps: [
         'Procure missões apropriadas para seu nível',
@@ -331,8 +331,10 @@ Responda apenas com uma lista simples, um objetivo por linha.`;
   }
 
   private getFallbackDailyGoals(hero: Hero): string[] {
+
+
     return [
-      `Completar 2 missões apropriadas para nível ${hero.level}`,
+      `Completar 2 missões apropriadas para nível ${hero.progression.level}`,
       `Treinar atributo mais fraco por 30 minutos`,
       `Interagir com 3 NPCs diferentes`,
       `Coletar recursos para crafting`,

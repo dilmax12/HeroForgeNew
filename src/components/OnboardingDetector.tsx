@@ -21,7 +21,7 @@ const OnboardingDetector: React.FC = () => {
     // Small delay to ensure the store is loaded
     const timer = setTimeout(checkOnboarding, 1000);
     return () => clearTimeout(timer);
-  }, [shouldShowOnboarding]);
+  }, []);
 
   const handleStartOnboarding = () => {
     setShowWelcomeModal(false);

@@ -66,7 +66,7 @@ Sempre considere:
 Informações do Herói:
 - Nome: ${hero.name}
 - Classe: ${hero.class}
-- Nível: ${hero.level}
+- Nível: ${hero.progression.level}
 - Rank: ${hero.rank || 'F'}
 - Atributos principais: ${Object.entries(hero.attributes)
       .sort(([,a], [,b]) => b - a)
@@ -194,7 +194,7 @@ Formato da resposta em JSON:
 
   async generateNPCDialogue(hero: Hero, npcName: string, context: string): Promise<NPCDialogue> {
     try {
-      const prompt = `Crie um diálogo para o NPC "${npcName}" falando com ${hero.name} (${hero.class}, nível ${hero.level}).
+      const prompt = `Crie um diálogo para o NPC "${npcName}" falando com ${hero.name} (${hero.class}, nível ${hero.progression.level}).
 
 Contexto: ${context}
 
@@ -273,8 +273,8 @@ Formato JSON:
         optional: obj.optional
       })),
       rewards: [
-        { type: 'experience', amount: hero.level * 50, description: 'Experiência de combate' },
-        { type: 'gold', amount: hero.level * 25, description: 'Recompensa em ouro' }
+        { type: 'experience', amount: hero.progression.level * 50, description: 'Experiência de combate' },
+        { type: 'gold', amount: hero.progression.level * 25, description: 'Recompensa em ouro' }
       ],
       difficulty,
       type: missionType,

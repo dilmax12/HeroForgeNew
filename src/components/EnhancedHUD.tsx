@@ -12,8 +12,8 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
     return level * 100 + (level - 1) * 50;
   };
   
-  const currentLevelXP = calculateXPForLevel(hero.level);
-  const nextLevelXP = calculateXPForLevel(hero.level + 1);
+  const currentLevelXP = calculateXPForLevel(hero.progression.level);
+  const nextLevelXP = calculateXPForLevel(hero.progression.level + 1);
   const xpProgress = hero.progression.xp - currentLevelXP;
   const xpNeeded = nextLevelXP - currentLevelXP;
   const xpPercentage = Math.max(0, Math.min(100, (xpProgress / xpNeeded) * 100));
@@ -43,7 +43,7 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
-            {hero.level}
+            {hero.progression.level}
           </div>
           <div>
             <div className="text-white font-semibold text-sm">{hero.name}</div>
@@ -68,7 +68,7 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
           />
         </div>
         <div className="text-xs text-gray-400 mt-1">
-          {xpPercentage.toFixed(1)}% para o nível {hero.level + 1}
+          {xpPercentage.toFixed(1)}% para o nível {hero.progression.level + 1}
         </div>
       </div>
 

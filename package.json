@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "test": "vitest",
+    "start": "vite",
+    "clean": "rm -rf node_modules/.vite && rm -rf dist",
     "test:run": "vitest run",
     "e2e": "cypress run",
     "e2e:open": "cypress open"

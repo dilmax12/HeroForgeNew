@@ -30,7 +30,7 @@ export class ImageAIService {
       wisdom: 'serene expression and thoughtful demeanor'
     };
 
-    let prompt = `${styleDescriptions[style]} of ${hero.name}, a level ${hero.level} ${classDescriptions[hero.class as keyof typeof classDescriptions] || hero.class}`;
+    let prompt = `${styleDescriptions[style]} of ${hero.name}, a level ${hero.progression.level} ${classDescriptions[hero.class as keyof typeof classDescriptions] || hero.class}`;
     
     if (attributeDescriptions[dominantAttribute as keyof typeof attributeDescriptions]) {
       prompt += `, with ${attributeDescriptions[dominantAttribute as keyof typeof attributeDescriptions]}`;

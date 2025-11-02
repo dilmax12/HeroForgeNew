@@ -35,8 +35,8 @@ export class RankSystem {
     
     for (const rank of RANK_ORDER) {
       const threshold = RANK_THRESHOLDS[rank];
-      const meetsXP = hero.xp >= threshold.xp;
-      const meetsMissions = (hero.questsCompleted || 0) >= threshold.missions;
+      const meetsXP = hero.progression.xp >= threshold.xp;
+      const meetsMissions = (hero.stats.questsCompleted || 0) >= threshold.missions;
       const meetsTitles = !threshold.titles || (hero.titles?.length || 0) >= threshold.titles;
       const meetsSpecial = this.checkSpecialRequirements(hero, threshold.specialRequirements);
       
@@ -88,10 +88,10 @@ export class RankSystem {
       return {
         currentRank,
         nextRank: null,
-        currentXP: hero.xp,
-        requiredXP: hero.xp,
-        currentMissions: hero.questsCompleted || 0,
-        requiredMissions: hero.questsCompleted || 0,
+        currentXP: hero.progression.xp,
+        requiredXP: hero.progression.xp,
+        currentMissions: hero.stats.questsCompleted || 0,
+        requiredMissions: hero.stats.questsCompleted || 0,
         progressPercentage: 100,
         canPromote: false
       };
@@ -100,22 +100,22 @@ export class RankSystem {
     const nextThreshold = RANK_THRESHOLDS[nextRank];
     const currentThreshold = RANK_THRESHOLDS[currentRank];
     
-    const xpProgress = Math.min(100, ((hero.xp - currentThreshold.xp) / (nextThreshold.xp - currentThreshold.xp)) * 100);
-    const missionProgress = Math.min(100, ((hero.questsCompleted || 0) / nextThreshold.missions) * 100);
+    const xpProgress = Math.min(100, ((hero.progression.xp - currentThreshold.xp) / (nextThreshold.xp - currentThreshold.xp)) * 100);
+    const missionProgress = Math.min(100, ((hero.stats.questsCompleted || 0) / nextThreshold.missions) * 100);
     
     const progressPercentage = Math.min(xpProgress, missionProgress);
     
-    const canPromote = hero.xp >= nextThreshold.xp && 
-                      (hero.questsCompleted || 0) >= nextThreshold.missions &&
+    const canPromote = hero.progression.xp >= nextThreshold.xp && 
+                      (hero.stats.questsCompleted || 0) >= nextThreshold.missions &&
                       (!nextThreshold.titles || (hero.titles?.length || 0) >= nextThreshold.titles) &&
                       this.checkSpecialRequirements(hero, nextThreshold.specialRequirements);
     
     return {
       currentRank,
       nextRank,
-      currentXP: hero.xp,
+      currentXP: hero.progression.xp,
       requiredXP: nextThreshold.xp,
-      currentMissions: hero.questsCompleted || 0,
+      currentMissions: hero.stats.questsCompleted || 0,
       requiredMissions: nextThreshold.missions,
       progressPercentage,
       canPromote
@@ -139,7 +139,7 @@ export class RankSystem {
     const historyEntry: RankHistory = {
       rank: newRank,
       achievedAt: new Date(),
-      heroLevel: hero.level,
+      heroLevel: hero.progression.level,
       notableAchievement: this.getNotableAchievement(hero, newRank),
       celebrationViewed: false
     };
@@ -187,9 +187,9 @@ export class RankSystem {
    */
   private getNotableAchievement(hero: Hero, rank: RankLevel): string {
     const achievements = [
-      `Alcançou ${hero.xp} XP total`,
-      `Completou ${hero.questsCompleted || 0} missões`,
-      `Nível ${hero.level} conquistado`,
+      `Alcançou ${hero.progression.xp} XP total`,
+      `Completou ${hero.stats.questsCompleted || 0} missões`,
+      `Nível ${hero.progression.level} conquistado`,
       `Classe ${hero.class} dominada`
     ];
     
@@ -204,9 +204,10 @@ export class RankSystem {
    * Calcula pontos de rank baseado em múltiplos fatores
    */
   calculateRankPoints(hero: Hero): number {
-    const basePoints = hero.xp;
-    const missionBonus = (hero.questsCompleted || 0) * 50;
-    const levelBonus = hero.level * 100;
+    const basePoints = hero.progression.xp;
+    const missionBonus = (hero.stats.questsCompleted || 0) * 50;
+    
+    const levelBonus = hero.progression.level * 100;
     const titleBonus = (hero.titles?.length || 0) * 200;
     const achievementBonus = (hero.achievements?.length || 0) * 150;
     
@@ -221,9 +222,9 @@ export class RankSystem {
       heroId: hero.id,
       heroName: hero.name,
       rank: this.calculateRank(hero),
-      level: hero.level,
-      totalXP: hero.xp,
-      missionsCompleted: hero.questsCompleted || 0,
+      level: hero.progression.level,
+      totalXP: hero.progression.xp,
+      missionsCompleted: hero.stats.questsCompleted || 0,
       rankPoints: this.calculateRankPoints(hero),
       position
     };
@@ -251,7 +252,7 @@ export class RankSystem {
       rankHistory: [{
         rank: initialRank,
         achievedAt: new Date(),
-        heroLevel: hero.level,
+        heroLevel: hero.progression.level,
         notableAchievement: 'Início da jornada épica',
         celebrationViewed: true
       }],
@@ -284,7 +285,7 @@ export class RankSystem {
         const newHistory: RankHistory = {
           rank: promotion.newRank,
           achievedAt: new Date(),
-          heroLevel: hero.level,
+          heroLevel: hero.progression.level,
           notableAchievement: this.getNotableAchievement(hero, promotion.newRank),
           celebrationViewed: false
         };

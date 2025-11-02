@@ -19,8 +19,8 @@ export const LEADERBOARD_CONFIGS: LeaderboardConfig[] = [
     type: 'xp',
     icon: '⭐',
     color: 'text-yellow-400',
-    getValue: (hero) => hero.progression.experience,
-    formatValue: (value) => `${value.toLocaleString()} XP`
+    getValue: (hero) => hero.progression?.experience || 0,
+    formatValue: (value) => `${(value || 0).toLocaleString()} XP`
   },
   {
     id: 'level',
@@ -29,8 +29,8 @@ export const LEADERBOARD_CONFIGS: LeaderboardConfig[] = [
     type: 'xp',
     icon: '🏆',
     color: 'text-amber-400',
-    getValue: (hero) => hero.progression.level,
-    formatValue: (value) => `Nível ${value}`
+    getValue: (hero) => hero.progression?.level || 0,
+    formatValue: (value) => `Nível ${value || 0}`
   },
   {
     id: 'gold',
@@ -39,8 +39,8 @@ export const LEADERBOARD_CONFIGS: LeaderboardConfig[] = [
     type: 'gold',
     icon: '💰',
     color: 'text-yellow-500',
-    getValue: (hero) => hero.progression.gold,
-    formatValue: (value) => `${value.toLocaleString()} 🪙`
+    getValue: (hero) => hero.progression?.gold || 0,
+    formatValue: (value) => `${(value || 0).toLocaleString()} 🪙`
   },
   {
     id: 'quests',
@@ -49,8 +49,8 @@ export const LEADERBOARD_CONFIGS: LeaderboardConfig[] = [
     type: 'quests',
     icon: '📜',
     color: 'text-blue-400',
-    getValue: (hero) => hero.completedQuests.length,
-    formatValue: (value) => `${value} missões`
+    getValue: (hero) => (hero.completedQuests || []).length,
+    formatValue: (value) => `${value || 0} missões`
   },
   {
     id: 'achievements',
@@ -59,8 +59,8 @@ export const LEADERBOARD_CONFIGS: LeaderboardConfig[] = [
     type: 'achievements',
     icon: '🏅',
     color: 'text-purple-400',
-    getValue: (hero) => hero.achievements.filter(a => a.unlockedAt).length,
-    formatValue: (value) => `${value} conquistas`
+    getValue: (hero) => (hero.achievements || []).filter(a => a.unlockedAt).length,
+    formatValue: (value) => `${value || 0} conquistas`
   },
   {
     id: 'reputation',
@@ -69,8 +69,8 @@ export const LEADERBOARD_CONFIGS: LeaderboardConfig[] = [
     type: 'reputation',
     icon: '⭐',
     color: 'text-green-400',
-    getValue: (hero) => hero.reputationFactions.reduce((sum, faction) => sum + Math.max(0, faction.reputation), 0),
-    formatValue: (value) => `${value} pontos`
+    getValue: (hero) => (hero.reputationFactions || []).reduce((sum, faction) => sum + Math.max(0, faction.reputation), 0),
+    formatValue: (value) => `${value || 0} pontos`
   },
   {
     id: 'playtime',
@@ -79,8 +79,11 @@ export const LEADERBOARD_CONFIGS: LeaderboardConfig[] = [
     type: 'playtime',
     icon: '⏰',
     color: 'text-indigo-400',
-    getValue: (hero) => hero.stats.totalPlayTime || 0,
-    formatValue: (value) => `${Math.floor(value / 60)}h ${value % 60}m`
+    getValue: (hero) => (hero.stats?.totalPlayTime || 0),
+    formatValue: (value) => {
+      const safeValue = value || 0;
+      return `${Math.floor(safeValue / 60)}h ${safeValue % 60}m`;
+    }
   }
 ];
 
@@ -92,16 +95,21 @@ export function generateLeaderboard(
   // Filtrar heróis válidos e calcular valores
   const validEntries = heroes
     .filter(hero => hero.progression.level > 0) // Apenas heróis que começaram a jogar
-    .map(hero => ({
-      heroId: hero.id,
-      heroName: hero.name,
-      heroClass: hero.class,
-      heroRace: hero.race,
-      value: config.getValue(hero),
-      rank: 0, // Será definido após ordenação
-      change: 0, // TODO: Implementar comparação com ranking anterior
-      lastUpdated: new Date()
-    }))
+    .map(hero => {
+      const rawValue = config.getValue(hero);
+      const safeValue = typeof rawValue === 'number' && !isNaN(rawValue) ? rawValue : 0;
+      
+      return {
+        heroId: hero.id,
+        heroName: hero.name,
+        heroClass: hero.class,
+        heroRace: hero.race,
+        value: safeValue,
+        rank: 0, // Será definido após ordenação
+        change: 0, // TODO: Implementar comparação com ranking anterior
+        lastUpdated: new Date()
+      };
+    })
     .sort((a, b) => b.value - a.value) // Ordenar por valor (maior primeiro)
     .slice(0, limit); // Limitar número de entradas
 
@@ -145,7 +153,7 @@ export function getHeroRanking(hero: Hero, heroes: Hero[]): RankingSystem {
     globalRank,
     classRank,
     weeklyRank: 0, // TODO: Implementar ranking semanal
-    achievements: hero.achievements.filter(a => a.unlockedAt).length,
+    achievements: (hero.achievements || []).filter(a => a.unlockedAt).length,
     totalScore
   };
 }
@@ -163,10 +171,11 @@ export function calculateTotalScore(hero: Hero): number {
   return Math.floor(
     hero.progression.level * weights.level +
     hero.progression.experience * weights.xp +
+
     hero.progression.gold * weights.gold +
-    hero.completedQuests.length * weights.quests +
-    hero.achievements.filter(a => a.unlockedAt).length * weights.achievements +
-    hero.reputationFactions.reduce((sum, faction) => sum + Math.max(0, faction.reputation), 0) * weights.reputation
+    (hero.completedQuests || []).length * weights.quests +
+    (hero.achievements || []).filter(a => a.unlockedAt).length * weights.achievements +
+    (hero.reputationFactions || []).reduce((sum, faction) => sum + Math.max(0, faction.reputation), 0) * weights.reputation
   );
 }
 

@@ -14,7 +14,8 @@ import {
 import { Leaderboard, LeaderboardEntry } from '../types/hero';
 
 const Leaderboards: React.FC = () => {
-  const { selectedHero, heroes } = useHeroStore();
+  const { getSelectedHero, heroes } = useHeroStore();
+  const selectedHero = getSelectedHero();
   const [selectedLeaderboard, setSelectedLeaderboard] = useState('xp');
   const [leaderboards, setLeaderboards] = useState<Leaderboard[]>([]);
   const [viewMode, setViewMode] = useState<'top' | 'around'>('top');

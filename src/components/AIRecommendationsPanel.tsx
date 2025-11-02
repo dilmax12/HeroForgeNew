@@ -60,7 +60,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
 
   useEffect(() => {
     generateRecommendations();
-  }, [generateRecommendations]);
+  }, [hero]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority.toLowerCase()) {
@@ -458,7 +458,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
       <div className="hero-summary">
         <div className="summary-item">
           <div className="summary-label">Nível</div>
-          <div className="summary-value">{hero.level}</div>
+          <div className="summary-value">{hero.progression.level}</div>
         </div>
         <div className="summary-item">
           <div className="summary-label">Classe</div>

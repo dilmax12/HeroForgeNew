@@ -11,7 +11,8 @@ import {
 } from '../utils/titles';
 
 const TitlesManager: React.FC = () => {
-  const { selectedHero, setActiveTitle } = useHeroStore();
+  const { getSelectedHero, setActiveTitle } = useHeroStore();
+  const selectedHero = getSelectedHero();
   const [selectedCategory, setSelectedCategory] = useState<'all' | Title['category']>('all');
   const [selectedRarity, setSelectedRarity] = useState<'all' | Title['rarity']>('all');
   const [searchTerm, setSearchTerm] = useState('');

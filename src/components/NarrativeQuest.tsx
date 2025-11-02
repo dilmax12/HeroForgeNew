@@ -10,7 +10,8 @@ interface NarrativeQuestProps {
 }
 
 const NarrativeQuest: React.FC<NarrativeQuestProps> = ({ quest, onComplete, onClose }) => {
-  const { selectedHero, gainExperience, addGold, addItem, updateReputation } = useHeroStore();
+  const { getSelectedHero, gainExperience, addGold, addItem, updateReputation } = useHeroStore();
+  const selectedHero = getSelectedHero();
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [showOutcome, setShowOutcome] = useState(false);
   const [outcome, setOutcome] = useState<any>(null);

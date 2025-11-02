@@ -6,9 +6,15 @@ import { HeroRankData } from './ranks';
 
 export type Attribute = 'forca' | 'destreza' | 'constituicao' | 'inteligencia' | 'sabedoria' | 'carisma';
 
-export type HeroClass = 'guerreiro' | 'mago' | 'ladino' | 'clerigo' | 'patrulheiro' | 'paladino';
+export type HeroClass = 'guerreiro' | 'mago' | 'ladino' | 'clerigo' | 'patrulheiro' | 'paladino' | 'arqueiro';
 
 export type HeroRace = 'humano' | 'elfo' | 'anao' | 'orc' | 'halfling';
+
+export type Element = 'fire' | 'ice' | 'thunder' | 'earth' | 'light' | 'dark' | 'physical';
+
+export type SkillType = 'attack' | 'buff' | 'support';
+
+export type SkillTarget = 'single' | 'aoe' | 'self' | 'ally';
 
 export type Alignment = 'leal-bom' | 'neutro-bom' | 'caotico-bom' | 
                         'leal-neutro' | 'neutro-puro' | 'caotico-neutro' | 
@@ -85,6 +91,33 @@ export interface Quest {
   };
 }
 
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  type: SkillType;
+  cost: number; // mana/energia
+  basePower?: number; // para ataques
+  duration?: number; // para buffs em turnos
+  cooldown?: number; // em turnos
+  element?: Element;
+  target: SkillTarget;
+  effects?: {
+    heal?: number;
+    buff?: {
+      attribute?: keyof HeroAttributes;
+      value?: number;
+      percentage?: number;
+    };
+    debuff?: {
+      attribute?: keyof HeroAttributes;
+      value?: number;
+      percentage?: number;
+    };
+    special?: string; // efeitos especiais como teleporte, confusão, etc.
+  };
+}
+
 export interface Item {
   id: string;
   name: string;
@@ -92,6 +125,7 @@ export interface Item {
   type: ItemType;
   rarity: ItemRarity;
   price: number;
+  icon?: string; // Emoji or icon representation
   bonus?: Partial<HeroAttributes>;
   effects?: {
     hp?: number;
@@ -278,6 +312,10 @@ export interface Hero {
   derivedAttributes: DerivedAttributes;
   progression: HeroProgression;
   inventory: HeroInventory;
+  element: Element;
+  skills: Skill[];
+  image?: string;
+  battleQuote?: string;
   avatar?: string;
   backstory?: string;
   shortBio?: string;
@@ -320,6 +358,10 @@ export interface HeroCreationData {
   alignment: Alignment;
   background: string;
   attributes: HeroAttributes;
+  element: Element;
+  skills: Skill[];
+  image?: string;
+  battleQuote?: string;
   avatar?: string;
   backstory?: string;
   shortBio?: string;

@@ -15,6 +15,7 @@ export const SHOP_ITEMS: Item[] = [
     type: 'consumable',
     rarity: 'comum',
     price: 25,
+    icon: '🧪',
     effects: { hp: 20 }
   },
   {
@@ -24,6 +25,7 @@ export const SHOP_ITEMS: Item[] = [
     type: 'consumable',
     rarity: 'raro',
     price: 60,
+    icon: '🧪',
     effects: { hp: 50 }
   },
   {
@@ -33,6 +35,7 @@ export const SHOP_ITEMS: Item[] = [
     type: 'consumable',
     rarity: 'epico',
     price: 150,
+    icon: '🧪',
     effects: { hp: 100 }
   },
   {
@@ -42,6 +45,7 @@ export const SHOP_ITEMS: Item[] = [
     type: 'consumable',
     rarity: 'comum',
     price: 30,
+    icon: '🔮',
     effects: { mp: 30 }
   },
   {
@@ -51,6 +55,7 @@ export const SHOP_ITEMS: Item[] = [
     type: 'consumable',
     rarity: 'raro',
     price: 80,
+    icon: '📜',
     effects: { duration: 0 } // Efeito instantâneo
   },
   {
@@ -60,6 +65,7 @@ export const SHOP_ITEMS: Item[] = [
     type: 'consumable',
     rarity: 'raro',
     price: 100,
+    icon: '💪',
     bonus: { forca: 2 },
     effects: { duration: 60 }
   },
@@ -72,6 +78,7 @@ export const SHOP_ITEMS: Item[] = [
     type: 'weapon',
     rarity: 'comum',
     price: 100,
+    icon: '⚔️',
     bonus: { forca: 3 }
   },
   {
@@ -81,6 +88,7 @@ export const SHOP_ITEMS: Item[] = [
     type: 'weapon',
     rarity: 'raro',
     price: 250,
+    icon: '🗡️',
     bonus: { forca: 5 }
   },
   {
@@ -90,6 +98,7 @@ export const SHOP_ITEMS: Item[] = [
     type: 'weapon',
     rarity: 'epico',
     price: 400,
+    icon: '🗡️',
     bonus: { destreza: 3, forca: 2 }
   },
   {
@@ -99,7 +108,48 @@ export const SHOP_ITEMS: Item[] = [
     type: 'weapon',
     rarity: 'epico',
     price: 450,
+    icon: '🪄',
     bonus: { inteligencia: 4, sabedoria: 2 }
+  },
+  {
+    id: 'arco-madeira',
+    name: 'Arco de Madeira',
+    description: 'Arco simples de madeira resistente. +2 Destreza',
+    type: 'weapon',
+    rarity: 'comum',
+    price: 80,
+    icon: '🏹',
+    bonus: { destreza: 2 }
+  },
+  {
+    id: 'arco-composto',
+    name: 'Arco Composto',
+    description: 'Arco avançado com maior alcance. +4 Destreza, +1 Força',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 220,
+    icon: '🏹',
+    bonus: { destreza: 4, forca: 1 }
+  },
+  {
+    id: 'arco-elfico',
+    name: 'Arco Élfico Encantado',
+    description: 'Arco élfico com runas mágicas. +5 Destreza, +2 Sabedoria',
+    type: 'weapon',
+    rarity: 'epico',
+    price: 480,
+    icon: '🏹',
+    bonus: { destreza: 5, sabedoria: 2 }
+  },
+  {
+    id: 'besta-pesada',
+    name: 'Besta Pesada',
+    description: 'Besta de guerra com grande poder. +3 Força, +3 Destreza',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 320,
+    icon: '🏹',
+    bonus: { forca: 3, destreza: 3 }
   },
 
   // === ARMADURAS ===
@@ -110,6 +160,7 @@ export const SHOP_ITEMS: Item[] = [
     type: 'armor',
     rarity: 'comum',
     price: 75,
+    icon: '🦺',
     bonus: { constituicao: 2 }
   },
   {
@@ -119,6 +170,7 @@ export const SHOP_ITEMS: Item[] = [
     type: 'armor',
     rarity: 'raro',
     price: 200,
+    icon: '🛡️',
     bonus: { constituicao: 4 }
   },
   {
@@ -128,7 +180,28 @@ export const SHOP_ITEMS: Item[] = [
     type: 'armor',
     rarity: 'epico',
     price: 500,
+    icon: '🛡️',
     bonus: { constituicao: 6, destreza: -1 }
+  },
+  {
+    id: 'armadura-couro-tachas',
+    name: 'Armadura de Couro com Tachas',
+    description: 'Couro reforçado com tachas metálicas. +3 Constituição, +1 Destreza',
+    type: 'armor',
+    rarity: 'raro',
+    price: 180,
+    icon: '🦺',
+    bonus: { constituicao: 3, destreza: 1 }
+  },
+  {
+    id: 'gibao-elfico',
+    name: 'Gibão Élfico',
+    description: 'Armadura élfica leve e flexível. +2 Constituição, +3 Destreza',
+    type: 'armor',
+    rarity: 'epico',
+    price: 420,
+    icon: '🦺',
+    bonus: { constituicao: 2, destreza: 3 }
   },
 
   // === ACESSÓRIOS ===
@@ -139,6 +212,7 @@ export const SHOP_ITEMS: Item[] = [
     type: 'accessory',
     rarity: 'raro',
     price: 150,
+    icon: '💍',
     bonus: { forca: 2 }
   },
   {
@@ -148,6 +222,7 @@ export const SHOP_ITEMS: Item[] = [
     type: 'accessory',
     rarity: 'raro',
     price: 180,
+    icon: '🔮',
     bonus: { sabedoria: 3 }
   },
   {
@@ -157,7 +232,38 @@ export const SHOP_ITEMS: Item[] = [
     type: 'accessory',
     rarity: 'epico',
     price: 300,
+    icon: '📿',
     bonus: { carisma: 3 }
+  },
+  {
+    id: 'aljava-encantada',
+    name: 'Aljava Encantada',
+    description: 'Aljava mágica que melhora a precisão. +2 Destreza, +1 Sabedoria',
+    type: 'accessory',
+    rarity: 'raro',
+    price: 200,
+    icon: '🏹',
+    bonus: { destreza: 2, sabedoria: 1 }
+  },
+  {
+    id: 'bracadeira-arqueiro',
+    name: 'Braçadeira do Arqueiro',
+    description: 'Proteção para o braço que saca a corda. +3 Destreza',
+    type: 'accessory',
+    rarity: 'raro',
+    price: 160,
+    icon: '🛡️',
+    bonus: { destreza: 3 }
+  },
+  {
+    id: 'anel-precisao',
+    name: 'Anel da Precisão',
+    description: 'Anel que aprimora a mira. +2 Destreza, +1 Inteligência',
+    type: 'accessory',
+    rarity: 'epico',
+    price: 280,
+    icon: '💍',
+    bonus: { destreza: 2, inteligencia: 1 }
   },
 
   // === COSMÉTICOS ===
@@ -167,7 +273,8 @@ export const SHOP_ITEMS: Item[] = [
     description: 'Capa elegante de cor carmesim. Puramente cosmética.',
     type: 'cosmetic',
     rarity: 'comum',
-    price: 50
+    price: 50,
+    icon: '🧥'
   },
   {
     id: 'coroa-ouro',
@@ -175,7 +282,8 @@ export const SHOP_ITEMS: Item[] = [
     description: 'Coroa dourada para verdadeiros líderes. Cosmética.',
     type: 'cosmetic',
     rarity: 'lendario',
-    price: 1000
+    price: 1000,
+    icon: '👑'
   },
   {
     id: 'mascara-sombras',
@@ -183,7 +291,8 @@ export const SHOP_ITEMS: Item[] = [
     description: 'Máscara misteriosa para heróis discretos. Cosmética.',
     type: 'cosmetic',
     rarity: 'epico',
-    price: 200
+    price: 200,
+    icon: '🎭'
   }
 ];
 

@@ -182,48 +182,25 @@ export const RankProgressAnimation: React.FC<RankProgressAnimationProps> = ({
 }) => {
   return (
     <div className="relative w-full h-4 bg-gray-700 rounded-full overflow-hidden">
-      <motion.div
-        initial={{ width: 0 }}
-        animate={{ width: `${progress}%` }}
-        transition={{ 
-          duration: isAnimating ? 1.5 : 0.3, 
-          ease: "easeOut" 
-        }}
-        className={`h-full bg-gradient-to-r ${color} relative`}
+      <div
+        className={`h-full bg-gradient-to-r ${color} relative transition-all duration-300 ease-out`}
+        style={{ width: `${progress}%` }}
       >
         {/* Efeito de brilho na barra de progresso */}
-        <motion.div
-          animate={{ x: [-100, 300] }}
-          transition={{ 
-            duration: 2, 
-            repeat: Infinity, 
-            ease: "linear" 
-          }}
-          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent w-20"
-        />
-      </motion.div>
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent w-20" />
+      </div>
       
-      {/* Partículas na barra de progresso */}
+      {/* Partículas na barra de progresso - simplificadas */}
       {isAnimating && (
         <div className="absolute inset-0">
-          {[...Array(5)].map((_, i) => (
-            <motion.div
+          {[...Array(3)].map((_, i) => (
+            <div
               key={i}
-              initial={{ 
-                x: 0, 
-                y: Math.random() * 16,
-                opacity: 0 
+              className="absolute w-1 h-1 bg-white rounded-full opacity-50"
+              style={{
+                left: `${(progress / 100) * (20 + i * 20)}%`,
+                top: `${4 + i * 2}px`
               }}
-              animate={{ 
-                x: progress * 3, 
-                opacity: [0, 1, 0] 
-              }}
-              transition={{ 
-                duration: 1, 
-                delay: i * 0.2,
-                ease: "easeOut"
-              }}
-              className="absolute w-1 h-1 bg-white rounded-full"
             />
           ))}
         </div>
@@ -237,25 +214,22 @@ interface FloatingRankBadgeProps {
   isFloating?: boolean;
 }
 
-export const FloatingRankBadge: React.FC<FloatingRankBadgeProps> = ({
+export const FloatingRankBadge: React.FC<FloatingRankBadgeProps> = React.memo(({
   rank,
   isFloating = true
 }) => {
+  // Verificação de segurança para o rank
+  if (!rank) {
+    return null;
+  }
+
+  // Temporariamente usando div normal em vez de motion.div para resolver problemas de hooks
   return (
-    <motion.div
-      animate={isFloating ? { 
-        y: [0, -10, 0],
-        scale: [1, 1.05, 1]
-      } : {}}
-      transition={isFloating ? { 
-        duration: 2, 
-        repeat: Infinity, 
-        ease: "easeInOut" 
-      } : {}}
+    <div
       className={`inline-flex items-center px-4 py-2 rounded-full bg-gradient-to-r ${getRankGradient(rank)} text-white font-bold ${medievalTheme.effects.shadows.glow}`}
     >
       <span className="text-xl mr-2">{getRankIcon(rank)}</span>
       <span>{rank}</span>
-    </motion.div>
+    </div>
   );
-};
+});

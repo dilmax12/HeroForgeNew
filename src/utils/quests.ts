@@ -193,7 +193,7 @@ export function generateQuest(
   const rewards = applyDifficultyModifier(template.baseReward, difficulty);
   const enemies = template.enemies ? generateEnemies(template.enemies, difficulty) : undefined;
   
-  return {
+  const quest = {
     id: questId,
     title: interpolateTemplate(template.titleTemplate, variables),
     description: interpolateTemplate(template.descriptionTemplate, variables),
@@ -207,9 +207,16 @@ export function generateQuest(
     isGuildQuest,
     failurePenalty: difficulty === 'epica' ? { gold: 20, reputation: -5 } : undefined
   };
+  
+  if (isGuildQuest) {
+    console.log('🏰 Missão de guilda gerada:', quest.title, '- Dificuldade:', difficulty);
+  }
+  
+  return quest;
 }
 
 export function generateQuestBoard(heroLevel: number = 1, guildLevel: number = 0): Quest[] {
+  console.log('🎯 generateQuestBoard chamada:', { heroLevel, guildLevel });
   const quests: Quest[] = [];
   
   // 2 missões rápidas
@@ -225,12 +232,24 @@ export function generateQuestBoard(heroLevel: number = 1, guildLevel: number = 0
   quests.push(generateQuest('epica', heroLevel));
   
   // Missões de guilda (se aplicável)
+  console.log('🏰 Verificando missões de guilda - guildLevel:', guildLevel);
   if (guildLevel > 0) {
+    console.log('✅ Gerando missão de guilda padrão');
     quests.push(generateQuest('padrao', heroLevel, true));
     if (guildLevel >= 3) {
+      console.log('✅ Gerando missão de guilda épica');
       quests.push(generateQuest('epica', heroLevel, true));
     }
+  } else {
+    console.log('❌ Nenhuma missão de guilda gerada - guildLevel é 0');
   }
+  
+  const guildQuests = quests.filter(q => q.isGuildQuest);
+  console.log('📋 Missões geradas:', {
+    total: quests.length,
+    guildQuests: guildQuests.length,
+    guildQuestTitles: guildQuests.map(q => q.title)
+  });
   
   return quests;
 }

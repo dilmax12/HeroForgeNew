@@ -28,7 +28,7 @@ interface EvolutionPanelProps {
 type ViewMode = 'overview' | 'progress' | 'history' | 'leaderboard' | 'comparison';
 
 // Componentes auxiliares
-const RankCard: React.FC<{ 
+const LocalRankCard: React.FC<{ 
   rank: RankLevel; 
   size?: 'small' | 'medium' | 'large'; 
   isFloating?: boolean;
@@ -73,7 +73,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
       const initializedRankData = rankSystem.initializeRankData(currentHero);
       updateHero(currentHero.id, { rankData: initializedRankData });
     }
-  }, [currentHero, updateHero]);
+  }, [currentHero]);
   const rankProgress = currentHero ? getHeroRankProgress(currentHero.id) : null;
   const leaderboard = getRankLeaderboard();
 
@@ -99,7 +99,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
       currentProgress: getHeroRankProgress(currentHero.id),
       compareProgress: getHeroRankProgress(compareHero.id)
     };
-  }, [currentHero, selectedHeroForComparison, heroes, getHeroRankProgress]);
+  }, [currentHero, selectedHeroForComparison, heroes]);
 
   if (!currentHero || !rankProgress) {
     return (
@@ -127,20 +127,20 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
             <h3 className="text-xl font-bold text-amber-100">{currentHero.name}</h3>
             <p className="text-amber-300">{currentHero.class} • {currentHero.race}</p>
           </div>
-          <RankCard rank={rankProgress.progress.currentRank} size="large" />
+          <LocalRankCard rank={rankProgress.progress.currentRank} size="large" />
         </div>
         
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center">
-            <div className="text-2xl font-bold text-amber-100">{currentHero.level}</div>
+            <div className="text-2xl font-bold text-amber-100">{currentHero.progression.level}</div>
             <div className="text-sm text-amber-300">Nível</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-amber-100">{(currentHero.xp || 0).toLocaleString()}</div>
+            <div className="text-2xl font-bold text-amber-100">{(currentHero.progression.xp || 0).toLocaleString()}</div>
             <div className="text-sm text-amber-300">XP Total</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-amber-100">{currentHero.questsCompleted}</div>
+            <div className="text-2xl font-bold text-amber-100">{currentHero.stats.questsCompleted}</div>
             <div className="text-sm text-amber-300">Missões</div>
           </div>
           <div className="text-center">
@@ -169,7 +169,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
             {rankProgress.rankData.rankHistory.slice(-3).reverse().map((entry, index) => (
               <div key={index} className="flex items-center justify-between p-3 bg-slate-600 rounded">
                 <div className="flex items-center">
-                  <RankCard rank={entry.rank} size="small" />
+                  <LocalRankCard rank={entry.rank} size="small" />
                   <div className="ml-3">
                     <div className="text-slate-100 font-medium">Promovido para Rank {entry.rank}</div>
                     <div className="text-slate-400 text-sm">
@@ -304,7 +304,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
         ) : (
           filteredHistory.reverse().map((entry, index) => (
             <div key={index} className="flex items-center p-4 bg-slate-700 rounded-lg">
-              <RankCard rank={entry.rank} size="medium" />
+              <LocalRankCard rank={entry.rank} size="medium" />
               <div className="ml-4 flex-1">
                 <div className="flex items-center justify-between">
                   <div>
@@ -360,7 +360,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
               {entry.position}
             </div>
             
-            <RankCard rank={entry.rank} size="small" />
+            <LocalRankCard rank={entry.rank} size="small" />
             
             <div className="ml-3 flex-1">
               <div className="text-slate-100 font-medium">{entry.heroName}</div>
@@ -410,7 +410,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
               <h5 className="text-lg font-semibold text-slate-100">{comparisonData.current.name}</h5>
               <p className="text-slate-400">{comparisonData.current.class}</p>
               <div className="mt-2">
-                <RankCard rank={comparisonData.currentProgress?.progress.currentRank || 'F'} size="large" />
+                <LocalRankCard rank={comparisonData.currentProgress?.progress.currentRank || 'F'} size="large" />
               </div>
             </div>
             
@@ -421,11 +421,11 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-300">XP Total</span>
-                <span className="text-slate-100">{(comparisonData.current.xp || 0).toLocaleString()}</span>
+                <span className="text-slate-100">{(comparisonData.current.progression.xp || 0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-300">Missões</span>
-                <span className="text-slate-100">{comparisonData.current.questsCompleted}</span>
+                <span className="text-slate-100">{comparisonData.current.stats.questsCompleted}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-300">Pontos de Rank</span>
@@ -439,7 +439,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
             <div className="text-center mb-4">
               <h5 className="text-lg font-semibold text-slate-100">{comparisonData.compare.name}</h5>
               <p className="text-slate-400">{comparisonData.compare.class}</p>
-              <RankCard rank={comparisonData.compareProgress?.progress.currentRank || 'F'} size="large" className="mt-2" />
+              <LocalRankCard rank={comparisonData.compareProgress?.progress.currentRank || 'F'} size="large" className="mt-2" />
             </div>
             
             <div className="space-y-3">
@@ -449,11 +449,11 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-300">XP Total</span>
-                <span className="text-slate-100">{(comparisonData.compare.xp || 0).toLocaleString()}</span>
+                <span className="text-slate-100">{(comparisonData.compare.progression.xp || 0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-300">Missões</span>
-                <span className="text-slate-100">{comparisonData.compare.questsCompleted}</span>
+                <span className="text-slate-100">{comparisonData.compare.stats.questsCompleted}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-300">Pontos de Rank</span>

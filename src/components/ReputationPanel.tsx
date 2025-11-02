@@ -43,7 +43,7 @@ const ReputationPanel: React.FC<ReputationPanelProps> = ({ hero }) => {
       </h3>
       
       <div className="space-y-4">
-        {hero.reputationFactions.map((faction) => {
+        {(hero.reputationFactions || []).map((faction) => {
           const level = getReputationLevel(faction.reputation);
           const modifiers = calculateReputationModifiers(hero, faction.name);
           const factionInfo = FACTION_DESCRIPTIONS[faction.name as keyof typeof FACTION_DESCRIPTIONS];

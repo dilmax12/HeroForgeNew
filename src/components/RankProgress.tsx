@@ -228,15 +228,15 @@ export const RankProgress: React.FC<RankProgressProps> = ({
       <div className="border-t border-gray-700 pt-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
           <div>
-            <div className="text-2xl font-bold text-blue-400">{hero.level}</div>
+            <div className="text-2xl font-bold text-blue-400">{hero.progression.level}</div>
             <div className="text-sm text-gray-400">Nível</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-green-400">{hero.xp.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-green-400">{hero.progression.xp.toLocaleString()}</div>
             <div className="text-sm text-gray-400">XP Total</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-purple-400">{hero.questsCompleted || 0}</div>
+            <div className="text-2xl font-bold text-purple-400">{hero.stats.questsCompleted || 0}</div>
             <div className="text-sm text-gray-400">Missões</div>
           </div>
           <div>

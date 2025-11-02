@@ -1,22 +1,118 @@
 import React, { useState, useEffect } from 'react';
 import { useHeroStore } from '../store/heroStore';
-import { Quest, QuestDifficulty } from '../types/hero';
-import { generateQuestBoard } from '../utils/questGeneration';
+import { Quest, QuestDifficulty, Hero } from '../types/hero';
+import { generateQuestBoard } from '../utils/quests';
 import { generateNarrativeMission } from '../utils/narrativeMissions';
 import NarrativeQuest from './NarrativeQuest';
+import { getClassIcon } from '../styles/medievalTheme';
+import { ELEMENT_INFO } from '../utils/elementSystem';
+
+// Componente para seleção de herói
+const HeroSelector: React.FC<{ 
+  heroes: Hero[], 
+  onHeroSelect: (heroId: string) => void 
+}> = ({ heroes, onHeroSelect }) => {
+  const { getSelectedHero } = useHeroStore();
+  const selectedHero = getSelectedHero();
+  const selectedHeroId = selectedHero?.id || null;
+
+  const handleClick = (heroId: string) => {
+    onHeroSelect(heroId);
+  };
+
+  if (heroes.length === 0) {
+    return (
+      <div className="text-center p-8 bg-slate-800/50 rounded-lg border border-amber-500/30">
+        <div className="text-4xl mb-4">🦸</div>
+        <h3 className="text-xl font-bold text-amber-400 mb-2">Nenhum Herói Criado</h3>
+        <p className="text-gray-300 mb-4">Você precisa criar um herói primeiro para acessar as missões.</p>
+        <a 
+          href="/" 
+          className="inline-block px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg transition-colors"
+        >
+          Criar Primeiro Herói
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-slate-800/50 rounded-lg border border-amber-500/30 p-6">
+      <h3 className="text-xl font-bold text-amber-400 mb-4 text-center">Escolha seu Herói</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {heroes.map(hero => {
+          const elementInfo = ELEMENT_INFO[hero.element];
+          return (
+            <div
+              key={hero.id}
+              onClick={() => handleClick(hero.id)}
+              className={`bg-slate-700/50 rounded-lg p-4 border transition-all cursor-pointer group ${
+                selectedHeroId === hero.id 
+                  ? 'border-amber-500 bg-amber-900/20' 
+                  : 'border-slate-600 hover:border-amber-500 hover:bg-slate-700/70'
+              }`}
+            >
+              <div className="flex items-center space-x-3">
+                <div className="text-3xl">{hero.avatar}</div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-white group-hover:text-amber-400 transition-colors">
+                    {hero.name}
+                  </h4>
+                  <div className="text-sm text-gray-300 flex items-center space-x-2">
+                    <span>{getClassIcon(hero.class)} {hero.class}</span>
+                    <span className={elementInfo.color}>
+                      {elementInfo.icon} {hero.element}
+                    </span>
+                  </div>
+                  <div className="text-xs text-amber-600">
+                    Nível {hero.progression.level} • {hero.progression.experience} XP
+                  </div>
+                  {selectedHeroId === hero.id && (
+                    <div className="text-xs text-green-400 mt-1 font-medium">
+                      ✓ Herói selecionado! Carregando missões...
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 const QuestBoard: React.FC = () => {
   const { 
-    selectedHero, 
+    getSelectedHero, 
     availableQuests, 
     refreshQuests, 
     acceptQuest, 
-    completeQuest 
+    completeQuest,
+    selectHero,
+    heroes
   } = useHeroStore();
+  
+  const selectedHero = getSelectedHero();
   
   const [selectedTab, setSelectedTab] = useState<'available' | 'narrative' | 'active' | 'completed'>('available');
   const [selectedNarrativeQuest, setSelectedNarrativeQuest] = useState<Quest | null>(null);
   const [narrativeQuests, setNarrativeQuests] = useState<Quest[]>([]);
+  const [forceUpdate, setForceUpdate] = useState(0);
+
+  // Selecionar automaticamente o primeiro herói se não há nenhum selecionado
+  useEffect(() => {
+    if (!selectedHero && heroes.length > 0) {
+      console.log('Nenhum herói selecionado, selecionando automaticamente o primeiro:', heroes[0].name);
+      selectHero(heroes[0].id);
+      refreshQuests(heroes[0].progression.level);
+    }
+  }, [selectedHero?.id, heroes.length]);
+
+  // Monitorar mudanças no herói selecionado
+  useEffect(() => {
+    console.log('Estado do herói selecionado mudou:', selectedHero?.name || 'Nenhum');
+  }, [selectedHero]);
 
   // Gerar missões narrativas quando o herói for selecionado
   useEffect(() => {
@@ -29,6 +125,27 @@ const QuestBoard: React.FC = () => {
       setNarrativeQuests(newNarrativeQuests);
     }
   }, [selectedHero?.id, selectedHero?.progression.level]);
+
+  const handleHeroSelect = (heroId: string) => {
+    console.log('Clique detectado! Selecionando herói:', heroId);
+    selectHero(heroId);
+    
+    // Atualizar missões para o herói selecionado
+    const selectedHeroData = heroes.find(h => h.id === heroId);
+    if (selectedHeroData) {
+      console.log('Atualizando missões para herói:', selectedHeroData.name, 'Level:', selectedHeroData.progression.level);
+      refreshQuests(selectedHeroData.progression.level);
+    }
+    
+    console.log('Herói selecionado, forçando atualização...');
+    setForceUpdate(prev => prev + 1);
+    
+    // Verificar se a seleção funcionou
+    setTimeout(() => {
+      const currentSelected = heroes.find(h => h.id === heroId);
+      console.log('Herói encontrado:', currentSelected?.name);
+    }, 100);
+  };
 
   const handleNarrativeQuestComplete = (questId: string, outcome: any) => {
     // Aplicar recompensas ao herói
@@ -44,39 +161,42 @@ const QuestBoard: React.FC = () => {
 
   if (!selectedHero) {
     return (
-      <div className="text-center p-8">
-        <h2 className="text-2xl font-bold text-amber-400 mb-4">Selecione um Herói</h2>
-        <p className="text-gray-300">Você precisa selecionar um herói para ver as missões disponíveis.</p>
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="text-center mb-8">
+          <div className="text-6xl mb-4">📜</div>
+          <h2 className="text-3xl font-bold text-amber-400 mb-4">Quadro de Missões</h2>
+          <p className="text-gray-300 mb-6">Selecione um herói para ver as missões disponíveis</p>
+        </div>
+        
+        <HeroSelector heroes={heroes} onHeroSelect={handleHeroSelect} />
       </div>
     );
   }
 
   const getDifficultyColor = (difficulty: QuestDifficulty) => {
     switch (difficulty) {
-      case 'easy': return 'text-green-400 bg-green-900/20';
-      case 'medium': return 'text-yellow-400 bg-yellow-900/20';
-      case 'hard': return 'text-red-400 bg-red-900/20';
-      case 'epic': return 'text-purple-400 bg-purple-900/20';
+      case 'rapida': return 'text-green-400 bg-green-900/20';
+      case 'padrao': return 'text-yellow-400 bg-yellow-900/20';
+      case 'epica': return 'text-purple-400 bg-purple-900/20';
       default: return 'text-gray-400 bg-gray-900/20';
     }
   };
 
   const getDifficultyLabel = (difficulty: QuestDifficulty) => {
     switch (difficulty) {
-      case 'easy': return 'Fácil';
-      case 'medium': return 'Médio';
-      case 'hard': return 'Difícil';
-      case 'epic': return 'Épico';
+      case 'rapida': return 'Rápida';
+      case 'padrao': return 'Padrão';
+      case 'epica': return 'Épica';
       default: return 'Desconhecido';
     }
   };
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'contract': return '📜';
-      case 'hunt': return '⚔️';
-      case 'exploration': return '🗺️';
-      case 'story': return '📖';
+      case 'contrato': return '📜';
+      case 'caca': return '⚔️';
+      case 'exploracao': return '🗺️';
+      case 'historia': return '📖';
       default: return '❓';
     }
   };
@@ -87,13 +207,17 @@ const QuestBoard: React.FC = () => {
   };
 
   const handleAcceptQuest = (quest: Quest) => {
-    if (canAcceptQuest(quest)) {
-      acceptQuest(quest.id);
+    if (canAcceptQuest(quest) && selectedHero) {
+      console.log('🎯 Aceitando missão:', quest.title, 'para herói:', selectedHero.name);
+      acceptQuest(selectedHero.id, quest.id);
     }
   };
 
   const handleCompleteQuest = (questId: string) => {
-    completeQuest(questId);
+    if (selectedHero) {
+      console.log('✅ Completando missão:', questId, 'para herói:', selectedHero.name);
+      completeQuest(selectedHero.id, questId);
+    }
   };
 
   const renderQuestCard = (quest: Quest, isActive = false, isCompleted = false) => (
@@ -139,13 +263,13 @@ const QuestBoard: React.FC = () => {
         <div className="flex items-center space-x-4 text-sm">
           <span className="flex items-center space-x-1">
             <span>🪙</span>
-            <span>{quest.rewards.gold} ouro</span>
+            <span>{quest.rewards?.gold || 0} ouro</span>
           </span>
           <span className="flex items-center space-x-1">
             <span>⭐</span>
-            <span>{quest.rewards.xp} XP</span>
+            <span>{quest.rewards?.xp || 0} XP</span>
           </span>
-          {quest.rewards.items && quest.rewards.items.length > 0 && (
+          {quest.rewards?.items && quest.rewards.items.length > 0 && (
             <span className="flex items-center space-x-1">
               <span>🎁</span>
               <span>{quest.rewards.items.length} item(s)</span>
@@ -190,7 +314,10 @@ const QuestBoard: React.FC = () => {
       <div className="flex items-center justify-between mb-8">
         <h2 className="text-3xl font-bold text-amber-400">Quadro de Missões</h2>
         <button
-          onClick={refreshQuests}
+          onClick={() => {
+            console.log('🔄 Atualizando missões para herói:', selectedHero?.name, 'Level:', selectedHero?.progression.level);
+            refreshQuests(selectedHero?.progression.level || 1);
+          }}
           className="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-md font-medium transition-colors"
         >
           🔄 Atualizar Missões
@@ -263,7 +390,10 @@ const QuestBoard: React.FC = () => {
         <div className="text-center p-8">
           <p className="text-gray-400">Nenhuma missão disponível no momento.</p>
           <button
-            onClick={refreshQuests}
+            onClick={() => {
+              console.log('🎲 Gerando novas missões para herói:', selectedHero?.name, 'Level:', selectedHero?.progression.level);
+              refreshQuests(selectedHero?.progression.level || 1);
+            }}
             className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-md font-medium transition-colors"
           >
             Gerar Novas Missões

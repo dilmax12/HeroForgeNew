@@ -2,7 +2,8 @@
  * Sistema de Combate - RNG + Atributos
  */
 
-import { Hero, CombatResult, QuestEnemy, Item } from '../types/hero';
+import { Hero, CombatResult, QuestEnemy, Item, Skill } from '../types/hero';
+import { getElementMultiplier } from './elementSystem';
 
 // === TIPOS DE COMBATE ===
 
@@ -239,6 +240,104 @@ function calculateGoldReward(enemy: CombatEntity): number {
   return Math.floor((enemy.maxHp + enemy.forca) * 0.8) + Math.floor(Math.random() * 10);
 }
 
+// === SISTEMA DE HABILIDADES ===
+
+export interface SkillUseResult {
+  damage: number;
+  elementMultiplier: number;
+  healing?: number;
+  effects?: string[];
+  success: boolean;
+  message: string;
+}
+
+/**
+ * Resolve o uso de uma habilidade em combate
+ */
+export function resolveSkillUse(user: Hero, target: Hero | CombatEntity, skill: Skill): SkillUseResult {
+  const userElement = user.element || 'physical';
+  const targetElement = (target as Hero).element || 'physical';
+  
+  // Calcular poder base da habilidade
+  let basePower = skill.basePower || 0;
+  
+  // Modificadores baseados em atributos
+  switch (skill.type) {
+    case 'attack':
+      basePower += user.attributes.forca * 0.5;
+      break;
+    case 'support':
+      basePower += user.attributes.sabedoria * 0.3;
+      break;
+    case 'buff':
+      basePower += user.attributes.carisma * 0.2;
+      break;
+  }
+  
+  // Calcular multiplicador elemental
+  const elementMultiplier = getElementMultiplier(skill.element || 'physical', targetElement);
+  
+  // Calcular dano final
+  let finalDamage = 0;
+  let healing = 0;
+  const effects: string[] = [];
+  
+  if (skill.type === 'attack') {
+    const targetDefense = (target as any).constituicao || target.constituicao || 0;
+    finalDamage = Math.max(0, Math.floor(basePower * elementMultiplier) - (targetDefense * 0.3));
+  } else if (skill.type === 'support' && skill.name.includes('Cura')) {
+    healing = Math.floor(basePower);
+  }
+  
+  // Adicionar efeitos especiais baseados na habilidade
+  if (skill.effects) {
+    effects.push(...skill.effects);
+  }
+  
+  // Determinar sucesso (pode falhar em casos específicos)
+  const successRate = 0.9; // 90% de chance base
+  const success = Math.random() < successRate;
+  
+  // Gerar mensagem
+  let message = `${user.name} usa ${skill.name}!`;
+  if (!success) {
+    message += ' Mas falhou!';
+    return {
+      damage: 0,
+      elementMultiplier: 1,
+      effects: [],
+      success: false,
+      message
+    };
+  }
+  
+  if (finalDamage > 0) {
+    message += ` Causa ${finalDamage} de dano`;
+    if (elementMultiplier > 1) {
+      message += ' (super efetivo!)';
+    } else if (elementMultiplier < 1) {
+      message += ' (pouco efetivo)';
+    }
+  }
+  
+  if (healing > 0) {
+    message += ` Cura ${healing} HP`;
+  }
+  
+  if (effects.length > 0) {
+    message += ` (${effects.join(', ')})`;
+  }
+  
+  return {
+    damage: finalDamage,
+    elementMultiplier,
+    healing,
+    effects,
+    success: true,
+    message
+  };
+}
+
 // === FUNÇÃO PRINCIPAL DE COMBATE ===
 
 export function resolveCombat(hero: Hero, enemies: QuestEnemy[]): CombatResult {
@@ -302,7 +401,7 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[]): CombatResult {
         combatLog.push(`${enemy.name} foi derrotado!`);
         
         // Calcular recompensas
-        const xp = calculateXpReward(enemy, hero.level);
+        const xp = calculateXpReward(enemy, hero.progression.level);
         const gold = calculateGoldReward(enemy);
         const loot = generateLoot(questEnemy.type);
         
@@ -335,7 +434,7 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[]): CombatResult {
 
 // === FUNÇÃO DE AUTO-RESOLVE (PARA MISSÕES RÁPIDAS) ===
 
-export function autoResolveCombat(hero: Hero, enemies: QuestEnemy[]): CombatResult {
+export function autoResolveCombat(hero: Hero, enemies: QuestEnemy[], isGuildQuest: boolean = false): CombatResult {
   const heroEntity = heroToCombatEntity(hero);
   let totalPower = heroEntity.forca + heroEntity.destreza + heroEntity.constituicao;
   
@@ -345,11 +444,59 @@ export function autoResolveCombat(hero: Hero, enemies: QuestEnemy[]): CombatResu
     enemyPower += (enemy.forca + enemy.destreza + enemy.constituicao) * questEnemy.count;
   });
   
-  // Calcular chance de vitória (50% base + diferença de poder)
-  const powerDiff = totalPower - enemyPower;
-  const winChance = Math.max(10, Math.min(90, 50 + powerDiff * 2));
+  // Bônus especial para missões de guilda
+  let guildBonus = 0;
+  if (isGuildQuest) {
+    // Bônus muito maior para tornar missões de guilda viáveis
+    guildBonus = hero.progression.level * 30 + 40; // +40 base + 30 por nível
+    console.log(`🏰 Bônus de guilda aplicado: +${guildBonus} poder`);
+  }
+  
+  // Calcular chance de vitória (50% base + diferença de poder + bônus de guilda)
+  const powerDiff = (totalPower + guildBonus) - enemyPower;
+  const baseWinChance = isGuildQuest ? 75 : 50; // Chance base muito maior para missões de guilda
+  const winChance = Math.max(25, Math.min(95, baseWinChance + powerDiff * 2));
+  
+  console.log(`⚔️ Poder do herói: ${totalPower} + ${guildBonus} = ${totalPower + guildBonus}`);
+  console.log(`👹 Poder dos inimigos: ${enemyPower}`);
+  console.log(`🎲 Chance de vitória: ${winChance.toFixed(1)}%`);
   
   const victory = Math.random() * 100 < winChance;
+  
+  // Gerar narrativa imersiva do combate
+  const generateCombatNarrative = (victory: boolean, enemies: QuestEnemy[], hero: Hero): string[] => {
+    const narrative: string[] = [];
+    const enemyNames = enemies.map(e => `${e.count} ${e.type}${e.count > 1 ? 's' : ''}`).join(', ');
+    
+    narrative.push(`⚔️ ${hero.name} enfrenta ${enemyNames} em combate!`);
+    
+    if (isGuildQuest) {
+      narrative.push(`🏰 O poder da guilda fortalece ${hero.name} na batalha!`);
+    }
+    
+    if (victory) {
+      narrative.push(`💪 ${hero.name} luta com bravura e determinação!`);
+      narrative.push(`⚡ Seus golpes encontram o alvo com precisão mortal!`);
+      
+      enemies.forEach(questEnemy => {
+        if (questEnemy.count === 1) {
+          narrative.push(`🗡️ O ${questEnemy.type} é derrotado após uma batalha intensa!`);
+        } else {
+          narrative.push(`🗡️ Os ${questEnemy.count} ${questEnemy.type}s são derrotados um por um!`);
+        }
+      });
+      
+      narrative.push(`🎉 Vitória! ${hero.name} emerge triunfante do combate!`);
+    } else {
+      narrative.push(`😰 ${hero.name} luta corajosamente, mas os inimigos são muito poderosos!`);
+      narrative.push(`💥 Após uma batalha feroz, ${hero.name} é forçado a recuar!`);
+      narrative.push(`🩹 Ferido mas vivo, ${hero.name} aprende com a derrota...`);
+    }
+    
+    return narrative;
+  };
+  
+  const combatLog = generateCombatNarrative(victory, enemies, hero);
   
   if (victory) {
     let totalXp = 0;
@@ -359,11 +506,16 @@ export function autoResolveCombat(hero: Hero, enemies: QuestEnemy[]): CombatResu
     enemies.forEach(questEnemy => {
       for (let i = 0; i < questEnemy.count; i++) {
         const enemy = createEnemyFromTemplate(questEnemy.type, questEnemy.level || 1);
-        totalXp += calculateXpReward(enemy, hero.level);
+        totalXp += calculateXpReward(enemy, hero.progression.level);
         totalGold += calculateGoldReward(enemy);
         allLoot.push(...generateLoot(questEnemy.type));
       }
     });
+    
+    combatLog.push(`💰 Recompensas: ${totalXp} XP, ${totalGold} moedas de ouro`);
+    if (allLoot.length > 0) {
+      combatLog.push(`🎒 Itens encontrados: ${allLoot.map(item => item.name).join(', ')}`);
+    }
     
     return {
       victory: true,
@@ -371,16 +523,19 @@ export function autoResolveCombat(hero: Hero, enemies: QuestEnemy[]): CombatResu
       xpGained: totalXp,
       goldGained: totalGold,
       itemsGained: allLoot,
-      log: [`Combate resolvido automaticamente - Vitória!`]
+      log: combatLog
     };
   } else {
+    const damage = Math.floor(heroEntity.maxHp * 0.3);
+    combatLog.push(`💔 ${hero.name} sofre ${damage} pontos de dano na derrota`);
+    
     return {
       victory: false,
-      damage: Math.floor(heroEntity.maxHp * 0.3), // 30% de dano em derrota
+      damage: damage,
       xpGained: 0,
       goldGained: 0,
       itemsGained: [],
-      log: [`Combate resolvido automaticamente - Derrota!`]
+      log: combatLog
     };
   }
 }

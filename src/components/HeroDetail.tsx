@@ -42,7 +42,7 @@ const HeroDetail = () => {
               <div className="space-y-2 text-gray-300">
                 <p><span className="text-amber-400 font-medium">Raça:</span> {hero.race.charAt(0).toUpperCase() + hero.race.slice(1)}</p>
                 <p><span className="text-amber-400 font-medium">Classe:</span> {hero.class.charAt(0).toUpperCase() + hero.class.slice(1)}</p>
-                <p><span className="text-amber-400 font-medium">Nível:</span> {hero.level}</p>
+                <p><span className="text-amber-400 font-medium">Nível:</span> {hero.progression.level}</p>
                 <p><span className="text-amber-400 font-medium">Alinhamento:</span> {hero.alignment.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</p>
                 {hero.background && (
                   <p><span className="text-amber-400 font-medium">Antecedente:</span> {hero.background.charAt(0).toUpperCase() + hero.background.slice(1)}</p>

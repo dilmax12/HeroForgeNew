@@ -53,7 +53,7 @@ export const AIAvatarGenerator: React.FC<AIAvatarGeneratorProps> = ({
   const regenerateAvatar = useCallback(() => {
     setGeneratedAvatar(null);
     generateAvatar();
-  }, [generateAvatar]);
+  }, [hero, style]);
 
   return (
     <div className={`ai-avatar-generator ${className}`}>
@@ -247,7 +247,7 @@ export const AIAvatarGenerator: React.FC<AIAvatarGeneratorProps> = ({
       </div>
 
       <div className="hero-info">
-        <strong>{hero.name}</strong> - {hero.class} Nível {hero.level}
+        <strong>{hero.name}</strong> - {hero.class} Nível {hero.progression.level}
       </div>
 
       <div className="avatar-preview">

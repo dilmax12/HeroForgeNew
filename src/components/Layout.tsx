@@ -100,6 +100,16 @@ const Layout = () => {
                 </Link>
               </li>
               <li>
+                <Link to="/shop" className={navLinkClass('/shop')}>
+                  🏪 Loja
+                </Link>
+              </li>
+              <li>
+                <Link to="/training" className={navLinkClass('/training')}>
+                  💪 Treinamento
+                </Link>
+              </li>
+              <li>
                 <Link to="/ai-avatar" className={navLinkClass('/ai-avatar')}>
                   🎭 Avatar IA
                 </Link>

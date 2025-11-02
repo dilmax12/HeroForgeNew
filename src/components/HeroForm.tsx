@@ -1,131 +1,455 @@
-import { useState } from 'react';
-import { HeroCreationData, HeroRace, HeroClass, Alignment } from '../types/hero';
+// CACHE BUSTER - TIMESTAMP: 2024-12-19-19:52
+import { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { HeroCreationData, HeroRace, HeroClass, Alignment, Element, HeroAttributes } from '../types/hero';
 import { useHeroStore } from '../store/heroStore';
 import { generateStory } from '../utils/story';
 
-const initialAttributes = {
-  forca: 0,
-  destreza: 0,
-  constituicao: 0,
-  inteligencia: 0,
-  sabedoria: 0,
-  carisma: 0
-};
+import { 
+  generateName, 
+  generateNameOptions, 
+  getBattleQuote, 
+  validateCustomName 
+} from '../utils/nameGenerator';
+import { 
+  createInitialAttributes,
+  validateAttributes,
+  increaseAttribute,
+  decreaseAttribute,
+  canIncreaseAttribute,
+  canDecreaseAttribute,
+  calculateRemainingPoints,
+  autoDistributePoints,
+  ATTRIBUTE_INFO
+} from '../utils/attributeSystem';
+import { 
+  ELEMENT_INFO, 
+  generateRandomElement, 
+  getRecommendedElements,
+  getElementAdvantageInfo
+} from '../utils/elementSystem';
+import { getClassSkills } from '../utils/skillSystem';
 
 const HeroForm = () => {
-  const createHero = useHeroStore(state => state.createHero);
-  
   const [formData, setFormData] = useState<HeroCreationData>({
     name: '',
     race: 'humano',
     class: 'guerreiro',
     alignment: 'neutro-puro',
+    attributes: createInitialAttributes(),
     background: '',
-    attributes: initialAttributes,
     backstory: '',
-    shortBio: ''
+    element: 'physical',
+    skills: [],
+    image: '',
+    battleQuote: ''
   });
-
-  const [pointsLeft, setPointsLeft] = useState(18);
-  const [limitWarning, setLimitWarning] = useState<string>('');
-  const [loadingStory, setLoadingStory] = useState<boolean>(false);
   
-  const handleAttributeChange = (attr: keyof typeof formData.attributes, nextValue: number) => {
-    const currentValue = formData.attributes[attr];
-    const clamped = Math.max(0, Math.min(10, nextValue));
-    const diff = clamped - currentValue;
+  const [loadingStory, setLoadingStory] = useState(false);
+  const [loadingName, setLoadingName] = useState(false);
+  const [nameOptions, setNameOptions] = useState<string[]>([]);
+  const [showNameOptions, setShowNameOptions] = useState(false);
+  const [showSkillDetails, setShowSkillDetails] = useState<string | null>(null);
+  const [showElementTooltip, setShowElementTooltip] = useState(false);
+  const [limitWarning, setLimitWarning] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { createHero } = useHeroStore();
+  const navigate = useNavigate();
 
-    // Se exceder 18, mostrar aviso e não aplicar
-    if (diff > 0 && pointsLeft - diff < 0) {
-      setLimitWarning('Limite de 18 pontos atingido.');
-      setTimeout(() => setLimitWarning(''), 1500);
-      return;
+  const remainingPoints = calculateRemainingPoints(formData.attributes);
+  const classSkills = getClassSkills(formData.class);
+
+  const handleGenerateName = async () => {
+    setLoadingName(true);
+    try {
+      const options = generateNameOptions(formData.race);
+      setNameOptions(options);
+      setShowNameOptions(true);
+    } catch (error) {
+      console.error('Erro ao gerar nomes:', error);
+    } finally {
+      setLoadingName(false);
     }
-
-    setFormData(prev => ({
-      ...prev,
-      attributes: {
-        ...prev.attributes,
-        [attr]: clamped
-      }
-    }));
-
-    setPointsLeft(prev => prev - diff);
   };
-  
+
+  const handleSelectName = (name: string) => {
+    setFormData(prev => ({ ...prev, name }));
+    setShowNameOptions(false);
+  };
+
+  const handleAttributeChange = (attribute: keyof HeroAttributes, increase: boolean) => {
+    let newAttributes = formData.attributes;
+    
+    if (increase && canIncreaseAttribute(formData.attributes, attribute)) {
+      newAttributes = increaseAttribute(formData.attributes, attribute);
+    } else if (!increase && canDecreaseAttribute(formData.attributes, attribute)) {
+      newAttributes = decreaseAttribute(formData.attributes, attribute);
+    }
+    
+    if (newAttributes !== formData.attributes) {
+      setFormData(prev => ({ ...prev, attributes: newAttributes }));
+    }
+  };
+
+  const handleAutoDistribute = () => {
+    const newAttributes = autoDistributePoints(formData.attributes);
+    setFormData(prev => ({ ...prev, attributes: newAttributes }));
+  };
+
+  const handleElementChange = (element: Element) => {
+    setFormData(prev => ({ 
+      ...prev, 
+      element,
+      skills: getClassSkills(prev.class)
+    }));
+  };
+
+  const handleGenerateRandomElement = () => {
+    const randomElement = generateRandomElement();
+    handleElementChange(randomElement);
+  };
+
+  const handleClassChange = (newClass: HeroClass) => {
+    const newSkills = getClassSkills(newClass);
+    const newBattleQuote = getBattleQuote(newClass);
+    
+    setFormData(prev => ({ 
+      ...prev, 
+      class: newClass,
+      skills: newSkills,
+      battleQuote: newBattleQuote
+    }));
+  };
+
+  const handleGenerateBattleQuote = () => {
+    const quote = getBattleQuote(formData.class);
+    setFormData(prev => ({ ...prev, battleQuote: quote }));
+  };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        setFormData(prev => ({ ...prev, image: result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validação básica
-    if (!formData.name.trim()) {
-      alert('O nome do herói é obrigatório!');
+    const validation = validateAttributes(formData.attributes);
+    if (!validation.valid) {
+      setLimitWarning(validation.errors.join(', ') || 'Atributos inválidos');
       return;
     }
     
-    createHero(formData);
+    if (!formData.name.trim()) {
+      setLimitWarning('Nome é obrigatório');
+      return;
+    }
+
+    const nameValidation = validateCustomName(formData.name);
+    if (!nameValidation.valid) {
+      setLimitWarning(nameValidation.message || 'Nome inválido');
+      return;
+    }
     
-    // Reset do formulário
-    setFormData({
-      name: '',
-      race: 'humano',
-      class: 'guerreiro',
-      alignment: 'neutro-puro',
-      background: '',
-      attributes: initialAttributes,
-      backstory: '',
-      shortBio: ''
-    });
-    setPointsLeft(18);
+    try {
+      createHero(formData);
+      navigate('/');
+    } catch (error) {
+      console.error('Erro ao criar herói:', error);
+      setLimitWarning('Erro ao criar herói. Tente novamente.');
+    }
   };
   
   return (
     <div className="max-w-4xl mx-auto p-6 bg-gray-800 rounded-lg shadow-lg">
-      <h2 className="text-3xl font-bold text-center mb-6 text-amber-400">Forjar Novo Herói</h2>
+      <h2 className="text-3xl font-bold text-amber-400 mb-6 text-center">Forjar Novo Herói - Versão 3.0</h2>
       
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Informações básicas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300">Nome</label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({...formData, name: e.target.value})}
-              className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-300">Raça</label>
-            <select
-              value={formData.race}
-              onChange={(e) => setFormData({...formData, race: e.target.value as HeroRace})}
-              className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"
-            >
-              <option value="humano">Humano</option>
-              <option value="elfo">Elfo</option>
-              <option value="anao">Anão</option>
-              <option value="orc">Orc</option>
-              <option value="halfling">Halfling</option>
-            </select>
-          </div>
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {/* Seção 1: Raça e Nome */}
+        <div className="bg-gray-700 p-4 rounded-lg">
+          <h3 className="text-xl font-semibold text-amber-400 mb-4">1. Raça e Nome</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300">Raça</label>
+              <select
+                value={formData.race}
+                onChange={(e) => setFormData({...formData, race: e.target.value as HeroRace})}
+                className="mt-1 block w-full rounded-md bg-gray-600 border-gray-500 text-white"
+              >
+                <option value="humano">Humano</option>
+                <option value="elfo">Elfo</option>
+                <option value="anao">Anão</option>
+                <option value="orc">Orc</option>
+                <option value="halfling">Halfling</option>
+              </select>
+            </div>
 
-          <div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300">Nome</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  className="mt-1 block w-full rounded-md bg-gray-600 border-gray-500 text-white"
+                  placeholder="Nome do herói"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={handleGenerateName}
+                  disabled={loadingName}
+                  className="mt-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-md text-sm font-medium transition-colors disabled:opacity-60"
+                >
+                  {loadingName ? '...' : '🎲'}
+                </button>
+              </div>
+              
+              {showNameOptions && (
+                <div className="mt-2 p-2 bg-gray-600 rounded-md">
+                  <p className="text-xs text-gray-300 mb-2">Sugestões para {formData.race}:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {nameOptions.map((name, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => handleSelectName(name)}
+                        className="px-2 py-1 bg-purple-600 hover:bg-purple-700 rounded text-xs transition-colors"
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Seção 2: Classe e Skills */}
+        <div className="bg-gray-700 p-4 rounded-lg">
+          <h3 className="text-xl font-semibold text-amber-400 mb-4">2. Classe e Habilidades</h3>
+          <div className="mb-4">
             <label className="block text-sm font-medium text-gray-300">Classe</label>
             <select
               value={formData.class}
-              onChange={(e) => setFormData({...formData, class: e.target.value as HeroClass})}
-              className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"
+              onChange={(e) => handleClassChange(e.target.value as HeroClass)}
+              className="mt-1 block w-full rounded-md bg-gray-600 border-gray-500 text-white"
             >
               <option value="guerreiro">Guerreiro</option>
               <option value="mago">Mago</option>
-              <option value="ladino">Ladino</option>
+              <option value="arqueiro">Arqueiro</option>
               <option value="clerigo">Clérigo</option>
-              <option value="patrulheiro">Patrulheiro</option>
-              <option value="paladino">Paladino</option>
+              <option value="ladino">Ladino</option>
             </select>
           </div>
 
+          <div>
+            <h4 className="text-lg font-medium text-gray-300 mb-2">Habilidades Iniciais:</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {classSkills.map((skill) => (
+                <div key={skill.id} className="bg-gray-600 p-3 rounded-md">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h5 className="font-medium text-white">{skill.name}</h5>
+                      <p className="text-xs text-gray-300">{skill.type} • {skill.element}</p>
+                      <p className="text-xs text-amber-300">Custo: {skill.cost}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowSkillDetails(showSkillDetails === skill.id ? null : skill.id)}
+                      className="text-blue-400 hover:text-blue-300 text-sm"
+                    >
+                      ℹ️
+                    </button>
+                  </div>
+                  
+                  {showSkillDetails === skill.id && (
+                    <div className="mt-2 p-2 bg-gray-700 rounded text-xs">
+                      <p className="text-gray-300">{skill.description}</p>
+                      {skill.basePower && <p className="text-amber-300">Poder: {skill.basePower}</p>}
+                      {skill.duration && <p className="text-green-300">Duração: {skill.duration} turnos</p>}
+                      {skill.cooldown && <p className="text-red-300">Cooldown: {skill.cooldown} turnos</p>}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Seção 3: Atributos */}
+        <div className="bg-gray-700 p-4 rounded-lg">
+          <h3 className="text-xl font-semibold text-amber-400 mb-4">3. Atributos</h3>
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-sm text-amber-300 font-semibold">
+              Pontos restantes: {remainingPoints}
+            </p>
+            <button
+              type="button"
+              onClick={handleAutoDistribute}
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors"
+            >
+              Auto-Distribuir
+            </button>
+          </div>
+          
+          {limitWarning && (
+            <p className="text-sm text-red-400 mb-4">{limitWarning}</p>
+          )}
+          
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {Object.entries(formData.attributes).map(([attr, value]) => (
+              <div key={attr} className="flex flex-col items-center">
+                <label className="block text-sm font-medium text-gray-300 capitalize mb-1">
+                  {attr}
+                </label>
+                <p className="text-xs text-gray-400 text-center mb-2">
+                  {ATTRIBUTE_INFO[attr as keyof HeroAttributes].description}
+                </p>
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => handleAttributeChange(attr as keyof HeroAttributes, false)}
+                    className="px-2 py-1 bg-red-700 hover:bg-red-600 rounded-l-md disabled:opacity-50 transition-colors"
+                    disabled={!canDecreaseAttribute(formData.attributes, attr as keyof HeroAttributes)}
+                  >
+                    -
+                  </button>
+                  <span className="px-4 py-1 bg-gray-600 min-w-[3rem] text-center">{value}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleAttributeChange(attr as keyof HeroAttributes, true)}
+                    className="px-2 py-1 bg-green-700 hover:bg-green-600 rounded-r-md disabled:opacity-50 transition-colors"
+                    disabled={!canIncreaseAttribute(formData.attributes, attr as keyof HeroAttributes)}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Seção 4: Elemento */}
+        <div className="bg-gray-700 p-4 rounded-lg">
+          <h3 className="text-xl font-semibold text-amber-400 mb-4">4. Elemento</h3>
+          <div className="flex gap-2 mb-4">
+            <button
+              type="button"
+              onClick={handleGenerateRandomElement}
+              className="px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-md text-sm font-medium transition-colors"
+            >
+              🎲 Gerar Aleatório
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowElementTooltip(!showElementTooltip)}
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-sm font-medium transition-colors"
+            >
+              ℹ️ Relações
+            </button>
+          </div>
+
+          {showElementTooltip && (
+            <div className="mb-4 p-3 bg-gray-600 rounded-md text-sm">
+              <h5 className="font-medium text-white mb-2">Vantagens Elementais:</h5>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <p>Fogo vence Gelo</p>
+                <p>Gelo vence Trovão</p>
+                <p>Trovão vence Terra</p>
+                <p>Terra vence Fogo</p>
+                <p>Luz contra Sombra</p>
+                <p>Físico é neutro</p>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
+            {Object.entries(ELEMENT_INFO).map(([element, info]) => (
+              <button
+                key={element}
+                type="button"
+                onClick={() => handleElementChange(element as Element)}
+                className={`p-3 rounded-md text-center transition-colors ${
+                  formData.element === element
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-gray-600 hover:bg-gray-500 text-gray-300'
+                }`}
+              >
+                <div className="text-2xl mb-1">{info.icon}</div>
+                <div className="text-xs">{info.name}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Seção 5: Imagem */}
+        <div className="bg-gray-700 p-4 rounded-lg">
+          <h3 className="text-xl font-semibold text-amber-400 mb-4">5. Imagem do Herói</h3>
+          <div className="flex gap-4 items-start">
+            <div className="flex-1">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md font-medium transition-colors"
+              >
+                📁 Upload de Imagem
+              </button>
+              <p className="text-xs text-gray-400 mt-1">
+                Formatos aceitos: JPG, PNG, GIF (máx. 5MB)
+              </p>
+            </div>
+            
+            {formData.image && (
+              <div className="w-24 h-24 bg-gray-600 rounded-md overflow-hidden">
+                <img
+                  src={formData.image}
+                  alt="Preview do herói"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Seção 6: Frase de Batalha */}
+        <div className="bg-gray-700 p-4 rounded-lg">
+          <h3 className="text-xl font-semibold text-amber-400 mb-4">6. Frase de Batalha</h3>
+          <div className="flex gap-2 mb-2">
+            <button
+              type="button"
+              onClick={handleGenerateBattleQuote}
+              className="px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-md text-sm font-medium transition-colors"
+            >
+              🎲 Gerar Aleatória
+            </button>
+          </div>
+          <textarea
+            value={formData.battleQuote || ''}
+            onChange={(e) => setFormData({...formData, battleQuote: e.target.value})}
+            rows={2}
+            className="w-full rounded-md bg-gray-600 border-gray-500 text-white"
+            placeholder="Digite uma frase épica para seu herói..."
+          />
+        </div>
+
+        {/* Informações Adicionais */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-300">Alinhamento</label>
             <select
@@ -144,60 +468,23 @@ const HeroForm = () => {
               <option value="caotico-mal">Caótico e Mau</option>
             </select>
           </div>
-        </div>
 
-        {/* Atributos */}
-        <div>
-          <h3 className="text-xl font-semibold text-amber-400 mb-2">Atributos</h3>
-          <p className="text-sm text-amber-300 mb-2 font-semibold">Pontos restantes: {pointsLeft}</p>
-          {limitWarning && (
-            <p className="text-sm text-red-400 mb-4">{limitWarning}</p>
-          )}
-          
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {Object.entries(formData.attributes).map(([attr, value]) => (
-              <div key={attr} className="flex flex-col items-center">
-                <label className="block text-sm font-medium text-gray-300 capitalize">{attr}</label>
-                <div className="flex items-center mt-1">
-                  <button
-                    type="button"
-                    onClick={() => handleAttributeChange(attr as keyof typeof formData.attributes, value - 1)}
-                    className="px-2 py-1 bg-red-700 rounded-l-md disabled:opacity-50"
-                    disabled={value <= 0}
-                  >
-                    -
-                  </button>
-                  <span className="px-4 py-1 bg-gray-700">{value}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleAttributeChange(attr as keyof typeof formData.attributes, value + 1)}
-                    className="px-2 py-1 bg-green-700 rounded-r-md disabled:opacity-50"
-                    disabled={pointsLeft <= 0 || value >= 10}
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-            ))}
+          <div>
+            <label className="block text-sm font-medium text-gray-300">Antecedente</label>
+            <select
+              value={formData.background}
+              onChange={(e) => setFormData({...formData, background: e.target.value})}
+              className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"
+            >
+              <option value="">Selecione um antecedente</option>
+              <option value="acolyte">Acólito</option>
+              <option value="criminal">Criminoso</option>
+              <option value="folk-hero">Herói do Povo</option>
+              <option value="noble">Nobre</option>
+              <option value="sage">Sábio</option>
+              <option value="soldier">Soldado</option>
+            </select>
           </div>
-        </div>
-        
-        {/* Background */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300">Antecedente</label>
-          <select
-            value={formData.background}
-            onChange={(e) => setFormData({...formData, background: e.target.value})}
-            className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"
-          >
-            <option value="">Selecione um antecedente</option>
-            <option value="acolyte">Acólito</option>
-            <option value="criminal">Criminoso</option>
-            <option value="folk-hero">Herói do Povo</option>
-            <option value="noble">Nobre</option>
-            <option value="sage">Sábio</option>
-            <option value="soldier">Soldado</option>
-          </select>
         </div>
         
         {/* História */}
@@ -233,10 +520,10 @@ const HeroForm = () => {
         <div className="flex justify-center">
           <button
             type="submit"
-            className="px-6 py-3 bg-amber-600 hover:bg-amber-700 rounded-md font-bold transition-colors disabled:opacity-60"
-            disabled={Object.values(formData.attributes).reduce((s,v)=>s+v,0) > 18 || !formData.name.trim()}
+            className="px-8 py-4 bg-amber-600 hover:bg-amber-700 rounded-md font-bold text-lg transition-colors disabled:opacity-60"
+            disabled={!validateAttributes(formData.attributes).valid || !formData.name.trim()}
           >
-            Forjar Herói
+            ⚔️ Forjar Herói
           </button>
         </div>
       </form>

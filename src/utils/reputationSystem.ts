@@ -135,7 +135,7 @@ export function updateHeroReputation(
   factionName: string, 
   change: number
 ): Hero {
-  const updatedFactions = hero.reputationFactions.map(faction => {
+  const updatedFactions = (hero.reputationFactions || []).map(faction => {
     if (faction.name === factionName) {
       const newReputation = Math.max(-1000, Math.min(1000, faction.reputation + change));
       
@@ -144,11 +144,11 @@ export function updateHeroReputation(
       if (factionInfo && change > 0) {
         // Reduzir reputação com facções opostas
         factionInfo.opposingFactions.forEach(opposingFaction => {
-          const opposingIndex = hero.reputationFactions.findIndex(f => f.name === opposingFaction);
+          const opposingIndex = (hero.reputationFactions || []).findIndex(f => f.name === opposingFaction);
           if (opposingIndex !== -1) {
-            hero.reputationFactions[opposingIndex].reputation = Math.max(
+            (hero.reputationFactions || [])[opposingIndex].reputation = Math.max(
               -1000, 
-              hero.reputationFactions[opposingIndex].reputation - Math.floor(change * 0.3)
+              (hero.reputationFactions || [])[opposingIndex].reputation - Math.floor(change * 0.3)
             );
           }
         });
@@ -168,7 +168,7 @@ export function updateHeroReputation(
 export function getAvailableQuestsByReputation(hero: Hero): string[] {
   const availableQuests: string[] = [];
   
-  hero.reputationFactions.forEach(faction => {
+  (hero.reputationFactions || []).forEach(faction => {
     const level = getReputationLevel(faction.reputation);
     availableQuests.push(...level.questModifiers.specialQuestsUnlocked);
   });
@@ -177,7 +177,7 @@ export function getAvailableQuestsByReputation(hero: Hero): string[] {
 }
 
 export function calculateReputationModifiers(hero: Hero, factionName: string) {
-  const faction = hero.reputationFactions.find(f => f.name === factionName);
+  const faction = (hero.reputationFactions || []).find(f => f.name === factionName);
   if (!faction) return { goldBonus: 0, xpBonus: 0 };
   
   const level = getReputationLevel(faction.reputation);

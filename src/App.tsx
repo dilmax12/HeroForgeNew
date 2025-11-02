@@ -1,8 +1,9 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Link } from 'react-router-dom'
 import Layout from './components/Layout'
 import HeroList from './components/HeroList'
 import HeroForm from './components/HeroForm'
 import HeroDetail from './components/HeroDetail'
+import TestComponent from './components/TestComponent'
 import HeroProgression from './components/HeroProgression'
 import GuildSystem from './components/GuildSystem'
 import PlaytestPanel from './components/PlaytestPanel'
@@ -20,6 +21,8 @@ import { RankCelebrationManager } from './components/RankCelebration'
 import AIAvatarGenerator from './components/AIAvatarGenerator'
 import DynamicMissionsPanel from './components/DynamicMissionsPanel'
 import AIRecommendationsPanel from './components/AIRecommendationsPanel'
+import Shop from './components/Shop'
+import Training from './components/Training'
 import { useEffect } from 'react'
 import { useHeroStore } from './store/heroStore'
 
@@ -34,9 +37,9 @@ function HeroProgressionWrapper() {
         <div className="text-6xl mb-4">🦸</div>
         <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
         <p className="text-gray-600 mb-6">Selecione um herói para ver sua progressão.</p>
-        <a href="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
+        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
           Voltar à Lista de Heróis
-        </a>
+        </Link>
       </div>
     );
   }
@@ -55,9 +58,9 @@ function GuildSystemWrapper() {
         <div className="text-6xl mb-4">🏰</div>
         <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
         <p className="text-gray-600 mb-6">Selecione um herói para acessar o sistema de guildas.</p>
-        <a href="/" className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700 transition-colors">
+        <Link to="/" className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700 transition-colors">
           Voltar à Lista de Heróis
-        </a>
+        </Link>
       </div>
     );
   }
@@ -76,9 +79,9 @@ function DailyGoalsWrapper() {
         <div className="text-6xl mb-4">🎯</div>
         <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
         <p className="text-gray-600 mb-6">Selecione um herói para ver suas metas diárias.</p>
-        <a href="/" className="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700 transition-colors">
+        <Link to="/" className="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700 transition-colors">
           Voltar à Lista de Heróis
-        </a>
+        </Link>
       </div>
     );
   }
@@ -97,9 +100,9 @@ function EvolutionPanelWrapper() {
         <div className="text-6xl mb-4">🏆</div>
         <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
         <p className="text-gray-600 mb-6">Selecione um herói para ver sua evolução de ranks.</p>
-        <a href="/" className="bg-amber-600 text-white px-6 py-2 rounded hover:bg-amber-700 transition-colors">
+        <Link to="/" className="bg-amber-600 text-white px-6 py-2 rounded hover:bg-amber-700 transition-colors">
           Voltar à Lista de Heróis
-        </a>
+        </Link>
       </div>
     );
   }
@@ -118,9 +121,9 @@ function AIAvatarGeneratorWrapper() {
         <div className="text-6xl mb-4">🎭</div>
         <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
         <p className="text-gray-600 mb-6">Selecione um herói para gerar avatares com IA.</p>
-        <a href="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
+        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
           Voltar à Lista de Heróis
-        </a>
+        </Link>
       </div>
     );
   }
@@ -139,9 +142,9 @@ function DynamicMissionsPanelWrapper() {
         <div className="text-6xl mb-4">🗡️</div>
         <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
         <p className="text-gray-600 mb-6">Selecione um herói para ver missões dinâmicas.</p>
-        <a href="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
+        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
           Voltar à Lista de Heróis
-        </a>
+        </Link>
       </div>
     );
   }
@@ -160,9 +163,9 @@ function AIRecommendationsPanelWrapper() {
         <div className="text-6xl mb-4">🧠</div>
         <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
         <p className="text-gray-600 mb-6">Selecione um herói para ver recomendações de IA.</p>
-        <a href="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
+        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
           Voltar à Lista de Heróis
-        </a>
+        </Link>
       </div>
     );
   }
@@ -228,13 +231,15 @@ function App() {
           <Route path="events" element={<EventsPanel />} />
           <Route path="activities" element={<ActivityFeed />} />
           <Route path="tutorial" element={<OnboardingManager />} />
-          <Route path="/titles" element={<TitlesManager />} />
-          <Route path="/leaderboards" element={<Leaderboards />} />
+          <Route path="titles" element={<TitlesManager />} />
+          <Route path="leaderboards" element={<Leaderboards />} />
           <Route path="metrics" element={<MetricsDashboard />} />
           <Route path="playtest" element={<PlaytestPanel />} />
           <Route path="ai-avatar" element={<AIAvatarGeneratorWrapper />} />
           <Route path="ai-missions" element={<DynamicMissionsPanelWrapper />} />
           <Route path="ai-recommendations" element={<AIRecommendationsPanelWrapper />} />
+          <Route path="shop" element={<Shop />} />
+          <Route path="training" element={<Training />} />
         </Route>
       </Routes>
     </>

@@ -13,7 +13,7 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ isVisible, onClos
   const [highlightedElement, setHighlightedElement] = useState<Element | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const overlayRef = useRef<HTMLDivElement>(null);
-  const { gainXP, gainGold, addItem } = useHeroStore();
+  const { gainXP, gainGold, addItemToInventory, selectedHeroId } = useHeroStore();
 
   useEffect(() => {
     const handleStepChanged = (data: { step: OnboardingStep | null }) => {
@@ -27,12 +27,12 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ isVisible, onClos
 
     const handleStepCompleted = (data: { step: OnboardingStep }) => {
       // Award rewards if any
-      if (data.step.rewards) {
+      if (data.step.rewards && selectedHeroId) {
         const { xp, gold, items } = data.step.rewards;
-        if (xp) gainXP(xp);
-        if (gold) gainGold(gold);
+        if (xp) gainXP(selectedHeroId, xp);
+        if (gold) gainGold(selectedHeroId, gold);
         if (items) {
-          items.forEach(itemId => addItem(itemId, 1));
+          items.forEach(itemId => addItemToInventory(selectedHeroId, itemId, 1));
         }
       }
     };
@@ -55,7 +55,7 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ isVisible, onClos
       onboardingManager.off('step-completed', handleStepCompleted);
       onboardingManager.off('flow-completed', handleFlowCompleted);
     };
-  }, [isVisible, onClose, gainXP, gainGold, addItem]);
+  }, [isVisible, onClose]);
 
   const highlightElement = (selector: string) => {
     const element = document.querySelector(selector);

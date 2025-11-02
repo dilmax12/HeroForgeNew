@@ -108,11 +108,42 @@ export const validateAttributes = (attributes: HeroAttributes): { isValid: boole
   };
 };
 
+const calculateTotalAttributes = (
+  baseAttributes: HeroAttributes,
+  inventory: HeroInventory
+): HeroAttributes => {
+  const totalAttributes = { ...baseAttributes };
+  
+  // Aplicar bônus dos equipamentos
+  const equippedItems = [
+    inventory.equippedWeapon,
+    inventory.equippedArmor,
+    inventory.equippedAccessory
+  ].filter(Boolean);
+  
+  equippedItems.forEach(itemId => {
+    const item = SHOP_ITEMS.find(i => i.id === itemId);
+    if (item?.bonus) {
+      Object.entries(item.bonus).forEach(([attr, bonus]) => {
+        if (bonus && attr in totalAttributes) {
+          totalAttributes[attr as keyof HeroAttributes] += bonus;
+        }
+      });
+    }
+  });
+  
+  return totalAttributes;
+};
+
 const calculateDerivedAttributes = (
   attributes: HeroAttributes, 
   heroClass: string, 
-  level: number
+  level: number,
+  inventory?: HeroInventory
 ): DerivedAttributes => {
+  // Calcular atributos totais incluindo bônus de equipamentos
+  const totalAttributes = inventory ? calculateTotalAttributes(attributes, inventory) : attributes;
+  
   let hpBase = 0;
   let mpBase = 0;
   
@@ -146,10 +177,10 @@ const calculateDerivedAttributes = (
       mpBase = 6;
   }
   
-  const hp = hpBase + Math.floor(attributes.constituicao / 2) * level;
-  const mp = mpBase + Math.floor(attributes.inteligencia / 2) * level;
-  const initiative = Math.floor(attributes.destreza / 2);
-  const armorClass = 10 + Math.floor(attributes.destreza / 4);
+  const hp = hpBase + Math.floor(totalAttributes.constituicao / 2) * level;
+  const mp = mpBase + Math.floor(totalAttributes.inteligencia / 2) * level;
+  const initiative = Math.floor(totalAttributes.destreza / 2);
+  const armorClass = 10 + Math.floor(totalAttributes.destreza / 4);
   
   return {
     hp,
@@ -193,11 +224,24 @@ export const useHeroStore = create<HeroState>()(
           throw new Error(`Atributos inválidos: ${validation.errors.join(', ')}`);
         }
         
+        const initialInventory = {
+          items: {
+            'pocao-pequena': 2 // Poções iniciais
+          },
+          equippedWeapon: undefined,
+          equippedArmor: undefined,
+          equippedAccessory: undefined
+        };
+        
         const newHero: Hero = {
           id: uuidv4(),
           ...heroData,
           level: 1,
-          derivedAttributes: calculateDerivedAttributes(heroData.attributes, heroData.class, 1),
+          derivedAttributes: calculateDerivedAttributes(heroData.attributes, heroData.class, 1, initialInventory),
+          element: heroData.element,
+          skills: heroData.skills,
+          image: heroData.image,
+          battleQuote: heroData.battleQuote,
           progression: {
             xp: 0,
             level: 1,
@@ -217,16 +261,19 @@ export const useHeroStore = create<HeroState>()(
             unlockedAt: timestamp
           }],
           activeTitle: 'novato',
-          inventory: {
-            items: {
-              'pocao-pequena': 2 // Poções iniciais
-            },
-            equippedWeapon: undefined,
-            equippedArmor: undefined,
-            equippedAccessory: undefined
-          },
+          inventory: initialInventory,
           activeQuests: [],
           completedQuests: [],
+          reputationFactions: [
+            { id: 'guarda', name: 'Guarda da Cidade', reputation: 0, level: 'neutral' },
+            { id: 'comerciantes', name: 'Comerciantes', reputation: 0, level: 'neutral' },
+            { id: 'ladroes', name: 'Ladrões', reputation: 0, level: 'neutral' },
+            { id: 'clero', name: 'Clero', reputation: 0, level: 'neutral' },
+            { id: 'cultistas', name: 'Cultistas', reputation: 0, level: 'neutral' },
+            { id: 'exploradores', name: 'Exploradores', reputation: 0, level: 'neutral' }
+          ],
+          dailyGoals: [],
+          achievements: [],
           stats: {
             questsCompleted: 0,
             totalCombats: 0,
@@ -260,22 +307,34 @@ export const useHeroStore = create<HeroState>()(
       
       updateHero: (id, heroData) => {
         set(state => ({
-          heroes: state.heroes.map(hero => 
-            hero.id === id 
-              ? { 
-                  ...hero, 
-                  ...heroData, 
-                  updatedAt: new Date().toISOString(),
-                  derivedAttributes: heroData.attributes 
-                    ? calculateDerivedAttributes(
-                        { ...hero.attributes, ...heroData.attributes },
-                        heroData.class || hero.class,
-                        heroData.level || hero.level
-                      ) 
-                    : hero.derivedAttributes
-                } 
-              : hero
-          )
+          heroes: state.heroes.map(hero => {
+            if (hero.id !== id) return hero;
+            
+            const updatedHero = { 
+              ...hero, 
+              ...heroData, 
+              updatedAt: new Date().toISOString()
+            };
+            
+            // Recalcular atributos derivados se atributos, classe, nível ou inventário mudaram
+            if (heroData.attributes || heroData.class || heroData.level || heroData.inventory) {
+              const finalAttributes = heroData.attributes 
+                ? { ...hero.attributes, ...heroData.attributes }
+                : hero.attributes;
+              const finalClass = heroData.class || hero.class;
+              const finalLevel = heroData.level || hero.progression.level;
+              const finalInventory = heroData.inventory || hero.inventory;
+              
+              updatedHero.derivedAttributes = calculateDerivedAttributes(
+                finalAttributes,
+                finalClass,
+                finalLevel,
+                finalInventory
+              );
+            }
+            
+            return updatedHero;
+          })
         }));
       },
 
@@ -303,40 +362,83 @@ export const useHeroStore = create<HeroState>()(
       // === SISTEMA DE MISSÕES ===
       
       refreshQuests: (heroLevel = 1) => {
-        const newQuests = generateQuestBoard(heroLevel);
+        const state = get();
+        const selectedHero = state.getSelectedHero();
+        let guildLevel = 0;
+        
+        // Verificar se o herói selecionado está em uma guilda
+        if (selectedHero && selectedHero.progression.guildId) {
+          const guild = state.guilds.find(g => g.id === selectedHero.progression.guildId);
+          if (guild) {
+            guildLevel = guild.level || 1;
+            console.log('🏰 Herói está na guilda:', guild.name, 'Nível:', guildLevel);
+          }
+        }
+        
+        console.log('🔄 Gerando missões - Herói Level:', heroLevel, 'Guilda Level:', guildLevel);
+        const newQuests = generateQuestBoard(heroLevel, guildLevel);
+        console.log('📋 Missões geradas:', newQuests.length, 'total,', newQuests.filter(q => q.isGuildQuest).length, 'de guilda');
         set({ availableQuests: newQuests });
       },
       
       acceptQuest: (heroId: string, questId: string) => {
+        console.log('🔍 acceptQuest chamada:', { heroId, questId });
+        
         const state = get();
         const hero = state.heroes.find(h => h.id === heroId);
         const quest = state.availableQuests.find(q => q.id === questId);
         
-        if (!hero || !quest) return false;
+        console.log('👤 Herói encontrado:', hero ? `${hero.name} (Level ${hero.progression.level})` : 'Não encontrado');
+        console.log('📋 Missão encontrada:', quest ? `${quest.title} (Level ${quest.levelRequirement})` : 'Não encontrada');
         
-        if (hero.level < quest.levelRequirement) return false;
-        if (hero.activeQuests.length >= 3) return false; // Máximo 3 missões ativas
+        if (!hero || !quest) {
+          console.log('❌ Herói ou missão não encontrados');
+          return false;
+        }
+        
+        if (hero.progression.level < quest.levelRequirement) {
+          console.log('❌ Nível insuficiente:', hero.progression.level, '<', quest.levelRequirement);
+          return false;
+        }
+        
+        if (hero.activeQuests.length >= 3) {
+          console.log('❌ Máximo de missões ativas atingido:', hero.activeQuests.length);
+          return false;
+        }
+        
+        console.log('✅ Todos os requisitos atendidos, adicionando missão às ativas');
         
         get().updateHero(heroId, {
           activeQuests: [...hero.activeQuests, questId]
         });
         
+        console.log('🎉 Missão aceita com sucesso!');
         return true;
       },
       
       completeQuest: (heroId: string, questId: string, autoResolve = false) => {
+        console.log('🎯 completeQuest chamada:', { heroId, questId, autoResolve });
+        
         const state = get();
         const hero = state.heroes.find(h => h.id === heroId);
         const quest = state.availableQuests.find(q => q.id === questId);
         
-        if (!hero || !quest || !hero.activeQuests.includes(questId)) return null;
+        console.log('👤 Herói encontrado:', hero ? `${hero.name} (Level ${hero.progression.level})` : 'Não encontrado');
+        console.log('📋 Missão encontrada:', quest ? `${quest.title} (Level ${quest.levelRequirement})` : 'Não encontrada');
+        console.log('🔍 Missão está ativa?', hero?.activeQuests.includes(questId));
+        
+        if (!hero || !quest || !hero.activeQuests.includes(questId)) {
+          console.log('❌ Falha na validação inicial');
+          return null;
+        }
         
         let combatResult: CombatResult | null = null;
         
         // Resolver combate se houver inimigos
         if (quest.enemies && quest.enemies.length > 0) {
+          const isGuildQuest = quest.isGuildQuest || false;
           combatResult = autoResolve 
-            ? autoResolveCombat(hero, quest.enemies)
+            ? autoResolveCombat(hero, quest.enemies, isGuildQuest)
             : resolveCombat(hero, quest.enemies);
           
           if (!combatResult.victory) {
@@ -359,11 +461,15 @@ export const useHeroStore = create<HeroState>()(
         }
         
         // Sucesso na missão - aplicar recompensas
-        get().gainXP(heroId, quest.rewards.xp + (combatResult?.xpGained || 0));
-        get().gainGold(heroId, quest.rewards.gold + (combatResult?.goldGained || 0));
+        console.log('🎉 Missão completada com sucesso! Aplicando recompensas...');
+        console.log('💰 Recompensas:', quest.rewards);
+        console.log('⚔️ Resultado do combate:', combatResult);
+        
+        get().gainXP(heroId, (quest.rewards?.xp || 0) + (combatResult?.xpGained || 0));
+        get().gainGold(heroId, (quest.rewards?.gold || 0) + (combatResult?.goldGained || 0));
         
         // Adicionar itens das recompensas
-        if (quest.rewards.items) {
+        if (quest.rewards?.items) {
           quest.rewards.items.forEach(item => {
             get().addItemToInventory(heroId, item.id, item.qty);
           });
@@ -418,14 +524,14 @@ export const useHeroStore = create<HeroState>()(
         eventManager.updateEventProgress(heroId, 'quests-completed', 1);
         
         // Log quest completion activity
-        if (quest.difficulty === 'épica') {
+        if (quest.difficulty === 'epica') {
           logActivity.epicQuestCompleted({
             heroId,
             heroName: hero.name,
             heroClass: hero.class,
             questName: quest.title,
             questDifficulty: quest.difficulty,
-            questReward: quest.reward
+            questReward: quest.rewards
           });
         } else {
           logActivity.questCompleted({
@@ -434,7 +540,7 @@ export const useHeroStore = create<HeroState>()(
             heroClass: hero.class,
             questName: quest.title,
             questDifficulty: quest.difficulty,
-            questReward: quest.reward
+            questReward: quest.rewards
           });
         }
         
@@ -443,10 +549,11 @@ export const useHeroStore = create<HeroState>()(
           questName: quest.title,
           questDifficulty: quest.difficulty,
           questType: quest.type,
-          xpReward: quest.reward.xp,
-          goldReward: quest.reward.gold
+          xpReward: quest.rewards?.xp || 0,
+          goldReward: quest.rewards?.gold || 0
         });
         
+        console.log('✅ completeQuest finalizada com sucesso!');
         return combatResult;
       },
       
@@ -691,21 +798,22 @@ export const useHeroStore = create<HeroState>()(
           const item = SHOP_ITEMS.find(i => i.id === itemId);
           if (!item) return false;
           
-          const updates: any = { inventory: { ...hero.inventory } };
+          const updatedInventory = { ...hero.inventory };
           
           switch (item.type) {
             case 'weapon':
-              updates.inventory.equippedWeapon = itemId;
+              updatedInventory.equippedWeapon = itemId;
               break;
             case 'armor':
-              updates.inventory.equippedArmor = itemId;
+              updatedInventory.equippedArmor = itemId;
               break;
             case 'accessory':
-              updates.inventory.equippedAccessory = itemId;
+              updatedInventory.equippedAccessory = itemId;
               break;
           }
           
-          get().updateHero(heroId, updates);
+          // Atualizar inventário e forçar recálculo dos atributos derivados
+          get().updateHero(heroId, { inventory: updatedInventory });
         }
         
         return result.success;
@@ -1004,8 +1112,8 @@ export const useHeroStore = create<HeroState>()(
           };
 
           // Check for level up
-          const newLevel = checkLevelUp(updatedHero.progression.xp, updatedHero.level);
-          if (newLevel > updatedHero.level) {
+          const newLevel = checkLevelUp(updatedHero.progression.xp, updatedHero.progression.level);
+          if (newLevel > updatedHero.progression.level) {
             updatedHero.level = newLevel;
             updatedHero.progression.level = newLevel;
             updatedHero.derivedAttributes = calculateDerivedAttributes(
@@ -1170,7 +1278,47 @@ export const useHeroStore = create<HeroState>()(
         selectedHeroId: state.selectedHeroId,
         availableQuests: state.availableQuests,
         guilds: state.guilds
-      })
+      }),
+      migrate: (persistedState: any, version: number) => {
+        // Migração para garantir que heróis tenham as propriedades necessárias
+        if (persistedState?.heroes) {
+          persistedState.heroes = persistedState.heroes.map((hero: any) => {
+            const migratedHero = {
+              ...hero,
+              reputationFactions: hero.reputationFactions || [
+                { id: 'guarda', name: 'Guarda da Cidade', reputation: 0, level: 'neutral' },
+                { id: 'comerciantes', name: 'Comerciantes', reputation: 0, level: 'neutral' },
+                { id: 'ladroes', name: 'Ladrões', reputation: 0, level: 'neutral' },
+                { id: 'clero', name: 'Clero', reputation: 0, level: 'neutral' },
+                { id: 'cultistas', name: 'Cultistas', reputation: 0, level: 'neutral' },
+                { id: 'exploradores', name: 'Exploradores', reputation: 0, level: 'neutral' }
+              ],
+              dailyGoals: hero.dailyGoals || [],
+              achievements: hero.achievements || [],
+              stats: hero.stats || {
+                questsCompleted: 0,
+                totalCombats: 0,
+                totalPlayTime: 0,
+                lastActiveAt: new Date().toISOString(),
+                enemiesDefeated: 0,
+                goldEarned: 0,
+                itemsFound: 0,
+                achievementsUnlocked: 0,
+                loginStreak: 0,
+                lastLogin: new Date()
+              }
+            };
+            
+            // Inicializar rankData se não existir
+            if (!hero.rankData) {
+              migratedHero.rankData = rankSystem.initializeRankData(migratedHero);
+            }
+            
+            return migratedHero;
+          });
+        }
+        return persistedState;
+      }
     }
   )
 );

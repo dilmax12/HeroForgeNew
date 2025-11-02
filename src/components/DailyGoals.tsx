@@ -2,7 +2,7 @@
  * Componente de Mini-Metas Diárias
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useHeroStore } from '../store/heroStore';
 import { DailyGoal } from '../types/hero';
 import { 
@@ -24,22 +24,37 @@ export const DailyGoals: React.FC<DailyGoalsProps> = ({ heroId }) => {
   } = useHeroStore();
 
   const hero = heroes.find(h => h.id === heroId);
+  const initializedRef = useRef<Set<string>>(new Set());
   
   useEffect(() => {
-    if (!hero) return;
+    if (!heroId || initializedRef.current.has(heroId)) return;
 
-    // Cleanup expired goals on component mount
-    cleanupExpiredGoals(heroId);
+    // Get the current hero state at the time of effect execution
+    const currentHero = heroes.find(h => h.id === heroId);
+    if (!currentHero) return;
 
-    // Generate daily goals if hero doesn't have any or if it's a new day
     const now = new Date();
-    const hasValidGoals = hero.dailyGoals && hero.dailyGoals.length > 0 && 
-      hero.dailyGoals.some(goal => goal.expiresAt > now);
+    
+    // Only cleanup if there are actually expired goals
+    const hasExpiredGoals = currentHero.dailyGoals && currentHero.dailyGoals.length > 0 && 
+      currentHero.dailyGoals.some(goal => goal.expiresAt <= now);
+    
+    // Generate daily goals if hero doesn't have any or if it's a new day
+    const hasValidGoals = currentHero.dailyGoals && currentHero.dailyGoals.length > 0 && 
+      currentHero.dailyGoals.some(goal => goal.expiresAt > now);
+
+    // Mark this hero as initialized first to prevent re-execution
+    initializedRef.current.add(heroId);
+    
+    // Perform async operations after marking as initialized
+    if (hasExpiredGoals) {
+      setTimeout(() => cleanupExpiredGoals(heroId), 0);
+    }
 
     if (!hasValidGoals) {
-      generateDailyGoalsForHero(heroId);
+      setTimeout(() => generateDailyGoalsForHero(heroId), 0);
     }
-  }, [hero, heroId, generateDailyGoalsForHero, cleanupExpiredGoals]);
+  }, [heroId]);
 
   if (!hero || !hero.dailyGoals || hero.dailyGoals.length === 0) {
     return (

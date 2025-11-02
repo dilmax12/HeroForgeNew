@@ -5,7 +5,8 @@ import { useHeroStore } from '../store/heroStore';
 const QuickNavigation: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const location = useLocation();
-  const { selectedHero } = useHeroStore();
+  const { getSelectedHero } = useHeroStore();
+  const selectedHero = getSelectedHero();
   
   if (!selectedHero) return null;
 
@@ -137,7 +138,7 @@ const QuickNavigation: React.FC = () => {
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="flex items-center space-x-1">
                 <span className="text-blue-400">⭐</span>
-                <span>Nv. {selectedHero.level}</span>
+                <span>Nv. {selectedHero.progression.level}</span>
               </div>
               <div className="flex items-center space-x-1">
                 <span className="text-yellow-400">🪙</span>
