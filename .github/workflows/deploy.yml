@@ -37,13 +37,20 @@ jobs:
           VITE_ANTHROPIC_API_URL: 'https://api.anthropic.com'
           VITE_GOOGLE_API_URL: 'https://generativelanguage.googleapis.com/v1beta'
 
-      - name: List build output
-        run: ls -la dist/
+      - name: Debug build output
+        run: |
+          echo "=== Listing dist directory ==="
+          ls -la dist/
+          echo "=== Listing dist/assets directory ==="
+          ls -la dist/assets/ || echo "No assets directory found"
+          echo "=== Checking index.html content ==="
+          head -20 dist/index.html
 
       - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
+        uses: peaceiris/actions-gh-pages@v3
         with:
-          folder: dist
-          branch: gh-pages
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
           clean: true
-          single-commit: true
+          single_commit: true
+          force_orphan: true
