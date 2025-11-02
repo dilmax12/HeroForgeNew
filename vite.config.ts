@@ -6,7 +6,7 @@ const isGitHubPages = process.env.VITE_GITHUB_PAGES === 'true' || process.env.GI
 
 export default defineConfig({
   plugins: [reactSWC()],
-  base: isGitHubPages ? '/HeroForgeNew/' : '/',
+  base: '/HeroForgeNew/', // Forçar sempre para GitHub Pages
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
