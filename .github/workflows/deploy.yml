@@ -28,6 +28,13 @@ jobs:
         run: npm run build
         env:
           VITE_GITHUB_PAGES: 'true'
+          VITE_AI_SERVICE_PROVIDER: 'openrouter'
+          VITE_OPENAI_API_KEY: 'demo_key_for_build'
+          VITE_ANTHROPIC_API_KEY: 'demo_key_for_build'
+          VITE_GOOGLE_API_KEY: 'demo_key_for_build'
+          VITE_OPENAI_API_URL: 'https://openrouter.ai/api/v1'
+          VITE_ANTHROPIC_API_URL: 'https://api.anthropic.com'
+          VITE_GOOGLE_API_URL: 'https://generativelanguage.googleapis.com/v1beta'
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
