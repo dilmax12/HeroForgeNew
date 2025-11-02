@@ -1,9 +1,12 @@
 import { defineConfig } from 'vite'
 import reactSWC from '@vitejs/plugin-react-swc'
 
+// Detectar se estamos no GitHub Pages
+const isGitHubPages = process.env.VITE_GITHUB_PAGES === 'true' || process.env.GITHUB_ACTIONS === 'true'
+
 export default defineConfig({
   plugins: [reactSWC()],
-  base: process.env.VITE_GITHUB_PAGES === 'true' ? '/HeroForgeNew/' : '/',
+  base: isGitHubPages ? '/HeroForgeNew/' : '/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

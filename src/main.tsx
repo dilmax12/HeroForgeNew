@@ -6,8 +6,9 @@ import './index.css'
 
 // Configuração dinâmica do basename para diferentes ambientes
 const getBasename = () => {
-  // Para GitHub Pages
-  if (import.meta.env.VITE_GITHUB_PAGES === 'true') {
+  // Para GitHub Pages - verificar múltiplas condições
+  if (import.meta.env.VITE_GITHUB_PAGES === 'true' || 
+      window.location.hostname === 'dilmax12.github.io') {
     return '/HeroForgeNew'
   }
   // Para ambiente de desenvolvimento ou outros ambientes

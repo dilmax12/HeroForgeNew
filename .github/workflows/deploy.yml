@@ -24,6 +24,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Debug environment
+        run: |
+          echo "VITE_GITHUB_PAGES=${{ env.VITE_GITHUB_PAGES }}"
+          echo "NODE_ENV=${{ env.NODE_ENV }}"
+
       - name: Build
         run: npm run build
         env:
