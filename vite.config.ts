@@ -17,6 +17,11 @@ export default defineConfig({
       }
     }
   },
+  server: {
+    fs: {
+      strict: false
+    }
+  },
   test: {
     environment: 'jsdom',
     globals: true,
