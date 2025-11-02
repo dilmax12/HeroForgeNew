@@ -46,8 +46,20 @@ class AIService {
       ? import.meta.env.VITE_OPENAI_API_KEY 
       : import.meta.env.VITE_ANTHROPIC_API_KEY;
 
+    // Em produção sem chaves, retornar configuração padrão sem falhar
     if (!apiKey) {
-      throw new Error(`API key not found for provider: ${provider}`);
+      console.warn(`API key not found for provider: ${provider}. AI features will be disabled.`);
+      return {
+        provider,
+        apiKey: '',
+        apiUrl: '',
+        model: provider === 'openai' ? 'gpt-3.5-turbo' : 'claude-3-sonnet-20240229',
+        maxTokens: 1000,
+        temperature: 0.7,
+        timeout: 30000,
+        retryAttempts: 3,
+        retryDelay: 1000
+      };
     }
 
     return {
@@ -186,6 +198,17 @@ class AIService {
   }
 
   async generateText(request: AITextRequest): Promise<AITextResponse> {
+    // Verificar se o serviço está configurado
+    if (!this.isConfigured()) {
+      return {
+        text: 'AI service is not configured. Please check your API keys.',
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        model: this.config.model,
+        provider: this.config.provider,
+        finishReason: 'stop'
+      };
+    }
+
     const startTime = Date.now();
     const cacheKey = this.generateCacheKey(request);
 
@@ -227,6 +250,17 @@ class AIService {
   }
 
   async generateImage(request: AIImageRequest): Promise<AIImageResponse> {
+    // Verificar se o serviço está configurado
+    if (!this.isConfigured()) {
+      return {
+        url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OTk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkFJIE5vdCBDb25maWd1cmVkPC90ZXh0Pjwvc3ZnPg==',
+        revisedPrompt: request.prompt,
+        size: request.size || '1024x1024',
+        model: this.config.imageModel || 'dall-e-3',
+        provider: this.config.provider
+      };
+    }
+
     const startTime = Date.now();
     const cacheKey = this.generateCacheKey(request);
 
