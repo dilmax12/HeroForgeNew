@@ -1,12 +1,13 @@
 import { defineConfig } from 'vite'
 import reactSWC from '@vitejs/plugin-react-swc'
 
-// Detectar se estamos no GitHub Pages
+// Detectar plataforma de deploy
 const isGitHubPages = process.env.VITE_GITHUB_PAGES === 'true' || process.env.GITHUB_ACTIONS === 'true'
+const isVercel = process.env.VERCEL === '1'
 
 export default defineConfig({
   plugins: [reactSWC()],
-  base: '/HeroForgeNew/', // Forçar sempre para GitHub Pages
+  base: isGitHubPages ? '/HeroForgeNew/' : '/', // GitHub Pages precisa do subpath, Vercel usa root
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
