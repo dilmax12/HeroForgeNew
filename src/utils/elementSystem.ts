@@ -143,3 +143,27 @@ export function calculateElementalAffinity(heroElement: Element, skillElement?: 
   if (heroElement === skillElement) return 1.1; // +10% para mesmo elemento
   return 1.0;
 }
+
+// Fallback centralizado: retorna info de 'physical' se não encontrado
+export function getElementInfoSafe(element: Element | string) {
+  const key = element as Element;
+  return ELEMENT_INFO[key] || ELEMENT_INFO['physical'];
+}
+
+export const ELEMENT_ADV: Record<Element, { beats: Element[]; weak?: Element[] }> = {
+  fire: { beats: ['ice'], weak: ['earth'] },
+  ice: { beats: ['thunder'] },
+  thunder: { beats: ['earth'] },
+  earth: { beats: ['fire'] },
+  light: { beats: ['dark'] },
+  dark: { beats: ['light'] },
+  physical: { beats: [] }
+};
+
+export function computeElementMultiplier(atkElem: Element, defElem: Element, atkAffinity = 0, defResistance = 0): number {
+  let base = 1.0;
+  if (ELEMENT_ADV[atkElem]?.beats.includes(defElem)) base *= 1.3;
+  if (ELEMENT_ADV[defElem]?.beats.includes(atkElem)) base *= 0.75;
+  base *= 1 + (atkAffinity - defResistance) / 100;
+  return Math.max(0.4, Math.min(base, 2.5));
+}

@@ -124,6 +124,21 @@ const Layout = () => {
                   🧠 Recomendações IA
                 </Link>
               </li>
+              <li>
+                <Link to="/world-state-demo" className={navLinkClass('/world-state-demo')}>
+                  🌍 Demo Sistema
+                </Link>
+              </li>
+              <li>
+                <Link to="/enhanced-quests" className={navLinkClass('/enhanced-quests')}>
+                  📜 Missões Narrativas
+                </Link>
+              </li>
+              <li>
+                <Link to="/hero-journal" className={navLinkClass('/hero-journal')}>
+                  📖 Diário do Herói
+                </Link>
+              </li>
             </ul>
           </nav>
         </div>

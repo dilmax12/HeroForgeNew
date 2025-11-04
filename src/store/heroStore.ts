@@ -1,18 +1,23 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
-import { Hero, HeroCreationData, HeroAttributes, DerivedAttributes, Quest, Achievement, Guild, Item, CombatResult, DailyGoal } from '../types/hero';
+import { Hero, HeroCreationData, HeroAttributes, DerivedAttributes, Quest, Achievement, Guild, Item, CombatResult } from '../types/hero';
+import type { HeroInventory, Party } from '../types/hero';
+import type { DailyGoal } from '../types/hero';
+import type { EnhancedQuestChoice } from '../types/hero';
 import { generateQuestBoard, QUEST_ACHIEVEMENTS } from '../utils/quests';
 import { resolveCombat, autoResolveCombat } from '../utils/combat';
 import { purchaseItem, sellItem, equipItem, useConsumable, SHOP_ITEMS } from '../utils/shop';
 import { updateHeroReputation, generateReputationEvents } from '../utils/reputationSystem';
 import { generateAllLeaderboards, getHeroRanking, calculateTotalScore } from '../utils/leaderboardSystem';
-import { DailyGoal, generateDailyGoals, updateDailyGoalProgress, checkPerfectDayGoal, removeExpiredGoals, getDailyGoalRewards } from '../utils/dailyGoalsSystem';
+import { generateDailyGoals, updateDailyGoalProgress, checkPerfectDayGoal, removeExpiredGoals, getDailyGoalRewards } from '../utils/dailyGoalsSystem';
 import { onboardingManager } from '../utils/onboardingSystem';
 import { eventManager } from '../utils/eventSystem';
 import { logActivity } from '../utils/activitySystem';
 import { trackMetric } from '../utils/metricsSystem';
 import { rankSystem } from '../utils/rankSystem';
+import { worldStateManager } from '../utils/worldState';
+import { rollDecision, applyChoiceConsequences, recordDecision } from '../utils/narrativeMissions';
 
 interface HeroState {
   heroes: Hero[];
@@ -31,6 +36,7 @@ interface HeroState {
   refreshQuests: (heroLevel?: number) => void;
   acceptQuest: (heroId: string, questId: string) => boolean;
   completeQuest: (heroId: string, questId: string, autoResolve?: boolean) => CombatResult | null;
+  makeQuestChoice: (heroId: string, questId: string, choice: EnhancedQuestChoice, partySize?: number) => boolean;
   
   // === SISTEMA DE PROGRESSÃO ===
   gainXP: (heroId: string, xp: number) => void;
@@ -52,8 +58,8 @@ interface HeroState {
   // === SISTEMA DE TÍTULOS E REPUTAÇÃO ===
   setActiveTitle: (titleId?: string) => void;
   updateAchievementProgress: () => void;
-  updateReputation: (heroId: string, faction: string, change: number) => void;
-  processReputationEvents: (heroId: string) => void;
+  updateReputation: (factionName: string, change: number) => void;
+  processReputationEvents: () => void;
   
   // === SISTEMA DE METAS DIÁRIAS ===
   generateDailyGoalsForHero: (heroId: string) => void;
@@ -81,6 +87,11 @@ interface HeroState {
   getSelectedHero: () => Hero | undefined;
   getHeroQuests: (heroId: string) => Quest[];
   getHeroGuild: (heroId: string) => Guild | undefined;
+
+  // Party
+  createParty?: (name: string, memberIds: string[]) => Party;
+  addToParty?: (partyId: string, heroId: string) => boolean;
+  removeFromParty?: (partyId: string, heroId: string) => boolean;
 }
 
 // === VALIDAÇÃO E CÁLCULOS ===
@@ -181,6 +192,7 @@ const calculateDerivedAttributes = (
   const mp = mpBase + Math.floor(totalAttributes.inteligencia / 2) * level;
   const initiative = Math.floor(totalAttributes.destreza / 2);
   const armorClass = 10 + Math.floor(totalAttributes.destreza / 4);
+  const luck = Math.max(0, Math.floor((totalAttributes.carisma + totalAttributes.sabedoria) / 2));
   
   return {
     hp,
@@ -188,7 +200,8 @@ const calculateDerivedAttributes = (
     initiative,
     armorClass,
     currentHp: hp,
-    currentMp: mp
+    currentMp: mp,
+    luck
   };
 };
 
@@ -286,6 +299,17 @@ export const useHeroStore = create<HeroState>()(
         
         // Inicializar dados de rank
         newHero.rankData = rankSystem.initializeRankData(newHero);
+        
+        // Inicializar WorldState
+        newHero.worldState = worldStateManager.initializeWorldState();
+        
+        // Inicializar stamina
+        newHero.stamina = {
+          current: 100,
+          max: 100,
+          lastRecovery: timestamp,
+          recoveryRate: 10
+        };
         
         set(state => ({
           heroes: [...state.heroes, newHero],
@@ -433,6 +457,23 @@ export const useHeroStore = create<HeroState>()(
         }
         
         let combatResult: CombatResult | null = null;
+
+        // Aplicar fadiga da missão (redução de stamina)
+        {
+          const stateRef = get();
+          const currentHero = stateRef.heroes.find(h => h.id === heroId);
+          if (currentHero) {
+            const now = new Date().toISOString();
+            const current = currentHero.stamina?.current ?? 100;
+            const rate = currentHero.stamina?.recoveryRate ?? 10;
+            const max = currentHero.stamina?.max ?? 100;
+            const newStamina = Math.max(0, current - 20); // custo base da missão
+            stateRef.updateHero(heroId, {
+              stamina: { current: newStamina, max, lastRecovery: now, recoveryRate: rate },
+              updatedAt: now
+            });
+          }
+        }
         
         // Resolver combate se houver inimigos
         if (quest.enemies && quest.enemies.length > 0) {
@@ -557,6 +598,48 @@ export const useHeroStore = create<HeroState>()(
         return combatResult;
       },
       
+      // Registra escolhas narrativas com roll e persistência
+      makeQuestChoice: (heroId: string, questId: string, choice: EnhancedQuestChoice, partySize = 1) => {
+        const state = get();
+        const hero = state.heroes.find(h => h.id === heroId);
+        if (!hero) return false;
+
+        const outcome = rollDecision(hero, choice, partySize);
+        applyChoiceConsequences(heroId, choice, outcome.success);
+        recordDecision(heroId, questId, choice, outcome);
+
+        // Atualizar campos da missão (choiceMade, narrativa, etc.)
+        const questIndex = state.availableQuests.findIndex(q => q.id === questId);
+        if (questIndex >= 0) {
+          const q = state.availableQuests[questIndex];
+          const updated = { ...q, choiceMade: choice.id } as Quest;
+          set({
+            availableQuests: [
+              ...state.availableQuests.slice(0, questIndex),
+              updated,
+              ...state.availableQuests.slice(questIndex + 1)
+            ]
+          });
+        }
+
+        // Efeitos de mundo persistentes simplificados (exemplo)
+        // Ex.: criação de inimigo pessoal quando falha uma negociação ou escolhe saquear
+        if (!outcome.success && choice.failureEffects?.some(e => e.type === 'npc_relation')) {
+          const ws = hero.worldState || worldStateManager.initializeWorldState();
+          ws.npcStatus = ws.npcStatus || {} as any;
+          ws.npcStatus['inimigo-pessoal'] = {
+            alive: true,
+            relationToPlayer: -50,
+            lastInteraction: 'emboscada',
+            currentLocation: 'estrada-real',
+            questsAvailable: []
+          } as any;
+          set({ heroes: state.heroes.map(h => (h.id === hero.id ? { ...hero, worldState: ws } : h)) });
+        }
+
+        return outcome.success;
+      },
+
       // === SISTEMA DE PROGRESSÃO ===
       
       gainXP: (heroId: string, xp: number) => {
@@ -1269,6 +1352,19 @@ export const useHeroStore = create<HeroState>()(
             pendingCelebrations: updatedCelebrations
           }
         });
+      },
+
+      // Party
+      createParty: (name: string, memberIds: string[]) => {
+        const party: Party = { id: crypto.randomUUID(), name, members: memberIds, createdAt: new Date().toISOString(), sharedLoot: true, sharedXP: true };
+        // Persistência simplificada (pode mover para um store dedicado)
+        return party;
+      },
+      addToParty: (partyId: string, heroId: string) => {
+        return true;
+      },
+      removeFromParty: (partyId: string, heroId: string) => {
+        return true;
       }
     }),
     {

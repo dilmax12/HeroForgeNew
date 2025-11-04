@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Hero, HeroClass, Element } from '../types/hero';
-import { ELEMENT_INFO } from '../utils/elementSystem';
 import { getRankIcon } from '../styles/medievalTheme';
 import { useHeroStore } from '../store/heroStore';
 import { Eye, Star, Shield, Sword, Wand2, Target, Heart, UserX, Crown, Edit, Camera } from 'lucide-react';
+import { getElementInfoSafe } from '../utils/elementSystem';
 
 interface HeroGalleryCardProps {
   hero: Hero;
@@ -60,9 +60,9 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
   const { selectHero, getSelectedHero } = useHeroStore();
   const selectedHero = getSelectedHero();
 
+  // Define variáveis usadas no JSX
   const isSelected = selectedHero?.id === hero.id;
-  const elementInfo = ELEMENT_INFO[hero.element];
-
+  const elementInfo = getElementInfoSafe(hero.element);
   // Tamanhos baseados na prop size
   const sizeClasses = {
     small: 'w-48 h-64',
@@ -210,7 +210,7 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
                 <span className="capitalize truncate">{hero.class}</span>
               </div>
               <div className="flex items-center space-x-1 ml-2">
-                <span className="text-base">{elementInfo.icon}</span>
+                <span className="text-base">{elementInfo?.icon || '⚡'}</span>
               </div>
             </div>
 

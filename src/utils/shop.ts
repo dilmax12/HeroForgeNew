@@ -578,3 +578,31 @@ export function getDiscountedPrice(item: Item, hero: Hero): number {
   const discount = getReputationDiscount(hero.progression.reputation);
   return Math.floor(item.price * (1 - discount));
 }
+
+export type ItemPrefix = 'Flamejante' | 'do Caçador' | 'dos Ecos' | 'Gélido' | 'Trovejante';
+export type ItemSuffix = 'da Rapidez' | 'da Fúria' | 'da Precisão' | 'do Guardião';
+
+export interface ProceduralItem {
+  id: string;
+  name: string;
+  baseType: 'espada' | 'arco' | 'cajado' | 'machado';
+  rarity: 'comum' | 'raro' | 'epico' | 'lendario';
+  sockets?: number;
+  bonus?: Partial<HeroAttributes>;
+  elementOverride?: Element;
+}
+
+export function generateProceduralItem(seed: number, luck = 0): ProceduralItem {
+  const bases: ProceduralItem['baseType'][] = ['espada', 'arco', 'cajado', 'machado'];
+  const baseType = bases[seed % bases.length];
+  const prefixes: ItemPrefix[] = ['Flamejante', 'do Caçador', 'dos Ecos', 'Gélido', 'Trovejante'];
+  const suffixes: ItemSuffix[] = ['da Rapidez', 'da Fúria', 'da Precisão', 'do Guardião'];
+  const prefix = prefixes[(seed + 1) % prefixes.length];
+  const suffix = suffixes[(seed + 2) % suffixes.length];
+  const rarityRoll = (seed % 100) + luck;
+  const rarity: ProceduralItem['rarity'] = rarityRoll > 90 ? 'lendario' : rarityRoll > 70 ? 'epico' : rarityRoll > 40 ? 'raro' : 'comum';
+  const sockets = rarity === 'lendario' ? 3 : rarity === 'epico' ? 2 : rarity === 'raro' ? 1 : 0;
+  const elementOverride: Element | undefined = prefix === 'Flamejante' ? 'fire' : prefix === 'Gélido' ? 'ice' : prefix === 'Trovejante' ? 'thunder' : undefined;
+  const bonus = { forca: baseType === 'espada' ? 2 : 0, destreza: baseType === 'arco' ? 2 : 0, inteligencia: baseType === 'cajado' ? 2 : 0 };
+  return { id: crypto.randomUUID(), name: `${baseType} ${prefix} ${suffix}`, baseType, rarity, sockets, bonus, elementOverride };
+}

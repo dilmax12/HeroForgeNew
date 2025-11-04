@@ -159,24 +159,18 @@ export function getHeroRanking(hero: Hero, heroes: Hero[]): RankingSystem {
 }
 
 export function calculateTotalScore(hero: Hero): number {
-  const weights = {
-    level: 100,
-    xp: 0.1,
-    gold: 0.01,
-    quests: 50,
-    achievements: 25,
-    reputation: 1
-  };
+  const base = (hero.progression.xp || 0) + (hero.progression.gold || 0) + (hero.stats?.achievementsUnlocked || 0) * 100;
+  const epicItems = hero.inventory ? Object.keys(hero.inventory.items).length * 5 : 0;
+  const decisions = hero.worldState?.decisionLog?.length || 0;
+  const streak = hero.stats?.loginStreak || 0;
+  return base + epicItems + decisions * 10 + streak * 20;
+}
 
-  return Math.floor(
-    hero.progression.level * weights.level +
-    hero.progression.experience * weights.xp +
-
-    hero.progression.gold * weights.gold +
-    (hero.completedQuests || []).length * weights.quests +
-    (hero.achievements || []).filter(a => a.unlockedAt).length * weights.achievements +
-    (hero.reputationFactions || []).reduce((sum, faction) => sum + Math.max(0, faction.reputation), 0) * weights.reputation
-  );
+// Seasons e prestígio (esqueleto)
+export interface SeasonInfo { name: string; start: string; end?: string; prestigeMultiplier?: number; }
+export function applySeasonalScore(score: number, season?: SeasonInfo): number {
+  if (!season?.prestigeMultiplier) return score;
+  return Math.floor(score * season.prestigeMultiplier);
 }
 
 export function getLeaderboardPosition(heroId: string, leaderboard: Leaderboard): number {

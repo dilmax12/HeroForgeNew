@@ -6,6 +6,7 @@ import { generateNarrativeMission } from '../utils/narrativeMissions';
 import NarrativeQuest from './NarrativeQuest';
 import { getClassIcon } from '../styles/medievalTheme';
 import { ELEMENT_INFO } from '../utils/elementSystem';
+import { getElementInfoSafe } from '../utils/elementSystem';
 
 // Componente para seleção de herói
 const HeroSelector: React.FC<{ 
@@ -41,7 +42,9 @@ const HeroSelector: React.FC<{
       <h3 className="text-xl font-bold text-amber-400 mb-4 text-center">Escolha seu Herói</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {heroes.map(hero => {
-          const elementInfo = ELEMENT_INFO[hero.element];
+          // Antes: const elementInfo = ELEMENT_INFO[hero.element];
+          // Depois:
+          const elementInfo = getElementInfoSafe(hero.element);
           return (
             <div
               key={hero.id}
@@ -60,8 +63,8 @@ const HeroSelector: React.FC<{
                   </h4>
                   <div className="text-sm text-gray-300 flex items-center space-x-2">
                     <span>{getClassIcon(hero.class)} {hero.class}</span>
-                    <span className={elementInfo.color}>
-                      {elementInfo.icon} {hero.element}
+                    <span style={{ color: elementInfo?.color || '#9CA3AF' }}>
+                        {elementInfo?.icon || '⚡'} {hero.element}
                     </span>
                   </div>
                   <div className="text-xs text-amber-600">

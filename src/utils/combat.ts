@@ -539,3 +539,32 @@ export function autoResolveCombat(hero: Hero, enemies: QuestEnemy[], isGuildQues
     };
   }
 }
+
+export type MonsterArchetype = 'humano' | 'bestial' | 'elemental' | 'esqueleto' | 'corrupto';
+export type MonsterModifier = 'feroz' | 'agil' | 'versatil' | 'morto-vivo' | 'blindado';
+
+export interface GeneratedMonster {
+  type: MonsterArchetype;
+  tier: number;
+  modifiers: MonsterModifier[];
+  level: number;
+  drops: string[]; // itemIds
+  stats: {
+    hp: number;
+    damage: number;
+    speed: number;
+    resistances?: Partial<Record<Element, number>>;
+  };
+}
+
+export function generateMonster(seed: number, difficulty: 'facil' | 'medio' | 'dificil', luck = 0): GeneratedMonster {
+  const tier = difficulty === 'facil' ? 1 : difficulty === 'medio' ? 2 : 3;
+  const typePool: MonsterArchetype[] = ['humano', 'bestial', 'elemental', 'esqueleto', 'corrupto'];
+  const type = typePool[seed % typePool.length];
+  const modPool: MonsterModifier[] = ['feroz', 'agil', 'versatil', 'morto-vivo', 'blindado'];
+  const modifiers = [modPool[(seed + 3) % modPool.length]];
+  const level = tier + Math.floor(luck / 10);
+  const stats = { hp: 50 * tier + level * 5, damage: 10 * tier + level, speed: 5 + tier };
+  const drops = ['material-bruto', 'pedra-encantamento'];
+  return { type, tier, modifiers, level, drops, stats };
+}

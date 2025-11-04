@@ -22,10 +22,108 @@ export type Alignment = 'leal-bom' | 'neutro-bom' | 'caotico-bom' |
 
 // === NOVOS TIPOS PARA O SISTEMA ÉPICO ===
 
-export type QuestType = 'contrato' | 'caca' | 'exploracao' | 'historia';
-export type QuestDifficulty = 'rapida' | 'padrao' | 'epica';
+export type QuestType = 'contrato' | 'caca' | 'exploracao' | 'historia' | 'narrative';
+export type QuestDifficulty = 'rapida' | 'padrao' | 'epica' | 'facil' | 'medio' | 'dificil';
 export type ItemRarity = 'comum' | 'raro' | 'epico' | 'lendario';
 export type ItemType = 'weapon' | 'armor' | 'accessory' | 'consumable' | 'cosmetic';
+
+// === NOVOS TIPOS PARA SISTEMA DE DECISÕES E MUNDO ===
+
+export interface DecisionLogEntry {
+  id: string;
+  heroId: string;
+  questId: string;
+  choiceId: string;
+  choiceText: string;
+  timestamp: string;
+  impact: {
+    immediate: {
+      gold?: number;
+      xp?: number;
+      reputation?: Record<string, number>;
+      items?: string[];
+    };
+    longTerm: {
+      npcRelations?: Record<string, number>;
+      worldEvents?: string[];
+      futureQuestUnlocks?: string[];
+      futureQuestBlocks?: string[];
+    };
+  };
+  rollResult?: {
+    roll: number;
+    modifiers: number;
+    threshold: number;
+    success: boolean;
+  };
+}
+
+export interface WorldState {
+  factions: Record<string, {
+    reputation: number;
+    alliances: string[];
+    enemies: string[];
+    influence: number; // 0-100
+  }>;
+  activeEvents: string[];
+  npcStatus: Record<string, {
+    alive: boolean;
+    relationToPlayer: number; // -100 a +100
+    lastInteraction?: string;
+    currentLocation?: string;
+    questsAvailable?: string[];
+  }>;
+  decisionLog: DecisionLogEntry[];
+  worldEvents: {
+    id: string;
+    name: string;
+    description: string;
+    active: boolean;
+    startDate: string;
+    endDate?: string;
+    effects: {
+      lootMultiplier?: number;
+      xpMultiplier?: number;
+      specialEnemies?: boolean;
+      rareQuestChance?: number;
+    };
+  }[];
+  locations: Record<string, {
+    discovered: boolean;
+    reputation: number;
+    specialEvents?: string[];
+    questsCompleted: number;
+  }>;
+}
+
+export interface QuestChoiceEffect {
+  type: 'gold' | 'xp' | 'reputation' | 'item' | 'npc_relation' | 'world_event' | 'spawn_enemy';
+  target?: string; // faction, npc, item id, etc.
+  value?: number;
+  probability?: number; // 0-1, chance do efeito acontecer
+  description?: string;
+}
+
+export interface EnhancedQuestChoice {
+  id: string;
+  text: string;
+  description: string;
+  riskThreshold?: number; // 0-100, dificuldade do roll
+  rollModifiers?: {
+    attribute?: Attribute;
+    multiplier?: number;
+    bonus?: number;
+  };
+  successEffects: QuestChoiceEffect[];
+  failureEffects?: QuestChoiceEffect[];
+  requirements?: {
+    level?: number;
+    class?: HeroClass;
+    reputation?: Record<string, number>;
+    items?: string[];
+    previousChoices?: string[]; // IDs de escolhas anteriores necessárias
+  };
+}
 
 export interface QuestReward {
   gold: number;
@@ -61,6 +159,21 @@ export interface QuestChoice {
     class?: HeroClass;
     reputation?: number;
     items?: string[];
+  };
+}
+
+// Versão aprimorada para o novo sistema
+export interface EnhancedQuest extends Omit<Quest, 'choices'> {
+  enhancedChoices?: EnhancedQuestChoice[];
+  storySeeds?: {
+    context: string;
+    tone: string;
+    previousDecisions?: string[];
+  };
+  worldStateRequirements?: {
+    factionReputation?: Record<string, number>;
+    npcStatus?: Record<string, boolean>;
+    completedQuests?: string[];
   };
 }
 
@@ -265,6 +378,7 @@ export interface DerivedAttributes {
   armorClass: number;
   currentHp?: number; // HP atual (para combate)
   currentMp?: number; // MP atual
+  luck?: number;      // Novo: sorte que afeta rolls, loot e eventos
 }
 
 export interface HeroProgression {
@@ -349,6 +463,15 @@ export interface Hero {
   
   // Rank System v2.2
   rankData: HeroRankData;
+  
+  // === SISTEMA DE MUNDO E DECISÕES ===
+  worldState?: WorldState;
+  stamina?: {
+    current: number;
+    max: number;
+    lastRecovery: string; // ISO timestamp
+    recoveryRate: number; // pontos por hora
+  };
 }
 
 export interface HeroCreationData {
@@ -365,4 +488,13 @@ export interface HeroCreationData {
   avatar?: string;
   backstory?: string;
   shortBio?: string;
+}
+
+export interface Party {
+  id: string;
+  name: string;
+  members: string[]; // hero IDs
+  createdAt: string;
+  sharedLoot?: boolean;
+  sharedXP?: boolean;
 }

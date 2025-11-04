@@ -157,3 +157,15 @@ A narrativa deve:
 }
 
 export const storyAIService = new StoryAIService();
+
+
+export function generateStorySeeds(worldState: WorldState): { context: string; tone: string; previousDecisions: string[] } {
+  const decisions = worldState.decisionLog.slice(-5).map(d => d.choiceText);
+  return { context: 'Estradas turbulentas e facções em conflito', tone: 'épico e sombrio', previousDecisions: decisions };
+}
+
+export function updateWorldMemory(worldState: WorldState, event: string): WorldState {
+  const updated = { ...worldState };
+  updated.activeEvents = [...(updated.activeEvents || []), event];
+  return updated;
+}

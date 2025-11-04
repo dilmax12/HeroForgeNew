@@ -1,4 +1,6 @@
 import { Quest, QuestChoice, HeroClass } from '../types/hero';
+import { Hero, EnhancedQuestChoice, QuestChoiceEffect, DecisionLogEntry } from '../types/hero';
+import { useHeroStore } from '../store/heroStore';
 
 // Templates de missões narrativas com escolhas
 const NARRATIVE_MISSION_TEMPLATES = [
@@ -495,3 +497,77 @@ export const getNarrativeMissionsByDifficulty = (difficulty: string) => {
 export const getAllNarrativeMissions = () => {
   return NARRATIVE_MISSION_TEMPLATES;
 };
+
+
+export function rollDecision(hero: Hero, choice: EnhancedQuestChoice, partySize = 1): { roll: number; modifiers: number; threshold: number; success: boolean } {
+  const baseRoll = Math.floor(Math.random() * 100) + 1;
+  const attrs = hero.attributes;
+  const affinityBonus = hero.derivedAttributes?.luck ? Math.floor(hero.derivedAttributes.luck / 2) : 0;
+  const attrMod = choice.rollModifiers?.attribute ? Math.floor((attrs[choice.rollModifiers.attribute] || 0) * (choice.rollModifiers.multiplier || 1)) + (choice.rollModifiers.bonus || 0) : 0;
+  const partyBonus = Math.min(10, Math.floor((partySize - 1) * 2));
+  const modifiers = affinityBonus + attrMod + partyBonus;
+  const threshold = choice.riskThreshold ?? 50;
+  const success = baseRoll + modifiers >= threshold;
+  return { roll: baseRoll, modifiers, threshold, success };
+}
+
+export function applyChoiceConsequences(heroId: string, choice: EnhancedQuestChoice, success: boolean) {
+  const effects = success ? choice.successEffects : (choice.failureEffects || []);
+  const store = useHeroStore.getState();
+  effects.forEach(effect => {
+    switch (effect.type) {
+      case 'gold':
+        if (typeof effect.value === 'number') store.gainGold(heroId, effect.value);
+        break;
+      case 'xp':
+        if (typeof effect.value === 'number') store.gainXP(heroId, effect.value);
+        break;
+      case 'reputation':
+        if (effect.target && typeof effect.value === 'number') store.updateReputation(heroId, effect.target, effect.value);
+        break;
+      case 'item':
+        if (effect.target) store.addItemToInventory(heroId, effect.target, 1);
+        break;
+      case 'npc_relation':
+      case 'world_event':
+      case 'spawn_enemy':
+        // Persistência e eventos do mundo podem ser registrados no worldState
+        // Integração detalhada abaixo em store.makeQuestChoice
+        break;
+      default:
+        break;
+    }
+  });
+}
+
+export function recordDecision(heroId: string, questId: string, choice: EnhancedQuestChoice, outcome: { roll: number; modifiers: number; threshold: number; success: boolean }) {
+  const entry: DecisionLogEntry = {
+    id: crypto.randomUUID(),
+    heroId,
+    questId,
+    choiceId: choice.id,
+    choiceText: choice.text,
+    timestamp: new Date().toISOString(),
+    impact: { immediate: {}, longTerm: {} },
+    rollResult: outcome
+  };
+  const store = useHeroStore.getState();
+  // Atualiza worldState persistente do herói
+  const hero = store.getSelectedHero();
+  if (!hero) return;
+  hero.worldState = hero.worldState || { factions: {}, activeEvents: [], npcStatus: {}, decisionLog: [], worldEvents: [], locations: {} };
+  hero.worldState.decisionLog.push(entry);
+  store.updateHero(hero.id, { worldState: hero.worldState, updatedAt: new Date().toISOString() });
+}
+
+export interface DungeonLayer { enemies: string[]; events: string[]; rewardHint?: string; }
+export interface DungeonRun { id: string; seed: number; layers: DungeonLayer[]; completed?: boolean; metaProgress?: Record<string, number>; }
+
+export function generateDungeonRun(seed: number, layers = 3): DungeonRun {
+  const generated: DungeonLayer[] = Array.from({ length: layers }).map((_, i) => ({
+    enemies: [`tier-${i + 1}-corrupto`, `tier-${i + 1}-bestial`],
+    events: i === 1 ? ['tempestade'] : [],
+    rewardHint: i === layers - 1 ? 'baú raro' : 'materiais'
+  }));
+  return { id: crypto.randomUUID(), seed, layers: generated, completed: false, metaProgress: {} };
+}

@@ -23,8 +23,11 @@ import DynamicMissionsPanel from './components/DynamicMissionsPanel'
 import AIRecommendationsPanel from './components/AIRecommendationsPanel'
 import Shop from './components/Shop'
 import Training from './components/Training'
+import { WorldStateDemo } from './components/WorldStateDemo'
 import { useEffect } from 'react'
 import { useHeroStore } from './store/heroStore'
+import { EnhancedQuestBoard } from './components/EnhancedQuestBoard'
+import { HeroJournal } from './components/HeroJournal'
 
 // Componente wrapper para HeroProgression que precisa do herói selecionado
 function HeroProgressionWrapper() {
@@ -173,6 +176,48 @@ function AIRecommendationsPanelWrapper() {
   return <AIRecommendationsPanel hero={selectedHero} className="max-w-6xl mx-auto" />;
 }
 
+// Componente wrapper para EnhancedQuestBoard que precisa do herói selecionado
+function EnhancedQuestBoardWrapper() {
+  const { getSelectedHero } = useHeroStore();
+  const selectedHero = getSelectedHero();
+  
+  if (!selectedHero) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 text-center">
+        <div className="text-6xl mb-4">📜</div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
+        <p className="text-gray-600 mb-6">Selecione um herói para acessar as missões narrativas.</p>
+        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
+          Voltar à Lista de Heróis
+        </Link>
+      </div>
+    );
+  }
+  
+  return <EnhancedQuestBoard hero={selectedHero} />;
+}
+
+// Componente wrapper para HeroJournal que precisa do herói selecionado
+function HeroJournalWrapper() {
+  const { getSelectedHero } = useHeroStore();
+  const selectedHero = getSelectedHero();
+  
+  if (!selectedHero) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 text-center">
+        <div className="text-6xl mb-4">📖</div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
+        <p className="text-gray-600 mb-6">Selecione um herói para ver seu diário de aventuras.</p>
+        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
+          Voltar à Lista de Heróis
+        </Link>
+      </div>
+    );
+  }
+  
+  return <HeroJournal hero={selectedHero} />;
+}
+
 function App() {
   const { heroes, markCelebrationViewed } = useHeroStore();
   
@@ -238,8 +283,11 @@ function App() {
           <Route path="ai-avatar" element={<AIAvatarGeneratorWrapper />} />
           <Route path="ai-missions" element={<DynamicMissionsPanelWrapper />} />
           <Route path="ai-recommendations" element={<AIRecommendationsPanelWrapper />} />
+          <Route path="enhanced-quests" element={<EnhancedQuestBoardWrapper />} />
+          <Route path="hero-journal" element={<HeroJournalWrapper />} />
           <Route path="shop" element={<Shop />} />
           <Route path="training" element={<Training />} />
+          <Route path="world-state-demo" element={<WorldStateDemo />} />
         </Route>
       </Routes>
     </>
