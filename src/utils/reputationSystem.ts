@@ -18,11 +18,7 @@ export const REPUTATION_LEVELS: ReputationLevel[] = [
     threshold: -1000,
     color: 'text-red-500',
     description: 'Você é visto como um inimigo desta facção',
-    questModifiers: {
-      goldBonus: -0.5,
-      xpBonus: -0.3,
-      specialQuestsUnlocked: []
-    }
+    questModifiers: { goldBonus: -0.5, xpBonus: -0.3, specialQuestsUnlocked: [] }
   },
   {
     name: 'Hostil',
@@ -84,44 +80,25 @@ export const REPUTATION_LEVELS: ReputationLevel[] = [
     threshold: 1000,
     color: 'text-purple-400',
     description: 'Você é uma lenda para esta facção',
-    questModifiers: {
-      goldBonus: 0.5,
-      xpBonus: 0.3,
-      specialQuestsUnlocked: ['legendary_quests', 'faction_champion']
-    }
+    questModifiers: { goldBonus: 0.5, xpBonus: 0.3, specialQuestsUnlocked: ['legendary_quests', 'faction_champion'] }
   }
 ];
 
 export const FACTION_DESCRIPTIONS = {
-  'Guarda da Cidade': {
-    description: 'Defensores da ordem e da lei nas cidades',
-    opposingFactions: ['Ladrões', 'Cultistas'],
-    allyFactions: ['Comerciantes', 'Clero']
+  'Ordem': {
+    description: 'Defensores da lei, justiça e estabilidade',
+    opposingFactions: ['Sombra'],
+    allyFactions: ['Livre']
   },
-  'Comerciantes': {
-    description: 'Mercadores e artesãos que movem a economia',
-    opposingFactions: ['Ladrões'],
-    allyFactions: ['Guarda da Cidade']
-  },
-  'Ladrões': {
-    description: 'Organizações criminosas das sombras',
-    opposingFactions: ['Guarda da Cidade', 'Clero'],
-    allyFactions: ['Cultistas']
-  },
-  'Clero': {
-    description: 'Servos dos deuses e da luz divina',
-    opposingFactions: ['Cultistas', 'Ladrões'],
-    allyFactions: ['Guarda da Cidade']
-  },
-  'Cultistas': {
-    description: 'Adoradores de entidades sombrias',
-    opposingFactions: ['Clero', 'Guarda da Cidade'],
-    allyFactions: ['Ladrões']
-  },
-  'Exploradores': {
-    description: 'Aventureiros que desbravam terras desconhecidas',
-    opposingFactions: [],
+  'Sombra': {
+    description: 'Operadores das sombras: ladrões, cultistas e informantes',
+    opposingFactions: ['Ordem'],
     allyFactions: []
+  },
+  'Livre': {
+    description: 'Exploradores e comerciantes independentes',
+    opposingFactions: [],
+    allyFactions: ['Ordem']
   }
 };
 
@@ -201,29 +178,23 @@ export function generateReputationEvents(hero: Hero): Array<{
   reason: string;
 }> {
   const events = [];
-  
-  // Exemplo: Baseado em missões completadas
-  if (hero.completedQuests.length > 0) {
-    const lastQuest = hero.completedQuests[hero.completedQuests.length - 1];
-    
-    // Lógica simples para determinar mudanças de reputação
-    if (lastQuest.type === 'combat') {
-      events.push({
-        factionName: 'Guarda da Cidade',
-        change: 10,
-        reason: 'Eliminou ameaças à cidade'
-      });
-    }
-    
-    if (lastQuest.difficulty === 'legendary') {
-      events.push({
-        factionName: 'Exploradores',
-        change: 25,
-        reason: 'Completou uma missão lendária'
-      });
-    }
+
+  // Exemplo simples de eventos (ajuste conforme sua lógica real)
+  // Melhor manter neutro, usando nomes das 3 facções
+  if ((hero.completedQuests || []).length > 0) {
+    // Nota: se completedQuests for apenas IDs, adapte quando tiver contexto da última missão
+    events.push({
+      factionName: 'Ordem',
+      change: 10,
+      reason: 'Apoiou a estabilidade e combateu ameaças públicas'
+    });
+    events.push({
+      factionName: 'Sombra',
+      change: -3,
+      reason: 'Ações que atrapalham operações clandestinas'
+    });
   }
-  
+
   return events;
 }
 

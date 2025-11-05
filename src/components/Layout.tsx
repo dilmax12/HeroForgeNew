@@ -1,12 +1,15 @@
+import React, { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useHeroStore } from '../store/heroStore';
 import EnhancedHUD from './EnhancedHUD';
 import NotificationSystem, { useNotifications } from './NotificationSystem';
 import QuickNavigation from './QuickNavigation';
 import { medievalTheme, getClassIcon } from '../styles/medievalTheme';
+import GoogleLoginButton from './GoogleLoginButton';
 
 const Layout = () => {
   const location = useLocation();
+  const [hudVisible, setHudVisible] = useState(true);
   const { getSelectedHero } = useHeroStore();
   const selectedHero = getSelectedHero();
   const { notifications, removeNotification } = useNotifications();
@@ -29,6 +32,9 @@ const Layout = () => {
             <Link to="/" className="text-2xl font-bold text-amber-400 font-serif">
               {medievalTheme.icons.ui.castle} Forjador de Heróis
             </Link>
+            <div className="flex items-center space-x-4">
+              <GoogleLoginButton />
+            </div>
             
             {/* Herói Selecionado */}
             {selectedHero && (
@@ -148,8 +154,21 @@ const Layout = () => {
         <Outlet />
       </main>
       
-      {/* Enhanced HUD - only show when a hero is selected */}
-      {selectedHero && <EnhancedHUD hero={selectedHero} />}
+      {/* Enhanced HUD - show/hide with toggle */}
+      {selectedHero && hudVisible && <EnhancedHUD hero={selectedHero} />}
+
+      {/* HUD Toggle Button */}
+      {selectedHero && (
+        <button
+          aria-label={hudVisible ? 'Ocultar HUD' : 'Mostrar HUD'}
+          title={hudVisible ? 'Ocultar HUD' : 'Mostrar HUD'}
+          onClick={() => setHudVisible(v => !v)}
+          className={`fixed ${hudVisible ? 'bottom-4 right-4' : 'bottom-4 right-4'} z-50 px-3 py-2 rounded-full shadow-lg transition-colors 
+            ${hudVisible ? 'bg-gray-800 text-gray-200 hover:bg-gray-700' : 'bg-amber-600 text-white hover:bg-amber-700'}`}
+        >
+          {hudVisible ? 'Ocultar Painel' : 'Mostrar Painel'}
+        </button>
+      )}
       
       {/* Notification System */}
       <NotificationSystem 

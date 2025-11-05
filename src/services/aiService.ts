@@ -41,9 +41,22 @@ class AIService {
   }
 
   private loadConfig(): AIConfig {
-    const provider = (import.meta.env.VITE_AI_SERVICE_PROVIDER || 'openai') as AIProvider;
-    const apiKey = provider === 'openai' 
-      ? import.meta.env.VITE_OPENAI_API_KEY 
+    const provider = (import.meta.env.VITE_AI_SERVICE_PROVIDER || 'huggingface') as AIProvider;
+
+    if (provider === 'huggingface') {
+      return {
+        provider,
+        apiKey: '',
+        model: import.meta.env.VITE_AI_MODEL || 'HuggingFaceH4/zephyr-7b-beta',
+        imageModel: import.meta.env.VITE_AI_IMAGE_MODEL || 'stabilityai/sd-turbo',
+        baseURL: '/api/hf-text',
+        maxTokens: 1500,
+        temperature: 0.7
+      };
+    }
+
+    const apiKey = provider === 'openai'
+      ? import.meta.env.VITE_OPENAI_API_KEY
       : import.meta.env.VITE_ANTHROPIC_API_KEY;
 
     // Em produção sem chaves, retornar configuração padrão sem falhar
@@ -59,7 +72,7 @@ class AIService {
         timeout: 30000,
         retryAttempts: 3,
         retryDelay: 1000
-      };
+      } as any;
     }
 
     return {
@@ -67,7 +80,7 @@ class AIService {
       apiKey,
       model: import.meta.env.VITE_AI_MODEL || (provider === 'openai' ? 'gpt-4' : 'claude-3-sonnet-20240229'),
       imageModel: import.meta.env.VITE_AI_IMAGE_MODEL || 'dall-e-3',
-      baseURL: provider === 'openai' 
+      baseURL: provider === 'openai'
         ? import.meta.env.VITE_OPENAI_API_URL || 'https://api.openai.com/v1'
         : import.meta.env.VITE_ANTHROPIC_API_URL || 'https://api.anthropic.com/v1',
       maxTokens: 2000,
@@ -119,6 +132,36 @@ class AIService {
       model: data.model,
       provider: 'openai'
     };
+  }
+
+  private async makeHuggingFaceTextRequest(request: AITextRequest): Promise<AITextResponse> {
+    const response = await fetch(this.config.baseURL || '/api/hf-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: request.prompt,
+        systemMessage: request.systemMessage,
+        maxTokens: request.maxTokens || this.config.maxTokens,
+        temperature: request.temperature || this.config.temperature
+      })
+    });
+
+    const data = await response.json().catch(() => ({ text: '' }));
+    if (!response.ok) {
+      throw new AIError({
+        code: 'hf_error',
+        message: data?.error || 'Erro ao gerar com Hugging Face',
+        provider: 'huggingface',
+        retryable: response.status >= 500
+      });
+    }
+
+    return {
+      text: data.text || '',
+      usage: undefined,
+      model: this.config.model,
+      provider: 'huggingface'
+    } as any;
   }
 
   private async makeAnthropicTextRequest(request: AITextRequest): Promise<AITextResponse> {
@@ -197,6 +240,32 @@ class AIService {
     };
   }
 
+  private async makeHuggingFaceImageRequest(request: AIImageRequest): Promise<AIImageResponse> {
+    const response = await fetch('/api/gerar-imagem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: request.prompt })
+    });
+
+    const data = await response.json().catch(() => ({ imagem: '' }));
+    if (!response.ok) {
+      throw new AIError({
+        code: 'hf_image_error',
+        message: data?.error || 'Erro ao gerar imagem no Hugging Face',
+        provider: 'huggingface',
+        retryable: response.status >= 500
+      });
+    }
+
+    return {
+      url: data.imagem || '',
+      revisedPrompt: request.prompt,
+      size: request.size || '512x512',
+      model: this.config.imageModel || 'stabilityai/sd-turbo',
+      provider: 'huggingface'
+    } as any;
+  }
+
   async generateText(request: AITextRequest): Promise<AITextResponse> {
     // Verificar se o serviço está configurado
     if (!this.isConfigured()) {
@@ -225,8 +294,10 @@ class AIService {
 
       if (this.config.provider === 'openai') {
         response = await this.makeOpenAITextRequest(request);
-      } else {
+      } else if (this.config.provider === 'anthropic') {
         response = await this.makeAnthropicTextRequest(request);
+      } else {
+        response = await this.makeHuggingFaceTextRequest(request);
       }
 
       // Update usage stats
@@ -256,7 +327,7 @@ class AIService {
         url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OTk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkFJIE5vdCBDb25maWd1cmVkPC90ZXh0Pjwvc3ZnPg==',
         revisedPrompt: request.prompt,
         size: request.size || '1024x1024',
-        model: this.config.imageModel || 'dall-e-3',
+        model: this.config.imageModel || 'stabilityai/sd-turbo',
         provider: this.config.provider
       };
     }
@@ -278,7 +349,8 @@ class AIService {
       if (this.config.provider === 'openai') {
         response = await this.makeOpenAIImageRequest(request);
       } else {
-        throw new Error('Image generation not supported for Anthropic');
+        // Hugging Face via backend
+        response = await this.makeHuggingFaceImageRequest(request);
       }
 
       // Update usage stats
@@ -327,6 +399,7 @@ class AIService {
   }
 
   isConfigured(): boolean {
+    if (this.config.provider === 'huggingface') return true; // usa rota backend, sem chave no client
     return !!this.config.apiKey;
   }
 

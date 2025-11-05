@@ -26,7 +26,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Aprenda os fundamentos do combate corpo a corpo',
     icon: '⚔️',
     cost: 20,
-    duration: 30,
+    duration: 3,
     rewards: {
       xp: 25,
       attributes: { forca: 1 }
@@ -38,7 +38,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Melhore sua velocidade e reflexos',
     icon: '🏃',
     cost: 25,
-    duration: 45,
+    duration: 3,
     rewards: {
       xp: 30,
       attributes: { destreza: 1 }
@@ -50,7 +50,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Aprofunde seus conhecimentos arcanos',
     icon: '📚',
     cost: 35,
-    duration: 60,
+    duration: 3,
     rewards: {
       xp: 40,
       attributes: { inteligencia: 1 }
@@ -65,7 +65,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Fortaleça sua mente e espírito',
     icon: '🧘',
     cost: 30,
-    duration: 40,
+    duration: 3,
     rewards: {
       xp: 35,
       attributes: { sabedoria: 1 }
@@ -77,7 +77,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Aumente sua resistência física',
     icon: '💪',
     cost: 40,
-    duration: 50,
+    duration: 3,
     rewards: {
       xp: 45,
       attributes: { constituicao: 1 }
@@ -92,7 +92,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Desenvolva suas habilidades sociais',
     icon: '🎭',
     cost: 50,
-    duration: 90,
+    duration: 3,
     rewards: {
       xp: 50,
       attributes: { carisma: 1 }
@@ -107,7 +107,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Técnicas avançadas de combate',
     icon: '🗡️',
     cost: 100,
-    duration: 120,
+    duration: 3,
     rewards: {
       xp: 100,
       attributes: { forca: 2, destreza: 1 }
@@ -122,7 +122,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Aprenda a encontrar tesouros escondidos',
     icon: '💰',
     cost: 75,
-    duration: 180,
+    duration: 3,
     rewards: {
       xp: 60,
       gold: 150

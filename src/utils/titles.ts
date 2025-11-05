@@ -2,7 +2,7 @@
  * Sistema de Títulos e Reputação
  */
 
-import { Title, Achievement, ReputationFaction, Hero } from '../types/hero';
+import { Title, Achievement, ReputationFaction, Hero, HeroAttributes } from '../types/hero';
 
 // === TÍTULOS PREDEFINIDOS ===
 
@@ -221,36 +221,9 @@ export const TITLE_ACHIEVEMENTS: Achievement[] = [
 // === FACÇÕES DE REPUTAÇÃO ===
 
 export const DEFAULT_FACTIONS: ReputationFaction[] = [
-  {
-    id: 'merchants-guild',
-    name: 'Guilda dos Mercadores',
-    reputation: 0,
-    level: 'neutral'
-  },
-  {
-    id: 'royal-guard',
-    name: 'Guarda Real',
-    reputation: 0,
-    level: 'neutral'
-  },
-  {
-    id: 'thieves-guild',
-    name: 'Guilda dos Ladrões',
-    reputation: 0,
-    level: 'neutral'
-  },
-  {
-    id: 'mages-circle',
-    name: 'Círculo dos Magos',
-    reputation: 0,
-    level: 'neutral'
-  },
-  {
-    id: 'temple-order',
-    name: 'Ordem do Templo',
-    reputation: 0,
-    level: 'neutral'
-  }
+  { id: 'ordem', name: 'Ordem', reputation: 0, level: 'neutral' },
+  { id: 'sombra', name: 'Sombra', reputation: 0, level: 'neutral' },
+  { id: 'livre', name: 'Livre', reputation: 0, level: 'neutral' }
 ];
 
 // === FUNÇÕES UTILITÁRIAS ===
@@ -265,8 +238,8 @@ export function getReputationLevel(reputation: number): ReputationFaction['level
 }
 
 export function updateFactionReputation(
-  factions: ReputationFaction[], 
-  factionId: string, 
+  factions: ReputationFaction[],
+  factionId: string,
   change: number
 ): ReputationFaction[] {
   return factions.map(faction => {
@@ -358,6 +331,43 @@ export function updateAchievementProgress(hero: Hero): Achievement[] {
       unlockedAt: unlocked && !achievement.unlocked ? new Date() : achievement.unlockedAt
     };
   });
+}
+
+// === BÔNUS PASSIVOS DE TÍTULOS ===
+// Bônus simples baseados em atributos para cada título.
+// São somados aos atributos totais (após equipamentos) e impactam os derivados.
+export const TITLE_PASSIVE_ATTRIBUTE_BONUSES: Record<string, Partial<HeroAttributes>> = {
+  // Título inicial
+  'novato': {},
+
+  // Combate
+  'wolf-slayer': { forca: 1 },
+  'dragon-bane': { forca: 2, constituicao: 2 },
+  'undead-hunter': { forca: 1, sabedoria: 1 },
+  'berserker': { forca: 2 },
+
+  // Exploração
+  'pathfinder': { destreza: 2 },
+  'treasure-hunter': { destreza: 1, inteligencia: 1 },
+  'master-explorer': { destreza: 1, sabedoria: 1 },
+
+  // Social
+  'guild-founder': { sabedoria: 1, carisma: 1 },
+  'mentor': { carisma: 1 },
+  'legend': { forca: 1, destreza: 1, constituicao: 1, inteligencia: 1, sabedoria: 1, carisma: 1 },
+
+  // Achievement
+  'completionist': { inteligencia: 1, sabedoria: 1 },
+  'wealthy': { carisma: 1 },
+
+  // Especiais
+  'beta-tester': { inteligencia: 1 },
+  'first-hero': { constituicao: 1 }
+};
+
+export function getTitleAttributeBonus(titleId?: string): Partial<HeroAttributes> {
+  if (!titleId) return {};
+  return TITLE_PASSIVE_ATTRIBUTE_BONUSES[titleId] || {};
 }
 
 export function getRarityColor(rarity: Title['rarity']): string {

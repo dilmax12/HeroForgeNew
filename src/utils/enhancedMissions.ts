@@ -14,7 +14,7 @@ const ENHANCED_MISSION_TEMPLATES: Omit<EnhancedQuest, 'id' | 'status'>[] = [
     type: 'narrative',
     difficulty: 'medio',
     levelRequirement: 2,
-    timeLimit: 60,
+    timeLimit: 3,
     rewards: { gold: 80, xp: 120 },
     repeatable: false,
     location: 'Estrada do Norte',
@@ -119,7 +119,7 @@ const ENHANCED_MISSION_TEMPLATES: Omit<EnhancedQuest, 'id' | 'status'>[] = [
     type: 'narrative',
     difficulty: 'dificil',
     levelRequirement: 4,
-    timeLimit: 90,
+    timeLimit: 3,
     rewards: { gold: 150, xp: 200 },
     repeatable: false,
     location: 'Ruínas Antigas',
@@ -293,7 +293,7 @@ export class EnhancedMissionGenerator {
    */
   private generateFallbackMission(hero: Hero): EnhancedQuest {
     return {
-      id: `fallback_${Date.now()}`,
+      id: `fallback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       title: 'Tarefa Simples',
       description: 'Uma tarefa básica para ganhar experiência.',
       type: 'narrative',

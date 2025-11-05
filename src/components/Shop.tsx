@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useHeroStore } from '../store/heroStore';
 import { SHOP_ITEMS, SHOP_CATEGORIES, purchaseItem, canAfford, getDailyOffers, getDiscountedPrice, RARITY_CONFIG } from '../utils/shop';
 import { Item } from '../types/hero';
@@ -49,7 +50,7 @@ const Shop: React.FC = () => {
     }
   };
 
-  const renderItem = (item: Item) => {
+  const renderItem = (item: Item, index?: number) => {
     const canBuy = canAfford(selectedHero, item);
     const discountedPrice = getDiscountedPrice(item, selectedHero);
     const hasDiscount = discountedPrice < item.price;
@@ -57,7 +58,7 @@ const Shop: React.FC = () => {
 
     return (
       <div 
-        key={item.id} 
+        key={`${item.id}-${index ?? 0}`}
         className={`bg-white p-4 rounded-lg border-2 shadow-sm hover:shadow-md transition-shadow`}
         style={{ borderColor: rarity.color }}
       >

@@ -56,12 +56,12 @@ function pick<T>(arr: T[]): T {
 
 function dominantAttribute(attrs: HeroAttributes): { key: keyof HeroAttributes; label: string } {
   const labels: Record<keyof HeroAttributes, string> = {
-    strength: 'força',
-    agility: 'destreza',
-    constitution: 'constituição',
-    intelligence: 'inteligência',
-    wisdom: 'sabedoria',
-    charisma: 'carisma'
+    forca: 'força',
+    destreza: 'destreza',
+    constituicao: 'constituição',
+    inteligencia: 'inteligência',
+    sabedoria: 'sabedoria',
+    carisma: 'carisma'
   };
   const entries = Object.entries(attrs) as [keyof HeroAttributes, number][];
   const [key] = entries.reduce((max, cur) => (cur[1] > max[1] ? cur : max), entries[0]);

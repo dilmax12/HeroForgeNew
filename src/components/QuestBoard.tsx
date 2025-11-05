@@ -240,7 +240,7 @@ const QuestBoard: React.FC = () => {
         </div>
         {quest.timeLimit && (
           <div className="text-right">
-            <span className="text-red-400 text-sm">⏰ {quest.timeLimit}h</span>
+            <span className="text-red-400 text-sm">⏰ {quest.timeLimit} min</span>
           </div>
         )}
       </div>

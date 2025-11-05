@@ -10,7 +10,7 @@ interface NarrativeQuestProps {
 }
 
 const NarrativeQuest: React.FC<NarrativeQuestProps> = ({ quest, onComplete, onClose }) => {
-  const { getSelectedHero, gainExperience, addGold, addItem, updateReputation } = useHeroStore();
+  const { getSelectedHero, gainXP, gainGold, addItemToInventory, updateReputation } = useHeroStore();
   const selectedHero = getSelectedHero();
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [showOutcome, setShowOutcome] = useState(false);
@@ -42,13 +42,13 @@ const NarrativeQuest: React.FC<NarrativeQuestProps> = ({ quest, onComplete, onCl
     if (result.success) {
       // Aplicar recompensas
       if (result.rewards.xp > 0) {
-        gainExperience(selectedHero.id, result.rewards.xp);
+        gainXP(selectedHero.id, result.rewards.xp);
       }
       if (result.rewards.gold > 0) {
-        addGold(selectedHero.id, result.rewards.gold);
+        gainGold(selectedHero.id, result.rewards.gold);
       }
       if (result.rewards.item) {
-        addItem(selectedHero.id, result.rewards.item);
+        addItemToInventory(selectedHero.id, result.rewards.item);
       }
       
       // Aplicar mudanças de reputação

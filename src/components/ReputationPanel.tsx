@@ -50,7 +50,7 @@ const ReputationPanel: React.FC<ReputationPanelProps> = ({ hero }) => {
           const progress = getProgressPercentage(faction.reputation);
           
           return (
-            <div key={faction.name} className="bg-gray-700 rounded-lg p-4">
+            <div key={faction.name} className="bg-gray-700 rounded-lg p-4" title={`${level.name}: ${level.description}`}>
               <div className="flex justify-between items-start mb-2">
                 <div>
                   <h4 className="font-semibold text-white">{faction.name}</h4>
@@ -63,6 +63,20 @@ const ReputationPanel: React.FC<ReputationPanelProps> = ({ hero }) => {
                   <div className="text-sm text-gray-400">
                     {faction.reputation}/1000
                   </div>
+                  {(modifiers.goldBonus !== 0 || modifiers.xpBonus !== 0) && (
+                    <div className="text-xs text-gray-300 mt-1">
+                      {modifiers.goldBonus !== 0 && (
+                        <span className={modifiers.goldBonus > 0 ? 'text-yellow-300' : 'text-red-400'}>
+                          Ouro {modifiers.goldBonus > 0 ? '+' : ''}{Math.round(modifiers.goldBonus * 100)}%
+                        </span>
+                      )}
+                      {modifiers.xpBonus !== 0 && (
+                        <span className={`ml-2 ${modifiers.xpBonus > 0 ? 'text-blue-300' : 'text-red-400'}`}>
+                          XP {modifiers.xpBonus > 0 ? '+' : ''}{Math.round(modifiers.xpBonus * 100)}%
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               

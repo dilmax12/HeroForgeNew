@@ -30,13 +30,28 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
     setError(null);
 
     try {
+      if (!hero) {
+        setError('Nenhum herói selecionado. Selecione um herói para gerar recomendações.');
+        return;
+      }
       const [
         generalRecs,
         heroWeaknesses,
         buildSuggestion,
         goals
       ] = await Promise.all([
-        recommendationAI.generateRecommendations(hero, 'general'),
+        recommendationAI.generateRecommendations({
+          hero,
+          maxRecommendations: 5,
+          context: {
+            recentActivities: [],
+            currentGoals: [],
+            weaknesses: [],
+            strengths: [],
+            availableTime: 'medium',
+            preferredActivities: []
+          }
+        } as any),
         recommendationAI.analyzeHeroWeaknesses(hero),
         recommendationAI.suggestOptimalBuild(hero),
         recommendationAI.generateDailyGoals(hero)
@@ -48,7 +63,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
       setDailyGoals(goals);
     } catch (err) {
       setError('Falha ao gerar recomendações. Tente novamente.');
-      console.error('Recommendations generation error:', err);
+      console.warn('Recommendations generation warning:', err);
     } finally {
       setIsLoading(false);
     }
@@ -63,7 +78,9 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
   }, [hero]);
 
   const getPriorityColor = (priority: string) => {
-    switch (priority.toLowerCase()) {
+    const p = (priority || '').toLowerCase();
+    switch (p) {
+      case 'critical': return '#dc2626';
       case 'high': return '#f87171';
       case 'medium': return '#fbbf24';
       case 'low': return '#4ade80';
@@ -72,7 +89,9 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
   };
 
   const getPriorityIcon = (priority: string) => {
-    switch (priority.toLowerCase()) {
+    const p = (priority || '').toLowerCase();
+    switch (p) {
+      case 'critical': return '🚨';
       case 'high': return '🔥';
       case 'medium': return '⚡';
       case 'low': return '💡';
@@ -80,21 +99,22 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
     }
   };
 
-  const getCategoryIcon = (category: string) => {
-    switch (category.toLowerCase()) {
-      case 'combat': return '⚔️';
-      case 'skills': return '🎯';
+  const getCategoryIcon = (type?: string) => {
+    const t = (type || '').toLowerCase();
+    switch (t) {
+      case 'training': return '🎯';
+      case 'quest': return '🗺️';
       case 'equipment': return '🛡️';
       case 'strategy': return '🧠';
       case 'social': return '👥';
-      case 'exploration': return '🗺️';
+      case 'progression': return '📈';
       default: return '📋';
     }
   };
 
   return (
     <div className={`ai-recommendations-panel ${className}`}>
-      <style jsx>{`
+      <style>{`
         .ai-recommendations-panel {
           background: ${medievalTheme.colors.background.secondary};
           border: 2px solid ${medievalTheme.colors.accent.gold};
@@ -527,7 +547,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                   >
                     <div className="recommendation-header">
                       <div className="recommendation-title">
-                        {getCategoryIcon(rec.category)}
+                        {getCategoryIcon(rec.type)}
                         {rec.title}
                       </div>
                       <div

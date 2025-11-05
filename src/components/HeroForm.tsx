@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { HeroCreationData, HeroRace, HeroClass, Alignment, Element, HeroAttributes } from '../types/hero';
 import { useHeroStore } from '../store/heroStore';
 import { generateStory } from '../utils/story';
+import { gerarTexto } from '../services/hfTextService';
 
 import { 
   generateName, 
@@ -47,6 +48,9 @@ const HeroForm = () => {
   
   const [loadingStory, setLoadingStory] = useState(false);
   const [loadingName, setLoadingName] = useState(false);
+  const [loadingNameAI, setLoadingNameAI] = useState(false);
+  const [loadingQuoteAI, setLoadingQuoteAI] = useState(false);
+  const [loadingHFStory, setLoadingHFStory] = useState(false);
   const [nameOptions, setNameOptions] = useState<string[]>([]);
   const [showNameOptions, setShowNameOptions] = useState(false);
   const [showSkillDetails, setShowSkillDetails] = useState<string | null>(null);
@@ -75,6 +79,21 @@ const HeroForm = () => {
   const handleSelectName = (name: string) => {
     setFormData(prev => ({ ...prev, name }));
     setShowNameOptions(false);
+  };
+
+  const handleGenerateNameAI = async () => {
+    setLoadingNameAI(true);
+    try {
+      const nome = await gerarTexto('nome');
+      if (nome) {
+        setFormData(prev => ({ ...prev, name: nome }));
+        setShowNameOptions(false);
+      }
+    } catch (error) {
+      console.error('Erro ao gerar nome via IA:', error);
+    } finally {
+      setLoadingNameAI(false);
+    }
   };
 
   const handleAttributeChange = (attribute: keyof HeroAttributes, increase: boolean) => {
@@ -124,6 +143,20 @@ const HeroForm = () => {
   const handleGenerateBattleQuote = () => {
     const quote = getBattleQuote(formData.class);
     setFormData(prev => ({ ...prev, battleQuote: quote }));
+  };
+
+  const handleGenerateBattleQuoteAI = async () => {
+    setLoadingQuoteAI(true);
+    try {
+      const frase = await gerarTexto('frase');
+      if (frase) {
+        setFormData(prev => ({ ...prev, battleQuote: frase }));
+      }
+    } catch (error) {
+      console.error('Erro ao gerar frase via IA:', error);
+    } finally {
+      setLoadingQuoteAI(false);
+    }
   };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -209,6 +242,14 @@ const HeroForm = () => {
                   className="mt-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-md text-sm font-medium transition-colors disabled:opacity-60"
                 >
                   {loadingName ? '...' : '🎲'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGenerateNameAI}
+                  disabled={loadingNameAI}
+                  className="mt-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-sm font-medium transition-colors disabled:opacity-60"
+                >
+                  {loadingNameAI ? '...' : '🤖 IA'}
                 </button>
               </div>
               
@@ -438,6 +479,14 @@ const HeroForm = () => {
             >
               🎲 Gerar Aleatória
             </button>
+            <button
+              type="button"
+              onClick={handleGenerateBattleQuoteAI}
+              disabled={loadingQuoteAI}
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-sm font-medium transition-colors disabled:opacity-60"
+            >
+              {loadingQuoteAI ? 'Gerando...' : '🤖 Gerar com IA'}
+            </button>
           </div>
           <textarea
             value={formData.battleQuote || ''}
@@ -505,6 +554,25 @@ const HeroForm = () => {
               disabled={loadingStory || !formData.name.trim()}
             >
               {loadingStory ? 'Gerando...' : 'Gerar história'}
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                setLoadingHFStory(true);
+                try {
+                  const contexto = `${formData.name || 'Herói'}, classe ${formData.class}, raça ${formData.race}, elemento ${formData.element}, alinhamento ${formData.alignment}${formData.background ? ', antecedente ' + formData.background : ''}`;
+                  const historia = await gerarTexto('historia', contexto);
+                  setFormData(prev => ({ ...prev, backstory: historia }));
+                } catch (error) {
+                  console.error('Erro ao gerar história via IA:', error);
+                } finally {
+                  setLoadingHFStory(false);
+                }
+              }}
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-sm font-medium transition-colors disabled:opacity-60"
+              disabled={loadingHFStory || !formData.name.trim()}
+            >
+              {loadingHFStory ? 'Gerando...' : '🤖 História (IA)'}
             </button>
           </div>
           <textarea

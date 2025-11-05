@@ -1,4 +1,4 @@
-export type AIProvider = 'openai' | 'anthropic';
+export type AIProvider = 'openai' | 'anthropic' | 'huggingface';
 
 export interface AIConfig {
   provider: AIProvider;

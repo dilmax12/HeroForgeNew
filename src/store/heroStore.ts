@@ -11,6 +11,7 @@ import { purchaseItem, sellItem, equipItem, useConsumable, SHOP_ITEMS } from '..
 import { updateHeroReputation, generateReputationEvents } from '../utils/reputationSystem';
 import { generateAllLeaderboards, getHeroRanking, calculateTotalScore } from '../utils/leaderboardSystem';
 import { generateDailyGoals, updateDailyGoalProgress, checkPerfectDayGoal, removeExpiredGoals, getDailyGoalRewards } from '../utils/dailyGoalsSystem';
+import { getTitleAttributeBonus } from '../utils/titles';
 import { onboardingManager } from '../utils/onboardingSystem';
 import { eventManager } from '../utils/eventSystem';
 import { logActivity } from '../utils/activitySystem';
@@ -150,10 +151,18 @@ const calculateDerivedAttributes = (
   attributes: HeroAttributes, 
   heroClass: string, 
   level: number,
-  inventory?: HeroInventory
+  inventory?: HeroInventory,
+  activeTitleId?: string
 ): DerivedAttributes => {
   // Calcular atributos totais incluindo bônus de equipamentos
-  const totalAttributes = inventory ? calculateTotalAttributes(attributes, inventory) : attributes;
+  const baseTotal = inventory ? calculateTotalAttributes(attributes, inventory) : attributes;
+  const titleBonus = getTitleAttributeBonus(activeTitleId);
+  const totalAttributes: HeroAttributes = { ...baseTotal } as HeroAttributes;
+  Object.entries(titleBonus).forEach(([attr, bonus]) => {
+    if (bonus && (attr as keyof HeroAttributes) in totalAttributes) {
+      totalAttributes[attr as keyof HeroAttributes] += bonus as number;
+    }
+  });
   
   let hpBase = 0;
   let mpBase = 0;
@@ -250,7 +259,7 @@ export const useHeroStore = create<HeroState>()(
           id: uuidv4(),
           ...heroData,
           level: 1,
-          derivedAttributes: calculateDerivedAttributes(heroData.attributes, heroData.class, 1, initialInventory),
+          derivedAttributes: calculateDerivedAttributes(heroData.attributes, heroData.class, 1, initialInventory, 'novato'),
           element: heroData.element,
           skills: heroData.skills,
           image: heroData.image,
@@ -278,12 +287,9 @@ export const useHeroStore = create<HeroState>()(
           activeQuests: [],
           completedQuests: [],
           reputationFactions: [
-            { id: 'guarda', name: 'Guarda da Cidade', reputation: 0, level: 'neutral' },
-            { id: 'comerciantes', name: 'Comerciantes', reputation: 0, level: 'neutral' },
-            { id: 'ladroes', name: 'Ladrões', reputation: 0, level: 'neutral' },
-            { id: 'clero', name: 'Clero', reputation: 0, level: 'neutral' },
-            { id: 'cultistas', name: 'Cultistas', reputation: 0, level: 'neutral' },
-            { id: 'exploradores', name: 'Exploradores', reputation: 0, level: 'neutral' }
+            { id: 'ordem', name: 'Ordem', reputation: 0, level: 'neutral' },
+            { id: 'sombra', name: 'Sombra', reputation: 0, level: 'neutral' },
+            { id: 'livre', name: 'Livre', reputation: 0, level: 'neutral' }
           ],
           dailyGoals: [],
           achievements: [],
@@ -340,20 +346,22 @@ export const useHeroStore = create<HeroState>()(
               updatedAt: new Date().toISOString()
             };
             
-            // Recalcular atributos derivados se atributos, classe, nível ou inventário mudaram
-            if (heroData.attributes || heroData.class || heroData.level || heroData.inventory) {
+            // Recalcular atributos derivados se atributos, classe, nível, inventário ou título mudaram
+            if (heroData.attributes || heroData.class || heroData.level || heroData.inventory || heroData.activeTitle !== undefined) {
               const finalAttributes = heroData.attributes 
                 ? { ...hero.attributes, ...heroData.attributes }
                 : hero.attributes;
               const finalClass = heroData.class || hero.class;
               const finalLevel = heroData.level || hero.progression.level;
               const finalInventory = heroData.inventory || hero.inventory;
+              const finalActiveTitle = heroData.activeTitle !== undefined ? heroData.activeTitle : hero.activeTitle;
               
               updatedHero.derivedAttributes = calculateDerivedAttributes(
                 finalAttributes,
                 finalClass,
                 finalLevel,
-                finalInventory
+                finalInventory,
+                finalActiveTitle
               );
             }
             
@@ -663,7 +671,9 @@ export const useHeroStore = create<HeroState>()(
           updates.derivedAttributes = calculateDerivedAttributes(
             hero.attributes,
             hero.class,
-            newLevel
+            newLevel,
+            hero.inventory,
+            hero.activeTitle
           );
         }
         
@@ -1059,8 +1069,9 @@ export const useHeroStore = create<HeroState>()(
          const hero = get().getSelectedHero();
          if (!hero) return;
 
-         updateHeroReputation(hero, factionName, change);
+         const updated = updateHeroReputation(hero, factionName, change);
          get().updateHero(hero.id, {
+           reputationFactions: updated.reputationFactions,
            progression: {
              ...hero.progression,
              reputation: hero.progression.reputation + change
@@ -1202,7 +1213,9 @@ export const useHeroStore = create<HeroState>()(
             updatedHero.derivedAttributes = calculateDerivedAttributes(
               updatedHero.attributes, 
               updatedHero.class, 
-              newLevel
+              newLevel,
+              updatedHero.inventory,
+              updatedHero.activeTitle
             );
           }
 
@@ -1382,12 +1395,9 @@ export const useHeroStore = create<HeroState>()(
             const migratedHero = {
               ...hero,
               reputationFactions: hero.reputationFactions || [
-                { id: 'guarda', name: 'Guarda da Cidade', reputation: 0, level: 'neutral' },
-                { id: 'comerciantes', name: 'Comerciantes', reputation: 0, level: 'neutral' },
-                { id: 'ladroes', name: 'Ladrões', reputation: 0, level: 'neutral' },
-                { id: 'clero', name: 'Clero', reputation: 0, level: 'neutral' },
-                { id: 'cultistas', name: 'Cultistas', reputation: 0, level: 'neutral' },
-                { id: 'exploradores', name: 'Exploradores', reputation: 0, level: 'neutral' }
+                { id: 'ordem', name: 'Ordem', reputation: 0, level: 'neutral' },
+                { id: 'sombra', name: 'Sombra', reputation: 0, level: 'neutral' },
+                { id: 'livre', name: 'Livre', reputation: 0, level: 'neutral' }
               ],
               dailyGoals: hero.dailyGoals || [],
               achievements: hero.achievements || [],

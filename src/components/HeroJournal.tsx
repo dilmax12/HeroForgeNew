@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Hero, DecisionLogEntry } from '../types/hero';
+import { getReputationLevel, getReputationDescription } from '../utils/reputationSystem';
 
 interface HeroJournalProps {
   hero: Hero;
@@ -58,15 +59,21 @@ export const HeroJournal: React.FC<HeroJournalProps> = ({ hero }) => {
 
   const getReputationSummary = () => {
     if (!hero.worldState?.factions) return [];
-    
+
     return Object.entries(hero.worldState.factions)
       .filter(([_, data]) => Math.abs(data.reputation) > 5)
       .sort(([_, a], [__, b]) => b.reputation - a.reputation)
-      .map(([name, data]) => ({
-        name,
-        reputation: data.reputation,
-        status: data.reputation > 20 ? 'Aliado' : data.reputation > 0 ? 'Amigável' : data.reputation > -20 ? 'Neutro' : 'Inimigo'
-      }));
+      .map(([name, data]) => {
+        const level = getReputationLevel(data.reputation);
+        const displayName = name.charAt(0).toUpperCase() + name.slice(1);
+        return {
+          name: displayName,
+          reputation: data.reputation,
+          status: level.name,
+          description: getReputationDescription(data.reputation),
+          color: level.color
+        };
+      });
   };
 
   const reputationSummary = getReputationSummary();
@@ -122,15 +129,11 @@ export const HeroJournal: React.FC<HeroJournalProps> = ({ hero }) => {
         <div className="bg-gray-800 rounded-lg p-6">
           <h3 className="text-xl font-bold text-white mb-4">Reputação</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {reputationSummary.map(({ name, reputation, status }) => (
+            {reputationSummary.map(({ name, reputation, status, description, color }) => (
               <div key={name} className="flex justify-between items-center bg-gray-700 rounded p-3">
                 <div>
                   <div className="text-white font-semibold">{name}</div>
-                  <div className={`text-sm ${
-                    status === 'Aliado' ? 'text-green-400' :
-                    status === 'Amigável' ? 'text-blue-400' :
-                    status === 'Neutro' ? 'text-gray-400' : 'text-red-400'
-                  }`}>
+                  <div className={`text-sm ${color}`} title={description}>
                     {status}
                   </div>
                 </div>

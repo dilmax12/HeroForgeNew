@@ -87,6 +87,21 @@ export const medievalTheme = {
       800: '#065f46',
       900: '#064e3b'
     }
+    ,
+    // Cores utilitárias esperadas pelos componentes (texto, fundo, acentos)
+    background: {
+      primary: '#0f172a', // slate-900
+      secondary: '#1e293b' // slate-800
+    },
+    text: {
+      primary: '#f8fafc', // slate-50
+      secondary: '#cbd5e1' // slate-300
+    },
+    accent: {
+      gold: '#f59e0b',    // gold-500
+      silver: '#64748b',  // silver-500
+      crimson: '#ef4444'  // crimson-500
+    }
   },
 
   // Gradientes temáticos

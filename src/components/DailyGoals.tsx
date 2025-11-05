@@ -37,11 +37,21 @@ export const DailyGoals: React.FC<DailyGoalsProps> = ({ heroId }) => {
     
     // Only cleanup if there are actually expired goals
     const hasExpiredGoals = currentHero.dailyGoals && currentHero.dailyGoals.length > 0 && 
-      currentHero.dailyGoals.some(goal => goal.expiresAt <= now);
+      currentHero.dailyGoals.some(goal => {
+        const exp = typeof (goal.expiresAt as any) === 'string' 
+          ? new Date(goal.expiresAt as unknown as string) 
+          : (goal.expiresAt as Date);
+        return exp <= now;
+      });
     
     // Generate daily goals if hero doesn't have any or if it's a new day
     const hasValidGoals = currentHero.dailyGoals && currentHero.dailyGoals.length > 0 && 
-      currentHero.dailyGoals.some(goal => goal.expiresAt > now);
+      currentHero.dailyGoals.some(goal => {
+        const exp = typeof (goal.expiresAt as any) === 'string' 
+          ? new Date(goal.expiresAt as unknown as string) 
+          : (goal.expiresAt as Date);
+        return exp > now;
+      });
 
     // Mark this hero as initialized first to prevent re-execution
     initializedRef.current.add(heroId);
@@ -76,9 +86,10 @@ export const DailyGoals: React.FC<DailyGoalsProps> = ({ heroId }) => {
     }
   };
 
-  const getTimeRemaining = (expiresAt: Date): string => {
+  const getTimeRemaining = (expiresAt: Date | string): string => {
     const now = new Date();
-    const timeLeft = expiresAt.getTime() - now.getTime();
+    const expDate = typeof expiresAt === 'string' ? new Date(expiresAt) : expiresAt;
+    const timeLeft = expDate.getTime() - now.getTime();
     
     if (timeLeft <= 0) return 'Expirado';
     

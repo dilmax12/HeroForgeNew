@@ -128,6 +128,11 @@ Formato da resposta em JSON:
 
   async generateMission(request: MissionGenerationRequest): Promise<DynamicMission> {
     try {
+      // Se o serviço de IA não estiver configurado, retorne missão fallback
+      if (!aiService.isConfigured()) {
+        return this.generateFallbackMission(request);
+      }
+
       const response = await aiService.generateText({
         prompt: this.buildMissionPrompt(request),
         systemMessage: this.getSystemPrompt(),
@@ -135,8 +140,22 @@ Formato da resposta em JSON:
         temperature: 0.8
       });
 
-      // Parse the JSON response
-      const missionData = JSON.parse(response.text);
+      // Parse robusto do JSON da resposta
+      let missionData: any = null;
+      try {
+        missionData = JSON.parse(response.text);
+      } catch {
+        // Tentar extrair um bloco JSON da string
+        const match = response.text.match(/\{[\s\S]*\}/);
+        if (match) {
+          try { missionData = JSON.parse(match[0]); } catch {}
+        }
+      }
+
+      // Validar estrutura mínima
+      if (!missionData || !missionData.title || !missionData.description || !missionData.objectives || !missionData.rewards) {
+        return this.generateFallbackMission(request);
+      }
       
       return {
         id: this.generateMissionId(),
@@ -194,6 +213,13 @@ Formato da resposta em JSON:
 
   async generateNPCDialogue(hero: Hero, npcName: string, context: string): Promise<NPCDialogue> {
     try {
+      if (!aiService.isConfigured()) {
+        return {
+          npcName,
+          dialogue: `Saudações, ${hero.name}! Como posso ajudá-lo hoje?`,
+          responses: ['Preciso de uma missão', 'Conte-me sobre este lugar', 'Até logo']
+        };
+      }
       const prompt = `Crie um diálogo para o NPC "${npcName}" falando com ${hero.name} (${hero.class}, nível ${hero.progression.level}).
 
 Contexto: ${context}
@@ -218,7 +244,20 @@ Formato JSON:
         temperature: 0.7
       });
 
-      return JSON.parse(response.text);
+      // Parse robusto
+      try {
+        return JSON.parse(response.text);
+      } catch {
+        const match = response.text.match(/\{[\s\S]*\}/);
+        if (match) {
+          try { return JSON.parse(match[0]); } catch {}
+        }
+        return {
+          npcName,
+          dialogue: `Saudações, ${hero.name}! Como posso ajudá-lo hoje?`,
+          responses: ['Preciso de uma missão', 'Conte-me sobre este lugar', 'Até logo']
+        };
+      }
     } catch (error) {
       console.error('Error generating NPC dialogue:', error);
       return {

@@ -28,6 +28,10 @@ export const AIAvatarGenerator: React.FC<AIAvatarGeneratorProps> = ({
     setProgress(0);
 
     try {
+      if (!hero) {
+        setError('Herói não disponível para gerar avatar.');
+        return;
+      }
       // Simulate progress
       const progressInterval = setInterval(() => {
         setProgress(prev => Math.min(prev + 10, 90));
@@ -57,7 +61,7 @@ export const AIAvatarGenerator: React.FC<AIAvatarGeneratorProps> = ({
 
   return (
     <div className={`ai-avatar-generator ${className}`}>
-      <style jsx>{`
+      <style>{`
         .ai-avatar-generator {
           background: linear-gradient(${medievalTheme.gradients.backgrounds.secondary});
           border: 2px solid ${medievalTheme.colors.gold[500]};
@@ -247,7 +251,7 @@ export const AIAvatarGenerator: React.FC<AIAvatarGeneratorProps> = ({
       </div>
 
       <div className="hero-info">
-        <strong>{hero.name}</strong> - {hero.class} Nível {hero.progression.level}
+        <strong>{hero?.name ?? 'Herói'}</strong> - {(hero?.class ?? 'guerreiro')} Nível {(hero?.progression?.level ?? 1)}
       </div>
 
       <div className="avatar-preview">

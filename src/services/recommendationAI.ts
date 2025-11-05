@@ -26,6 +26,79 @@ export interface RecommendationContext {
 }
 
 export class RecommendationAI {
+  private parseJsonResponse(text: string): any {
+    const stripFences = (input: string) => {
+      let t = input.trim();
+      // Remove início de bloco ```json ou ```
+      t = t.replace(/^```\s*json\s*/i, '').replace(/^```\s*/i, '');
+      // Remove fechamento de bloco ``` no fim
+      t = t.replace(/```\s*$/i, '').trim();
+      return t;
+    };
+
+    // Escapa quebras de linha e caracteres de controle dentro de strings JSON
+    const escapeNewlinesInStrings = (input: string) => {
+      let result = '';
+      let inString = false;
+      let quote: string | null = null;
+      let escaped = false;
+      for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+        if (!inString) {
+          if ((ch === '"' || ch === '\'') && !escaped) {
+            inString = true;
+            quote = ch;
+          }
+          result += ch;
+          escaped = ch === '\\' ? !escaped : false;
+          continue;
+        }
+
+        // Dentro de string
+        if (!escaped && ch === quote) {
+          inString = false;
+          quote = null;
+          result += ch;
+          escaped = false;
+          continue;
+        }
+
+        if (!escaped && (ch === '\n' || ch === '\r')) {
+          result += ch === '\n' ? '\\n' : '\\r';
+          escaped = false;
+          continue;
+        }
+
+        // Mantém sequência de escape correta
+        result += ch;
+        if (escaped) {
+          escaped = false;
+        } else {
+          escaped = ch === '\\';
+        }
+      }
+      return result;
+    };
+
+    const cleaned = escapeNewlinesInStrings(stripFences(text));
+    try {
+      return JSON.parse(cleaned);
+    } catch (_) {
+      // Fallback: tentar extrair o primeiro objeto JSON entre chaves
+      const start = cleaned.indexOf('{');
+      const end = cleaned.lastIndexOf('}');
+      if (start !== -1 && end !== -1 && end > start) {
+        const slice = escapeNewlinesInStrings(cleaned.slice(start, end + 1));
+        return JSON.parse(slice);
+      }
+      // Último fallback: remover possíveis comentários e linhas soltas
+      const noLines = escapeNewlinesInStrings(cleaned)
+        .split('\n')
+        .filter(l => !l.trim().startsWith('//'))
+        .join('\n');
+      return JSON.parse(noLines);
+    }
+  }
   private getSystemPrompt(): string {
     return `Você é um conselheiro especialista em RPG medieval fantástico, focado em ajudar heróis a otimizar sua progressão e experiência de jogo.
 
@@ -115,6 +188,10 @@ TIPOS DE RECOMENDAÇÃO:
 
   async generateRecommendations(request: AIRecommendationRequest): Promise<Recommendation[]> {
     try {
+      // Se o serviço de IA não estiver configurado, use fallback diretamente
+      if (!aiService.isConfigured()) {
+        return this.generateFallbackRecommendations(request);
+      }
       const response = await aiService.generateText({
         prompt: this.buildRecommendationPrompt(request),
         systemMessage: this.getSystemPrompt(),
@@ -122,7 +199,7 @@ TIPOS DE RECOMENDAÇÃO:
         temperature: 0.7
       });
 
-      const data = JSON.parse(response.text);
+      const data = this.parseJsonResponse(response.text);
       
       return data.recommendations.map((rec: any, index: number) => ({
         id: this.generateRecommendationId(),
@@ -138,13 +215,16 @@ TIPOS DE RECOMENDAÇÃO:
         relatedAchievements: rec.relatedAchievements
       }));
     } catch (error) {
-      console.error('Error generating recommendations:', error);
+      console.warn('Error generating recommendations, using fallback:', error);
       return this.generateFallbackRecommendations(request);
     }
   }
 
   async analyzeHeroWeaknesses(hero: Hero): Promise<string[]> {
     try {
+      if (!aiService.isConfigured()) {
+        return this.getFallbackWeaknesses(hero);
+      }
       const prompt = `Analise os atributos do herói ${hero.name} e identifique pontos fracos:
 
 Atributos:
@@ -182,6 +262,9 @@ Responda apenas com uma lista simples, uma fraqueza por linha.`;
     playstyleAdvice: string;
   }> {
     try {
+      if (!aiService.isConfigured()) {
+        return this.getFallbackBuild(hero);
+      }
       const prompt = `Sugira um build otimizado para ${hero.name} (${hero.class}, nível ${hero.progression.level}):
 
 Atributos atuais:
@@ -204,15 +287,18 @@ Forneça em JSON:
         temperature: 0.6
       });
 
-      return JSON.parse(response.text);
+      return this.parseJsonResponse(response.text);
     } catch (error) {
-      console.error('Error suggesting optimal build:', error);
+      console.warn('Error suggesting optimal build, using fallback:', error);
       return this.getFallbackBuild(hero);
     }
   }
 
   async generateDailyGoals(hero: Hero, context?: RecommendationContext): Promise<string[]> {
     try {
+      if (!aiService.isConfigured()) {
+        return this.getFallbackDailyGoals(hero);
+      }
       const prompt = `Gere 3-5 objetivos diários personalizados para ${hero.name}:
 
 Herói: ${hero.name} (${hero.class}, nível ${hero.progression.level}, rank ${hero.rank || 'F'})
@@ -244,7 +330,7 @@ Responda apenas com uma lista simples, um objetivo por linha.`;
         .filter(line => line.length > 0)
         .slice(0, 5);
     } catch (error) {
-      console.error('Error generating daily goals:', error);
+      console.warn('Error generating daily goals, using fallback:', error);
       return this.getFallbackDailyGoals(hero);
     }
   }

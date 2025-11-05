@@ -59,7 +59,7 @@ export interface DecisionLogEntry {
 }
 
 export interface WorldState {
-  factions: Record<string, {
+  factions: Record<FactionId, {
     reputation: number;
     alliances: string[];
     enemies: string[];
@@ -275,7 +275,7 @@ export interface Title {
 }
 
 export interface ReputationFaction {
-  id: string;
+  id: FactionId;
   name: string;
   reputation: number; // -1000 a +1000
   level: 'hostile' | 'unfriendly' | 'neutral' | 'friendly' | 'honored' | 'revered';

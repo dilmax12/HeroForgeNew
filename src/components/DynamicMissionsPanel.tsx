@@ -31,10 +31,29 @@ export const DynamicMissionsPanel: React.FC<DynamicMissionsPanelProps> = ({
     setError(null);
 
     try {
+      if (!hero) {
+        setError('Nenhum herói selecionado. Selecione um herói para gerar missões.');
+        return;
+      }
       const newMissions = await Promise.all([
-        dynamicMissionsAI.generateMission(hero, 'main'),
-        dynamicMissionsAI.generateMission(hero, 'side'),
-        dynamicMissionsAI.generateMission(hero, 'daily')
+        dynamicMissionsAI.generateMission({
+          hero,
+          missionType: 'combat',
+          difficulty: 'medium',
+          context: 'Missão principal focada em combate'
+        } as any),
+        dynamicMissionsAI.generateMission({
+          hero,
+          missionType: 'exploration',
+          difficulty: 'easy',
+          context: 'Missão secundária de exploração'
+        } as any),
+        dynamicMissionsAI.generateMission({
+          hero,
+          missionType: 'social',
+          difficulty: 'easy',
+          context: 'Objetivo diário com interação social'
+        } as any)
       ]);
 
       setMissions(newMissions);
@@ -49,11 +68,15 @@ export const DynamicMissionsPanel: React.FC<DynamicMissionsPanelProps> = ({
   const generateNPCDialogue = useCallback(async (mission: DynamicMission) => {
     setIsLoadingDialogue(true);
     try {
+      if (!hero) {
+        return;
+      }
+      const npcName = mission.npcDialogue?.[0]?.npcName || 'NPC';
+      const context = `${mission.title}: ${mission.description}`;
       const dialogue = await dynamicMissionsAI.generateNPCDialogue(
-        mission.npc.name,
-        mission.title,
-        mission.description,
-        hero
+        hero,
+        npcName,
+        context
       );
       setNpcDialogue(dialogue);
     } catch (err) {
@@ -99,7 +122,7 @@ export const DynamicMissionsPanel: React.FC<DynamicMissionsPanelProps> = ({
 
   return (
     <div className={`dynamic-missions-panel ${className}`}>
-      <style jsx>{`
+      <style>{`
         .dynamic-missions-panel {
           background: ${medievalTheme.colors.background.secondary};
           border: 2px solid ${medievalTheme.colors.accent.gold};
@@ -448,7 +471,8 @@ export const DynamicMissionsPanel: React.FC<DynamicMissionsPanelProps> = ({
                 onClick={() => handleMissionSelect(mission)}
               >
                 <div className="mission-npc">
-                  {mission.npc.name}
+                  {mission.location ? `📍 ${mission.location}` : '📍 Local desconhecido'}
+                  {mission.npcDialogue && mission.npcDialogue[0]?.npcName ? ` • 👤 ${mission.npcDialogue[0].npcName}` : ''}
                 </div>
                 
                 <div className="mission-header">
@@ -487,17 +511,21 @@ export const DynamicMissionsPanel: React.FC<DynamicMissionsPanelProps> = ({
                 </div>
 
                 <div className="mission-rewards">
-                  <div className="reward-item">
-                    💰 {mission.rewards.gold} ouro
-                  </div>
-                  <div className="reward-item">
-                    ⭐ {mission.rewards.experience} XP
-                  </div>
-                  {mission.rewards.items.length > 0 && (
-                    <div className="reward-item">
-                      🎁 {mission.rewards.items.length} itens
-                    </div>
-                  )}
+                  {(() => {
+                    const rewards = Array.isArray(mission.rewards) ? mission.rewards : [];
+                    const gold = rewards.filter(r => r.type === 'gold').reduce((sum, r) => sum + (r.amount || 0), 0);
+                    const xp = rewards.filter(r => r.type === 'experience').reduce((sum, r) => sum + (r.amount || 0), 0);
+                    const itemsCount = rewards.filter(r => r.type === 'item').length;
+                    return (
+                      <>
+                        <div className="reward-item">💰 {gold} ouro</div>
+                        <div className="reward-item">⭐ {xp} XP</div>
+                        {itemsCount > 0 && (
+                          <div className="reward-item">🎁 {itemsCount} itens</div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </motion.div>
             ))}
@@ -550,7 +578,7 @@ export const DynamicMissionsPanel: React.FC<DynamicMissionsPanelProps> = ({
               ) : npcDialogue && (
                 <div className="dialogue-section">
                   <div className="npc-name">{npcDialogue.npcName}:</div>
-                  <div className="dialogue-text">"{npcDialogue.text}"</div>
+                  <div className="dialogue-text">"{npcDialogue.dialogue}"</div>
                 </div>
               )}
 

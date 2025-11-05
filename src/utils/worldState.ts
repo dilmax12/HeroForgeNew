@@ -21,12 +21,9 @@ export class WorldStateManager {
   initializeWorldState(): WorldState {
     return {
       factions: {
-        'Guarda da Cidade': { reputation: 0, alliances: [], enemies: [], influence: 50 },
-        'Comerciantes': { reputation: 0, alliances: [], enemies: [], influence: 30 },
-        'Ladrões': { reputation: 0, alliances: [], enemies: ['Guarda da Cidade'], influence: 20 },
-        'Bandidos': { reputation: -10, alliances: [], enemies: ['Guarda da Cidade', 'Comerciantes'], influence: 15 },
-        'Diplomatas': { reputation: 0, alliances: [], enemies: [], influence: 25 },
-        'Aventureiros': { reputation: 10, alliances: [], enemies: [], influence: 40 }
+        ordem: { reputation: 0, alliances: ['livre'], enemies: ['sombra'], influence: 50 },
+        sombra: { reputation: 0, alliances: [], enemies: ['ordem'], influence: 30 },
+        livre: { reputation: 0, alliances: ['ordem'], enemies: [], influence: 40 }
       },
       activeEvents: [],
       npcStatus: {

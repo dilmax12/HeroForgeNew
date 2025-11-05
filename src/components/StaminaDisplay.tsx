@@ -24,11 +24,13 @@ export const StaminaDisplay: React.FC = () => {
 
   // Atualizar stamina do herói baseado no tempo
   useEffect(() => {
-    if (selectedHero && selectedHero.stamina) {
-      const updatedStamina = worldStateManager.updateStamina(selectedHero);
-      
-      if (updatedStamina.current !== selectedHero.stamina.current) {
-        updateHero(selectedHero.id, { stamina: updatedStamina });
+    if (selectedHero) {
+      const prevCurrent = selectedHero.stamina?.current;
+      worldStateManager.updateStamina(selectedHero);
+      const nextCurrent = selectedHero.stamina?.current;
+
+      if (typeof prevCurrent === 'number' && typeof nextCurrent === 'number' && nextCurrent !== prevCurrent) {
+        updateHero(selectedHero.id, { stamina: selectedHero.stamina });
       }
     }
   }, [currentTime, selectedHero, updateHero]);
@@ -41,7 +43,8 @@ export const StaminaDisplay: React.FC = () => {
   const percentage = (current / max) * 100;
   
   // Calcular tempo até próxima recuperação
-  const timeSinceLastRecovery = currentTime - lastRecovery;
+  const lastRecoveryMs = new Date(lastRecovery).getTime();
+  const timeSinceLastRecovery = currentTime - lastRecoveryMs;
   const timeToNextRecovery = Math.max(0, 3600000 - (timeSinceLastRecovery % 3600000)); // 1 hora em ms
   const minutesToNext = Math.floor(timeToNextRecovery / 60000);
   const secondsToNext = Math.floor((timeToNextRecovery % 60000) / 1000);
@@ -129,7 +132,7 @@ export const StaminaDisplay: React.FC = () => {
             const fullStamina = {
               ...selectedHero.stamina,
               current: max,
-              lastRecovery: currentTime
+              lastRecovery: new Date(currentTime).toISOString()
             };
             updateHero(selectedHero.id, { stamina: fullStamina });
           }}
@@ -144,7 +147,7 @@ export const StaminaDisplay: React.FC = () => {
             const premiumStamina = {
               ...selectedHero.stamina,
               current: Math.min(max, current + 50),
-              lastRecovery: currentTime
+              lastRecovery: new Date(currentTime).toISOString()
             };
             updateHero(selectedHero.id, { stamina: premiumStamina });
           }}

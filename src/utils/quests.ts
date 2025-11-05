@@ -120,19 +120,19 @@ const DIFFICULTY_MODIFIERS = {
     goldMultiplier: 0.7,
     xpMultiplier: 0.8,
     enemyCountMultiplier: 0.7,
-    timeLimit: 30 // 30 minutos
+    timeLimit: 3 // 3 minutos (ajuste para testes)
   },
   padrao: {
     goldMultiplier: 1.0,
     xpMultiplier: 1.0,
     enemyCountMultiplier: 1.0,
-    timeLimit: 60 // 1 hora
+    timeLimit: 3 // 3 minutos (ajuste para testes)
   },
   epica: {
     goldMultiplier: 1.5,
     xpMultiplier: 1.8,
     enemyCountMultiplier: 1.4,
-    timeLimit: 120 // 2 horas
+    timeLimit: 3 // 3 minutos (ajuste para testes)
   }
 };
 
