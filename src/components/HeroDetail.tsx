@@ -35,6 +35,18 @@ const HeroDetail = () => {
       <div className="max-w-4xl mx-auto bg-gray-800 rounded-lg shadow-lg overflow-hidden">
         <div className="p-8">
           <h2 className="text-3xl font-bold text-amber-400 mb-6">{hero.name}</h2>
+          {hero.image && (
+            <div className="mb-6">
+              <img
+                src={hero.image}
+                alt={`Avatar de ${hero.name}`}
+                className="w-40 h-40 rounded-lg object-cover border border-gray-700 shadow-md"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = 'https://placehold.co/160x160?text=Avatar';
+                }}
+              />
+            </div>
+          )}
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
             <div>

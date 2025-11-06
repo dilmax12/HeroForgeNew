@@ -41,7 +41,7 @@ class AIService {
   }
 
   private loadConfig(): AIConfig {
-    const provider = (import.meta.env.VITE_AI_SERVICE_PROVIDER || 'huggingface') as AIProvider;
+    const provider = (import.meta.env.VITE_AI_SERVICE_PROVIDER || 'groq') as AIProvider;
 
     if (provider === 'huggingface') {
       return {
@@ -51,6 +51,37 @@ class AIService {
         imageModel: import.meta.env.VITE_AI_IMAGE_MODEL || 'stabilityai/sd-turbo',
         baseURL: '/api/hf-text',
         maxTokens: 1500,
+        temperature: 0.7
+      };
+    }
+
+    // Groq - OpenAI-compatible API
+    if (provider === 'groq') {
+      const apiKey = import.meta.env.VITE_GROQ_API_KEY || import.meta.env.VITE_OPENAI_API_KEY;
+      const baseURL = import.meta.env.VITE_GROQ_PROXY_URL || '/api/groq-openai';
+
+      if (!apiKey) {
+        console.warn('GROQ API key not found. AI features will be disabled.');
+        return {
+          provider,
+          apiKey: '',
+          apiUrl: baseURL,
+          model: import.meta.env.VITE_AI_MODEL || 'llama3-8b-8192',
+          maxTokens: 1500,
+          temperature: 0.7,
+          timeout: 30000,
+          retryAttempts: 3,
+          retryDelay: 1000
+        } as any;
+      }
+
+      return {
+        provider,
+        apiKey,
+        model: import.meta.env.VITE_AI_MODEL || 'llama3-8b-8192',
+        imageModel: import.meta.env.VITE_AI_IMAGE_MODEL || 'stabilityai/sd-turbo',
+        baseURL,
+        maxTokens: 2000,
         temperature: 0.7
       };
     }
@@ -89,7 +120,15 @@ class AIService {
   }
 
   private generateCacheKey(request: AITextRequest | AIImageRequest): string {
-    return btoa(JSON.stringify(request)).replace(/[/+=]/g, '');
+    // Usa hash simples para evitar problemas de Unicode com btoa
+    const str = JSON.stringify(request);
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const chr = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + chr;
+      hash |= 0; // converte para inteiro 32-bit
+    }
+    return `k${Math.abs(hash).toString(36)}`;
   }
 
   private isValidCache(cache: AICache): boolean {
@@ -257,8 +296,26 @@ class AIService {
       });
     }
 
+    let imageUrl = data.imagem || '';
+    // Se o backend retornou placeholder SVG ou vazio, tentar fallback gratuito Lexica
+    if (!imageUrl || (typeof imageUrl === 'string' && imageUrl.startsWith('data:image/svg+xml'))) {
+      try {
+        const res2 = await fetch(`/api/hero-image?prompt=${encodeURIComponent(request.prompt)}`, { method: 'GET' });
+        const data2 = await res2.json().catch(() => ({ image: '' }));
+        if (res2.ok && typeof data2?.image === 'string' && data2.image.length > 0) {
+          imageUrl = data2.image;
+        }
+      } catch (_) {
+        // Ignorar e manter placeholder
+      }
+      // Fallback gratuito adicional: Pollinations
+      if (!imageUrl || (typeof imageUrl === 'string' && imageUrl.startsWith('data:image/svg+xml'))) {
+        imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(request.prompt)}?n=1&size=${encodeURIComponent(request.size || '512x512')}`;
+      }
+    }
+
     return {
-      url: data.imagem || '',
+      url: imageUrl,
       revisedPrompt: request.prompt,
       size: request.size || '512x512',
       model: this.config.imageModel || 'stabilityai/sd-turbo',
@@ -293,6 +350,9 @@ class AIService {
       let response: AITextResponse;
 
       if (this.config.provider === 'openai') {
+        response = await this.makeOpenAITextRequest(request);
+      } else if (this.config.provider === 'groq') {
+        // Groq usa API compatível com OpenAI
         response = await this.makeOpenAITextRequest(request);
       } else if (this.config.provider === 'anthropic') {
         response = await this.makeAnthropicTextRequest(request);
@@ -349,7 +409,7 @@ class AIService {
       if (this.config.provider === 'openai') {
         response = await this.makeOpenAIImageRequest(request);
       } else {
-        // Hugging Face via backend
+        // Para Groq (ou qualquer outro), use o backend Hugging Face para geração de imagem
         response = await this.makeHuggingFaceImageRequest(request);
       }
 

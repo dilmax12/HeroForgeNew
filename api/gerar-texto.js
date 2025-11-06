@@ -59,7 +59,25 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { tipo, contexto = '' } = req.body || {};
+    // Em alguns ambientes serverless, req.body pode não estar populado. Tentar fallback de leitura manual.
+    let body = req.body;
+    if (!body || (typeof body === 'object' && Object.keys(body).length === 0)) {
+      try {
+        const raw = await new Promise((resolve, reject) => {
+          let data = '';
+          req.on('data', chunk => { data += chunk; });
+          req.on('end', () => resolve(data));
+          req.on('error', reject);
+        });
+        if (raw) {
+          body = JSON.parse(raw);
+        }
+      } catch {
+        // Ignora e segue com body vazio
+      }
+    }
+
+    const { tipo, contexto = '' } = body || {};
     if (!tipo) {
       return res.status(400).json({ error: 'Campo "tipo" é obrigatório' });
     }

@@ -206,7 +206,7 @@ const QuestBoard: React.FC = () => {
 
   const canAcceptQuest = (quest: Quest) => {
     return selectedHero.progression.level >= quest.levelRequirement &&
-           !selectedHero.activeQuests.some(q => q.id === quest.id);
+           !selectedHero.activeQuests.includes(quest.id);
   };
 
   const handleAcceptQuest = (quest: Quest) => {
@@ -385,8 +385,14 @@ const QuestBoard: React.FC = () => {
             </button>
           </div>
         ))}
-        {selectedTab === 'active' && selectedHero.activeQuests.map(quest => renderQuestCard(quest, true))}
-        {selectedTab === 'completed' && selectedHero.completedQuests.map(quest => renderQuestCard(quest, false, true))}
+        {selectedTab === 'active' && selectedHero.activeQuests
+          .map(id => availableQuests.find(q => q.id === id))
+          .filter((q): q is Quest => !!q)
+          .map(q => renderQuestCard(q, true))}
+        {selectedTab === 'completed' && selectedHero.completedQuests
+          .map(id => availableQuests.find(q => q.id === id))
+          .filter((q): q is Quest => !!q)
+          .map(q => renderQuestCard(q, false, true))}
       </div>
 
       {selectedTab === 'available' && availableQuests.length === 0 && (

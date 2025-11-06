@@ -115,7 +115,7 @@ function EvolutionPanelWrapper() {
 
 // Componente wrapper para AIAvatarGenerator que precisa do herói selecionado
 function AIAvatarGeneratorWrapper() {
-  const { getSelectedHero } = useHeroStore();
+  const { getSelectedHero, updateHero } = useHeroStore();
   const selectedHero = getSelectedHero();
   
   if (!selectedHero) {
@@ -131,12 +131,23 @@ function AIAvatarGeneratorWrapper() {
     );
   }
   
-  return <AIAvatarGenerator hero={selectedHero} className="max-w-4xl mx-auto" />;
+  const handleAvatarGenerated = (url: string) => {
+    // Salva a imagem gerada no herói selecionado
+    updateHero(selectedHero.id, { image: url });
+  };
+
+  return (
+    <AIAvatarGenerator 
+      hero={selectedHero} 
+      className="max-w-4xl mx-auto" 
+      onAvatarGenerated={handleAvatarGenerated}
+    />
+  );
 }
 
 // Componente wrapper para DynamicMissionsPanel que precisa do herói selecionado
 function DynamicMissionsPanelWrapper() {
-  const { getSelectedHero } = useHeroStore();
+  const { getSelectedHero, refreshQuests, availableQuests, acceptQuest } = useHeroStore();
   const selectedHero = getSelectedHero();
   
   if (!selectedHero) {
@@ -152,12 +163,24 @@ function DynamicMissionsPanelWrapper() {
     );
   }
   
-  return <DynamicMissionsPanel hero={selectedHero} className="max-w-6xl mx-auto" />;
+  const handleMissionAccept = (mission: import('./services/dynamicMissionsAI').DynamicMission) => {
+    // Ao aceitar uma missão de IA, refletir no sistema de missões padrão
+    refreshQuests(selectedHero.progression.level);
+    const quest = availableQuests.find(q => selectedHero.progression.level >= q.levelRequirement && !selectedHero.activeQuests.includes(q.id));
+    if (quest) {
+      acceptQuest(selectedHero.id, quest.id);
+      console.log('✅ Missão IA aceita, vinculada a missão:', quest.title);
+    } else {
+      console.log('⚠️ Nenhuma missão disponível para vincular');
+    }
+  };
+
+  return <DynamicMissionsPanel hero={selectedHero} className="max-w-6xl mx-auto" onMissionAccept={handleMissionAccept} />;
 }
 
 // Componente wrapper para AIRecommendationsPanel que precisa do herói selecionado
 function AIRecommendationsPanelWrapper() {
-  const { getSelectedHero } = useHeroStore();
+  const { getSelectedHero, refreshQuests, availableQuests, acceptQuest, gainXP } = useHeroStore();
   const selectedHero = getSelectedHero();
   
   if (!selectedHero) {
@@ -173,7 +196,34 @@ function AIRecommendationsPanelWrapper() {
     );
   }
   
-  return <AIRecommendationsPanel hero={selectedHero} className="max-w-6xl mx-auto" />;
+  const handleApply = (rec: import('./services/recommendationAI').Recommendation) => {
+    // Ações básicas ao aplicar recomendação
+    if (rec.type === 'quest') {
+      // Garantir lista atualizada e aceitar a primeira missão elegível
+      refreshQuests(selectedHero.progression.level);
+      const quest = availableQuests.find(q => selectedHero.progression.level >= q.levelRequirement && !selectedHero.activeQuests.includes(q.id));
+      if (quest) {
+        acceptQuest(selectedHero.id, quest.id);
+        console.log('✅ Recomendação aplicada: missão aceita', quest.title);
+      } else {
+        console.log('⚠️ Nenhuma missão elegível para aceitar no momento');
+      }
+    } else if (rec.type === 'training' || rec.type === 'progression') {
+      // Pequeno bônus para refletir ação aplicada
+      gainXP(selectedHero.id, 25);
+      console.log('✅ Recomendação aplicada: bônus de XP');
+    } else {
+      console.log('ℹ️ Recomendação aplicada:', rec.type);
+    }
+  };
+
+  return (
+    <AIRecommendationsPanel 
+      hero={selectedHero} 
+      className="max-w-6xl mx-auto" 
+      onRecommendationApply={handleApply}
+    />
+  );
 }
 
 // Componente wrapper para EnhancedQuestBoard que precisa do herói selecionado

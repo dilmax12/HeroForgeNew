@@ -16,6 +16,10 @@ const HF_IMAGE_MODEL = 'stabilityai/stable-diffusion-2';
 // Cliente oficial da Hugging Face para Providers/Router
 const hfClient = new InferenceClient(HF_TOKEN, { provider: 'hf-inference' });
 
+// Configuração Groq (OpenAI-compatible) para proxy backend
+const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY || '';
+const GROQ_API_URL = process.env.GROQ_API_URL || process.env.VITE_GROQ_API_URL || 'https://api.groq.com/openai/v1';
+
 // Busca por imagem no Lexica.art (gratuito, sem chave)
 async function lexicaSearchImage(prompt) {
   const url = `https://lexica.art/api/v1/search?q=${encodeURIComponent(prompt)}`;
@@ -84,6 +88,50 @@ function generatePlaceholderImage(prompt) {
   const base64 = Buffer.from(svg, 'utf-8').toString('base64');
   return `data:image/svg+xml;base64,${base64}`;
 }
+
+// Proxy para Groq OpenAI-compatible: chat/completions (evita CORS no cliente)
+app.post('/api/groq-openai/chat/completions', async (req, res) => {
+  try {
+    if (!GROQ_API_KEY) {
+      return res.status(500).json({ error: { message: 'GROQ_API_KEY ausente no servidor' } });
+    }
+
+    const {
+      model,
+      messages,
+      max_tokens,
+      temperature
+    } = req.body || {};
+
+    const url = `${GROQ_API_URL}/chat/completions`;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: model || (process.env.VITE_AI_MODEL || 'llama-3.3-70b-versatile'),
+        messages: Array.isArray(messages) ? messages : [],
+        max_tokens: typeof max_tokens === 'number' ? max_tokens : 1500,
+        temperature: typeof temperature === 'number' ? temperature : 0.7
+      })
+    });
+
+    const text = await resp.text();
+    if (!resp.ok) {
+      let err;
+      try { err = JSON.parse(text); } catch {}
+      return res.status(resp.status).json(err || { error: { message: text } });
+    }
+
+    const data = JSON.parse(text);
+    return res.json(data);
+  } catch (err) {
+    console.error('Groq proxy error:', err?.message || String(err));
+    return res.status(500).json({ error: { message: err?.message || 'Erro ao chamar Groq' } });
+  }
+});
 
 // Fallback via API pública de Inference: texto
 async function hfApiTextGeneration(model, prompt, maxTokens = 128, temperature = 0.7) {

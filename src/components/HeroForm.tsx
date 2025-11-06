@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { HeroCreationData, HeroRace, HeroClass, Alignment, Element, HeroAttributes } from '../types/hero';
 import { useHeroStore } from '../store/heroStore';
 import { generateStory } from '../utils/story';
-import { gerarTexto } from '../services/hfTextService';
+import { gerarTexto } from '../services/groqTextService';
 
 import { 
   generateName, 

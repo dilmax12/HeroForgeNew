@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { imageAIService } from '../services/imageAIService';
 import { Hero } from '../types/hero';
@@ -21,6 +21,13 @@ export const AIAvatarGenerator: React.FC<AIAvatarGeneratorProps> = ({
   const [generatedAvatar, setGeneratedAvatar] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+
+  // Inicializa o preview com a imagem já salva do herói, se existir
+  useEffect(() => {
+    if (hero?.image && !generatedAvatar) {
+      setGeneratedAvatar(hero.image);
+    }
+  }, [hero?.image]);
 
   const generateAvatar = useCallback(async () => {
     setIsGenerating(true);
@@ -266,6 +273,10 @@ export const AIAvatarGenerator: React.FC<AIAvatarGeneratorProps> = ({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               transition={{ duration: 0.5 }}
+              onError={() => {
+                setError('Falha ao carregar imagem.');
+                setGeneratedAvatar(null);
+              }}
             />
           ) : (
             <motion.div

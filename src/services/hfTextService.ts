@@ -10,10 +10,16 @@ export async function gerarTexto(tipo: TextoTipo, contexto = ''): Promise<string
   if (!resp.ok) {
     // Tenta extrair mensagem detalhada mesmo quando não é JSON
     const raw = await resp.text();
-    let msg = `Falha ao gerar texto (${resp.status})`;
+    let msg: string = `Falha ao gerar texto (${resp.status})`;
     try {
       const err = JSON.parse(raw);
-      msg = err.error || err.message || msg;
+      const e = err?.error ?? err?.message ?? err;
+      if (typeof e === 'string') {
+        msg = e;
+      } else if (e && typeof e === 'object') {
+        // Tenta extrair mensagem comum
+        msg = e.message || e.msg || e.detail || JSON.stringify(e);
+      }
     } catch {
       if (raw) msg = `${msg}: ${raw.slice(0, 200)}`;
     }
