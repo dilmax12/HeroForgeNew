@@ -101,7 +101,8 @@ export default async function handler(req, res) {
     }
 
     const messages = [{ role: 'user', content: prompt }];
-    const modelWithProvider = MODEL_ID.includes(':') ? MODEL_ID : `${MODEL_ID}:auto`;
+    // Router v1 aceita o nome do modelo sem sufixo de provider; remover ':auto'
+    const modelWithProvider = MODEL_ID;
 
     const hfResponse = await fetch(HF_API, {
       method: 'POST',

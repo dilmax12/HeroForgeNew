@@ -34,6 +34,17 @@ VITE_AI_CACHE_ENABLED=true
 VITE_AI_DEBUG_MODE=false
 ```
 
+### 1.1 Configuração de Produção (Vercel)
+
+- Defina `HF_TOKEN` e `HF_TEXT_MODEL` sem sufixo de provider. Exemplo: `HF_TEXT_MODEL=HuggingFaceH4/zephyr-7b-beta`.
+- Para Groq, mantenha a chave apenas no backend: `GROQ_API_KEY=<sua_chave>`.
+- Configure o proxy do frontend para o backend serverless: `VITE_GROQ_PROXY_URL=/api/groq-chat`.
+- Mantenha `VITE_AI_SERVICE_PROVIDER=groq` e `VITE_AI_MODEL` conforme desejado.
+
+Observações:
+- O endpoint `https://router.huggingface.co/v1/chat/completions` não aceita `:auto` no nome do modelo; use o nome puro.
+- O proxy `api/groq-chat` é compatível com OpenAI (`chat/completions`).
+
 ### 2. Obtenção das Chaves de API
 
 #### OpenAI
