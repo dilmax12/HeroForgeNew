@@ -136,12 +136,19 @@ class AIService {
   }
 
   private async makeOpenAITextRequest(request: AITextRequest): Promise<AITextResponse> {
-    const response = await fetch(`${this.config.baseURL}/chat/completions`, {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    // Somente inclui Authorization se houver chave no cliente
+    if (this.config.apiKey) {
+      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+    }
+
+    const isProxy = typeof this.config.baseURL === 'string' && this.config.baseURL.startsWith('/api/');
+    const endpoint = isProxy ? this.config.baseURL : `${this.config.baseURL}/chat/completions`;
+    const response = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.apiKey}`
-      },
+      headers,
       body: JSON.stringify({
         model: this.config.model,
         messages: [
@@ -459,7 +466,16 @@ class AIService {
   }
 
   isConfigured(): boolean {
-    if (this.config.provider === 'huggingface') return true; // usa rota backend, sem chave no client
+    // Hugging Face usa exclusivamente rotas backend; não requer chave no cliente
+    if (this.config.provider === 'huggingface') return true;
+
+    // Groq via proxy serverless (baseURL relativo) também não requer chave no cliente
+    if (this.config.provider === 'groq') {
+      const isProxy = typeof this.config.baseURL === 'string' && this.config.baseURL.startsWith('/api/');
+      return isProxy || !!this.config.apiKey;
+    }
+
+    // OpenAI/Anthropic requerem chave no cliente
     return !!this.config.apiKey;
   }
 
