@@ -36,9 +36,12 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${GROQ_API_KEY}`
       },
+      // Sanitiza modelo: se vier nome de HF ou conter '/', força default Groq
       body: JSON.stringify({
         // Usa modelo recomendado atual para alta compatibilidade
-        model: model || (process.env.VITE_AI_MODEL || 'llama-3.1-8b-instant'),
+        model: (!model || /\//.test(model) || /huggingface/i.test(model))
+          ? 'llama-3.1-8b-instant'
+          : (model || (process.env.VITE_AI_MODEL || 'llama-3.1-8b-instant')),
         messages: Array.isArray(messages) ? messages : [],
         max_tokens: typeof max_tokens === 'number' ? max_tokens : 1500,
         temperature: typeof temperature === 'number' ? temperature : 0.7

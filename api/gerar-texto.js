@@ -3,7 +3,13 @@
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY || '';
 const GROQ_API_URL = process.env.GROQ_API_URL || process.env.VITE_GROQ_API_URL || 'https://api.groq.com/openai/v1';
-const DEFAULT_MODEL = process.env.VITE_AI_MODEL || 'llama-3.1-8b-instant';
+// Força modelo estável independentemente da env para evitar 404/400
+const DEFAULT_MODEL = 'llama-3.1-8b-instant';
+const GROQ_FALLBACK_MODELS = [
+  'llama-3.1-8b-instant',
+  'llama-3.1-70b-versatile',
+  'gemma2-9b-it'
+];
 
 /**
  * Normaliza diferentes formatos de resposta da Hugging Face
@@ -100,30 +106,27 @@ export default async function handler(req, res) {
     }
 
     const messages = [{ role: 'user', content: prompt }];
-    // Chamada ao Groq OpenAI-compatible
-    const groqResp = await fetch(`${GROQ_API_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: DEFAULT_MODEL,
-        messages,
-        max_tokens: 512,
-        temperature: 0.7
-      })
-    });
-
-    const raw = await groqResp.text();
-    let json;
-    try { json = JSON.parse(raw); } catch { json = { error: { message: raw } }; }
-    if (!groqResp.ok) {
-      const message = json?.error?.message || 'Falha na geração';
-      return res.status(groqResp.status).json({ error: message });
+    // Tenta sequencialmente modelos Groq até obter sucesso
+    let output = '';
+    for (const model of GROQ_FALLBACK_MODELS) {
+      const groqResp = await fetch(`${GROQ_API_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ model, messages, max_tokens: 512, temperature: 0.7 })
+      });
+      const raw = await groqResp.text();
+      let json; try { json = JSON.parse(raw); } catch { json = { error: { message: raw } }; }
+      if (groqResp.ok) {
+        output = Array.isArray(json?.choices) ? (json.choices[0]?.message?.content || '') : '';
+        break;
+      }
     }
-
-    const output = Array.isArray(json?.choices) ? (json.choices[0]?.message?.content || '') : '';
+    if (!output) {
+      return res.status(403).json({ error: 'Nenhum modelo Groq habilitado para este projeto. Habilite pelo menos um nas configurações do projeto no console Groq.' });
+    }
     // Para tipo 'nome', garantir que retornamos apenas o nome limpo
     const resultado = tipo === 'nome' ? normalizeNameOutput(output) : output;
     return res.json({ resultado });
