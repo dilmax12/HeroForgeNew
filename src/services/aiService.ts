@@ -66,7 +66,7 @@ class AIService {
           provider,
           apiKey: '',
           apiUrl: baseURL,
-          model: import.meta.env.VITE_AI_MODEL || 'llama3-8b-8192',
+          model: import.meta.env.VITE_AI_MODEL || 'llama-3.1-8b-instant',
           maxTokens: 1500,
           temperature: 0.7,
           timeout: 30000,
@@ -78,7 +78,7 @@ class AIService {
       return {
         provider,
         apiKey,
-        model: import.meta.env.VITE_AI_MODEL || 'llama3-8b-8192',
+        model: import.meta.env.VITE_AI_MODEL || 'llama-3.1-8b-instant',
         imageModel: import.meta.env.VITE_AI_IMAGE_MODEL || 'stabilityai/sd-turbo',
         baseURL,
         maxTokens: 2000,

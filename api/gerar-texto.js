@@ -1,10 +1,9 @@
 // Rota Serverless para Vercel: /api/gerar-texto
-// Usa Hugging Face Inference Router para geração de texto
+// Redireciona geração de texto para Groq (OpenAI-compatível) para maior estabilidade
 
-const HF_TOKEN = process.env.HF_TOKEN;
-// Modelo open-source instrucional (pode ser trocado conforme preferência)
-const MODEL_ID = process.env.HF_TEXT_MODEL || 'HuggingFaceH4/zephyr-7b-beta';
-const HF_API = `https://router.huggingface.co/v1/chat/completions`;
+const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY || '';
+const GROQ_API_URL = process.env.GROQ_API_URL || process.env.VITE_GROQ_API_URL || 'https://api.groq.com/openai/v1';
+const DEFAULT_MODEL = process.env.VITE_AI_MODEL || 'llama-3.1-8b-instant';
 
 /**
  * Normaliza diferentes formatos de resposta da Hugging Face
@@ -54,8 +53,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  if (!HF_TOKEN) {
-    return res.status(500).json({ error: 'HF_TOKEN não configurado no servidor' });
+  if (!GROQ_API_KEY) {
+    return res.status(500).json({ error: 'GROQ_API_KEY não configurado no servidor' });
   }
 
   try {
@@ -101,38 +100,35 @@ export default async function handler(req, res) {
     }
 
     const messages = [{ role: 'user', content: prompt }];
-    // Router v1 aceita o nome do modelo sem sufixo de provider; remover ':auto'
-    const modelWithProvider = MODEL_ID;
-
-    const hfResponse = await fetch(HF_API, {
+    // Chamada ao Groq OpenAI-compatible
+    const groqResp = await fetch(`${GROQ_API_URL}/chat/completions`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${HF_TOKEN}`,
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ model: modelWithProvider, messages })
+      body: JSON.stringify({
+        model: DEFAULT_MODEL,
+        messages,
+        max_tokens: 512,
+        temperature: 0.7
+      })
     });
 
-    // Tenta ler JSON, se falhar, lê texto puro
-    let data;
-    const text = await hfResponse.text();
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = { generated_text: text };
+    const raw = await groqResp.text();
+    let json;
+    try { json = JSON.parse(raw); } catch { json = { error: { message: raw } }; }
+    if (!groqResp.ok) {
+      const message = json?.error?.message || 'Falha na geração';
+      return res.status(groqResp.status).json({ error: message });
     }
 
-    if (!hfResponse.ok) {
-      const message = data?.error || data?.message || 'Falha na geração';
-      return res.status(hfResponse.status).json({ error: message });
-    }
-
-    const output = parseHFResponse(data) || 'Falha ao gerar resposta.';
+    const output = Array.isArray(json?.choices) ? (json.choices[0]?.message?.content || '') : '';
     // Para tipo 'nome', garantir que retornamos apenas o nome limpo
     const resultado = tipo === 'nome' ? normalizeNameOutput(output) : output;
     return res.json({ resultado });
   } catch (error) {
-    console.error('HF router error:', error);
-    return res.status(500).json({ error: 'Erro ao conectar com a IA' });
+    console.error('Groq text error:', error);
+    return res.status(500).json({ error: 'Erro ao conectar com a IA (Groq)' });
   }
 }

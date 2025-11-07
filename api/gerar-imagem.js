@@ -5,7 +5,7 @@ export default async function handler(req, res) {
 
   const HF_TOKEN = process.env.HF_TOKEN;
   // Padrão estável por defeito; env pode sobrescrever
-  const MODEL = process.env.HF_IMAGE_MODEL || 'stabilityai/stable-diffusion-xl-base-1.0';
+  const MODEL = process.env.HF_IMAGE_MODEL || 'stabilityai/sd-turbo';
   if (!HF_TOKEN) {
     return res.status(500).json({ error: 'HF_TOKEN não configurado' });
   }
@@ -41,6 +41,9 @@ export default async function handler(req, res) {
         const src = first?.src || '';
         if (src) return res.status(200).json({ imagem: src });
       }
+      // Fallback adicional: Unsplash random baseado em prompt (sem chave)
+      const unsplashUrl = `https://source.unsplash.com/1024x1024/?${encodeURIComponent(prompt)}`;
+      return res.status(200).json({ imagem: unsplashUrl });
       const errText = await response.text();
       let err;
       try { err = JSON.parse(errText); } catch { err = { error: errText }; }
@@ -50,6 +53,8 @@ export default async function handler(req, res) {
       return res.status(200).json({ imagem: placeholder });
     } catch (lexErr) {
       // Fallback final: placeholder SVG em caso de erro Lexica
+      const unsplashUrl = `https://source.unsplash.com/1024x1024/?${encodeURIComponent(prompt)}`;
+      if (unsplashUrl) return res.status(200).json({ imagem: unsplashUrl });
       const placeholder = generatePlaceholderImage(prompt);
       return res.status(200).json({ imagem: placeholder });
     }

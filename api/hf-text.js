@@ -3,10 +3,13 @@
 
 const HF_TOKEN = process.env.HF_TOKEN;
 // Padrão estável por defeito; env pode sobrescrever
-const MODEL_ID = process.env.HF_TEXT_MODEL || 'mistralai/Mistral-7B-Instruct-v0.2';
+// Padrão público e estável para minimizar erros de acesso
+const MODEL_ID = process.env.HF_TEXT_MODEL || 'HuggingFaceH4/zephyr-7b-beta';
 // Router v1 (OpenAI-compatible) usado apenas como fallback
 const HF_ROUTER_API = `https://router.huggingface.co/v1/chat/completions`;
 const FALLBACK_MODELS = [
+  // Prioriza um modelo público amplamente disponível na Inference API
+  'HuggingFaceH4/zephyr-7b-beta',
   'mistralai/Mistral-7B-Instruct-v0.2',
   'google/gemma-2-9b-it'
 ];
