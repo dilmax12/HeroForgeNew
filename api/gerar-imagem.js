@@ -4,7 +4,8 @@ export default async function handler(req, res) {
   }
 
   const HF_TOKEN = process.env.HF_TOKEN;
-  const MODEL = process.env.HF_IMAGE_MODEL || 'stabilityai/sd-turbo';
+  // Padrão estável por defeito; env pode sobrescrever
+  const MODEL = process.env.HF_IMAGE_MODEL || 'stabilityai/stable-diffusion-xl-base-1.0';
   if (!HF_TOKEN) {
     return res.status(500).json({ error: 'HF_TOKEN não configurado' });
   }
@@ -15,7 +16,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await fetch(`https://router.huggingface.co/hf-inference/models/${MODEL}`, {
+    // Usar Inference API direta para maior estabilidade
+    const response = await fetch(`https://api-inference.huggingface.co/models/${MODEL}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${HF_TOKEN}`,

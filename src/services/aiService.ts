@@ -58,7 +58,7 @@ class AIService {
     // Groq - OpenAI-compatible API
     if (provider === 'groq') {
       const apiKey = import.meta.env.VITE_GROQ_API_KEY || import.meta.env.VITE_OPENAI_API_KEY;
-      const baseURL = import.meta.env.VITE_GROQ_PROXY_URL || '/api/groq-openai';
+      const baseURL = import.meta.env.VITE_GROQ_PROXY_URL || '/api/groq-chat';
 
       if (!apiKey) {
         console.warn('GROQ API key not found. AI features will be disabled.');
@@ -144,8 +144,12 @@ class AIService {
       headers['Authorization'] = `Bearer ${this.config.apiKey}`;
     }
 
-    const isProxy = typeof this.config.baseURL === 'string' && this.config.baseURL.startsWith('/api/');
-    const endpoint = isProxy ? this.config.baseURL : `${this.config.baseURL}/chat/completions`;
+    const base = this.config.baseURL || '';
+    let endpoint = `${base}/chat/completions`;
+    if (typeof base === 'string' && base.startsWith('/api/')) {
+      // Suporte a dois proxies: /api/groq-chat (POST direto) e /api/groq-openai (OpenAI path)
+      endpoint = base.includes('groq-chat') ? base : `${base}/chat/completions`;
+    }
     const response = await fetch(endpoint, {
       method: 'POST',
       headers,
@@ -192,11 +196,15 @@ class AIService {
       })
     });
 
-    const data = await response.json().catch(() => ({ text: '' }));
+    const textRaw = await response.text();
+    let data: any = { text: '' };
+    try { data = JSON.parse(textRaw); } catch { data = { text: textRaw }; }
     if (!response.ok) {
+      const errObj = data?.error ?? data;
+      const errMsg = typeof errObj === 'string' ? errObj : (errObj?.message || 'Erro ao gerar com Hugging Face');
       throw new AIError({
         code: 'hf_error',
-        message: data?.error || 'Erro ao gerar com Hugging Face',
+        message: errMsg,
         provider: 'huggingface',
         retryable: response.status >= 500
       });
