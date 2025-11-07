@@ -41,79 +41,14 @@ class AIService {
   }
 
   private loadConfig(): AIConfig {
-    const provider = (import.meta.env.VITE_AI_SERVICE_PROVIDER || 'groq') as AIProvider;
-
-    if (provider === 'huggingface') {
-      return {
-        provider,
-        apiKey: '',
-        model: import.meta.env.VITE_AI_MODEL || 'HuggingFaceH4/zephyr-7b-beta',
-        imageModel: import.meta.env.VITE_AI_IMAGE_MODEL || 'stabilityai/sd-turbo',
-        baseURL: '/api/hf-text',
-        maxTokens: 1500,
-        temperature: 0.7
-      };
-    }
-
-    // Groq - OpenAI-compatible API
-    if (provider === 'groq') {
-      const apiKey = import.meta.env.VITE_GROQ_API_KEY || import.meta.env.VITE_OPENAI_API_KEY;
-      const baseURL = import.meta.env.VITE_GROQ_PROXY_URL || '/api/groq-chat';
-
-      if (!apiKey) {
-        console.warn('GROQ API key not found. AI features will be disabled.');
-        return {
-          provider,
-          apiKey: '',
-          apiUrl: baseURL,
-          model: import.meta.env.VITE_AI_MODEL || 'llama-3.1-8b-instant',
-          maxTokens: 1500,
-          temperature: 0.7,
-          timeout: 30000,
-          retryAttempts: 3,
-          retryDelay: 1000
-        } as any;
-      }
-
-      return {
-        provider,
-        apiKey,
-        model: import.meta.env.VITE_AI_MODEL || 'llama-3.1-8b-instant',
-        imageModel: import.meta.env.VITE_AI_IMAGE_MODEL || 'stabilityai/sd-turbo',
-        baseURL,
-        maxTokens: 2000,
-        temperature: 0.7
-      };
-    }
-
-    const apiKey = provider === 'openai'
-      ? import.meta.env.VITE_OPENAI_API_KEY
-      : import.meta.env.VITE_ANTHROPIC_API_KEY;
-
-    // Em produção sem chaves, retornar configuração padrão sem falhar
-    if (!apiKey) {
-      console.warn(`API key not found for provider: ${provider}. AI features will be disabled.`);
-      return {
-        provider,
-        apiKey: '',
-        apiUrl: '',
-        model: provider === 'openai' ? 'gpt-3.5-turbo' : 'claude-3-sonnet-20240229',
-        maxTokens: 1000,
-        temperature: 0.7,
-        timeout: 30000,
-        retryAttempts: 3,
-        retryDelay: 1000
-      } as any;
-    }
-
+    // Força configuração consistente: texto via Groq proxy backend e imagem via rota backend
+    const provider: AIProvider = 'groq';
     return {
       provider,
-      apiKey,
-      model: import.meta.env.VITE_AI_MODEL || (provider === 'openai' ? 'gpt-4' : 'claude-3-sonnet-20240229'),
-      imageModel: import.meta.env.VITE_AI_IMAGE_MODEL || 'dall-e-3',
-      baseURL: provider === 'openai'
-        ? import.meta.env.VITE_OPENAI_API_URL || 'https://api.openai.com/v1'
-        : import.meta.env.VITE_ANTHROPIC_API_URL || 'https://api.anthropic.com/v1',
+      apiKey: '',
+      model: 'llama-3.1-8b-instant',
+      imageModel: 'stabilityai/sd-turbo',
+      baseURL: '/api/groq-chat',
       maxTokens: 2000,
       temperature: 0.7
     };

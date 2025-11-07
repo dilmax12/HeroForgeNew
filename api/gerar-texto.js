@@ -127,8 +127,8 @@ export default async function handler(req, res) {
     if (!output) {
       return res.status(403).json({ error: 'Nenhum modelo Groq habilitado para este projeto. Habilite pelo menos um nas configurações do projeto no console Groq.' });
     }
-    // Para tipo 'nome', garantir que retornamos apenas o nome limpo
-    const resultado = tipo === 'nome' ? normalizeNameOutput(output) : output;
+    // Para 'nome', manter o epíteto conforme solicitado; retornar texto integral
+    const resultado = output;
     return res.json({ resultado });
   } catch (error) {
     console.error('Groq text error:', error);
