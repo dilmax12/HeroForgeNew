@@ -288,6 +288,7 @@ export interface DailyGoal {
   progress: number;
   maxProgress: number;
   completed: boolean;
+  claimed?: boolean;
   rewards: {
     xp: number;
     gold: number;
@@ -463,6 +464,10 @@ export interface Hero {
     // Streak de metas diárias: incrementa ao menos uma meta concluída por dia
     dailyCompletionStreak?: number;
     lastDailyCompletion?: Date | string;
+    // Limite diário de treinos
+    trainingsToday?: number;
+    lastTrainingDate?: string; // ISO string
+    trainingDailyLimit?: number; // padrão: 5
   };
   
   // Advanced Features

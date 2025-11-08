@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
-import { Hero, HeroCreationData, HeroAttributes, DerivedAttributes, Quest, Achievement, Guild, CombatResult } from '../types/hero';
+import { Hero, HeroCreationData, HeroAttributes, DerivedAttributes, Quest, Achievement, Guild, CombatResult, Title } from '../types/hero';
 import type { HeroInventory, Party } from '../types/hero';
 import type { ReferralInvite } from '../types/hero';
 import type { EnhancedQuestChoice } from '../types/hero';
@@ -11,7 +11,7 @@ import { purchaseItem, sellItem, equipItem, useConsumable, SHOP_ITEMS } from '..
 import { updateHeroReputation, generateReputationEvents } from '../utils/reputationSystem';
 import { generateAllLeaderboards, getHeroRanking, calculateTotalScore } from '../utils/leaderboardSystem';
 import { generateDailyGoals, updateDailyGoalProgress, checkPerfectDayGoal, removeExpiredGoals, getDailyGoalRewards } from '../utils/dailyGoalsSystem';
-import { getTitleAttributeBonus, AVAILABLE_TITLES } from '../utils/titles';
+import { getTitleAttributeBonus, AVAILABLE_TITLES, TITLE_ACHIEVEMENTS, updateAchievementProgress as updateTitleAchievementProgress, checkTitleUnlock } from '../utils/titles';
 import { onboardingManager } from '../utils/onboardingSystem';
 import { eventManager } from '../utils/eventSystem';
 import { logActivity } from '../utils/activitySystem';
@@ -70,6 +70,7 @@ interface HeroState {
   
   // === SISTEMA DE TÍTULOS E REPUTAÇÃO ===
   setActiveTitle: (titleId?: string) => void;
+  addTitleToSelectedHero: (title: Title, setActive?: boolean) => void;
   updateAchievementProgress: () => void;
   updateReputation: (factionName: string, change: number) => void;
   processReputationEvents: () => void;
@@ -311,12 +312,15 @@ export const useHeroStore = create<HeroState>()(
             { id: 'livre', name: 'Livre', reputation: 0, level: 'neutral' }
           ],
           dailyGoals: [],
-          achievements: [],
+          achievements: TITLE_ACHIEVEMENTS.map(a => ({ ...a })),
           stats: {
             questsCompleted: 0,
             totalCombats: 0,
             totalPlayTime: 0,
-            lastActiveAt: timestamp
+            lastActiveAt: timestamp,
+            trainingsToday: 0,
+            lastTrainingDate: timestamp,
+            trainingDailyLimit: 5
           },
           createdAt: timestamp,
           updatedAt: timestamp
@@ -1471,7 +1475,7 @@ export const useHeroStore = create<HeroState>()(
         return true;
       },
       
-      // === SISTEMA DE TÍTULOS E REPUTAÇÃO ===
+  // === SISTEMA DE TÍTULOS E REPUTAÇÃO ===
        
        setActiveTitle: (titleId?: string) => {
          const hero = get().getSelectedHero();
@@ -1487,14 +1491,114 @@ export const useHeroStore = create<HeroState>()(
            activeTitle: titleId
          });
        },
+
+       addTitleToSelectedHero: (title: Title, setActive: boolean = false) => {
+         const hero = get().getSelectedHero();
+         if (!hero) return;
+
+         // Evitar duplicados pelo id
+         const has = hero.titles.some(t => t.id === title.id);
+         const updatedTitles = has ? hero.titles : [...hero.titles, title];
+
+         const updates: Partial<Hero> = { titles: updatedTitles } as any;
+         if (setActive) {
+           (updates as any).activeTitle = title.id;
+         }
+
+         get().updateHero(hero.id, updates);
+       },
  
        updateAchievementProgress: () => {
          const hero = get().getSelectedHero();
          if (!hero) return;
- 
-         // Esta função será implementada para atualizar progresso de conquistas
-         // baseado nas estatísticas do herói
-         console.log('Atualizando progresso de conquistas para:', hero.name);
+
+         // Atualiza progresso dos achievements de títulos com base nas estatísticas atuais
+         const prevAchievements = hero.achievements || [];
+         const updatedAchievements = updateTitleAchievementProgress(hero);
+
+         // Coletar novos desbloqueios para recompensas de título
+         const newlyUnlocked = updatedAchievements.filter(a => {
+           const prev = prevAchievements.find(p => p.id === a.id);
+           return a.unlocked && (!prev || !prev.unlocked);
+         });
+
+         let updatedTitles = [...hero.titles];
+         newlyUnlocked.forEach(a => {
+           const rewardTitleId = a.rewards?.title;
+           if (!rewardTitleId) return;
+           const tpl = AVAILABLE_TITLES.find(t => t.id === rewardTitleId);
+           if (!tpl) return;
+           const already = updatedTitles.some(t => t.id === rewardTitleId);
+           if (!already) {
+             updatedTitles.push({ ...tpl, unlockedAt: new Date() });
+           }
+         });
+
+         // Desbloqueios adicionais com base em classe/nível/estatísticas
+         const lvl = hero.progression.level;
+         switch (hero.class) {
+           case 'guerreiro':
+             if (lvl >= 5 && !updatedTitles.some(t => t.id === 'campeao-de-ferro')) {
+               const tpl = AVAILABLE_TITLES.find(t => t.id === 'campeao-de-ferro');
+               if (tpl) updatedTitles.push({ ...tpl, unlockedAt: new Date() });
+             }
+             if (lvl >= 10 && !updatedTitles.some(t => t.id === 'portador-da-lamina-sagrada')) {
+               const tpl = AVAILABLE_TITLES.find(t => t.id === 'portador-da-lamina-sagrada');
+               if (tpl) updatedTitles.push({ ...tpl, unlockedAt: new Date() });
+             }
+             break;
+           case 'mago':
+             if (lvl >= 5 && !updatedTitles.some(t => t.id === 'teurgo-do-veu')) {
+               const tpl = AVAILABLE_TITLES.find(t => t.id === 'teurgo-do-veu');
+               if (tpl) updatedTitles.push({ ...tpl, unlockedAt: new Date() });
+             }
+             if (lvl >= 10 && !updatedTitles.some(t => t.id === 'guardiao-dos-arcanos')) {
+               const tpl = AVAILABLE_TITLES.find(t => t.id === 'guardiao-dos-arcanos');
+               if (tpl) updatedTitles.push({ ...tpl, unlockedAt: new Date() });
+             }
+             break;
+           case 'arqueiro':
+             if (lvl >= 5 && !updatedTitles.some(t => t.id === 'olho-de-falcao')) {
+               const tpl = AVAILABLE_TITLES.find(t => t.id === 'olho-de-falcao');
+               if (tpl) updatedTitles.push({ ...tpl, unlockedAt: new Date() });
+             }
+             if (lvl >= 10 && !updatedTitles.some(t => t.id === 'cacador-das-sombras')) {
+               const tpl = AVAILABLE_TITLES.find(t => t.id === 'cacador-das-sombras');
+               if (tpl) updatedTitles.push({ ...tpl, unlockedAt: new Date() });
+             }
+             break;
+           case 'clerigo':
+             if (lvl >= 5 && !updatedTitles.some(t => t.id === 'mao-da-luz')) {
+               const tpl = AVAILABLE_TITLES.find(t => t.id === 'mao-da-luz');
+               if (tpl) updatedTitles.push({ ...tpl, unlockedAt: new Date() });
+             }
+             if (lvl >= 10 && !updatedTitles.some(t => t.id === 'protetor-das-almas')) {
+               const tpl = AVAILABLE_TITLES.find(t => t.id === 'protetor-das-almas');
+               if (tpl) updatedTitles.push({ ...tpl, unlockedAt: new Date() });
+             }
+             break;
+           default:
+             break;
+         }
+
+         // Estatísticas gerais: itens encontrados, combates, exploração
+         if (hero.stats.itemsFound >= 50 && !updatedTitles.some(t => t.id === 'domador-da-fortuna')) {
+           const tpl = AVAILABLE_TITLES.find(t => t.id === 'domador-da-fortuna');
+           if (tpl) updatedTitles.push({ ...tpl, unlockedAt: new Date() });
+         }
+         if (hero.stats.totalCombats >= 50 && !updatedTitles.some(t => t.id === 'sombra-invicta')) {
+           const tpl = AVAILABLE_TITLES.find(t => t.id === 'sombra-invicta');
+           if (tpl) updatedTitles.push({ ...tpl, unlockedAt: new Date() });
+         }
+         if (hero.stats.questsCompleted >= 25 && !updatedTitles.some(t => t.id === 'explorador-do-desconhecido')) {
+           const tpl = AVAILABLE_TITLES.find(t => t.id === 'explorador-do-desconhecido');
+           if (tpl) updatedTitles.push({ ...tpl, unlockedAt: new Date() });
+         }
+
+         get().updateHero(hero.id, {
+           achievements: updatedAchievements,
+           titles: updatedTitles
+         });
        },
 
        updateReputation: (factionName: string, change: number) => {
@@ -1520,6 +1624,27 @@ export const useHeroStore = create<HeroState>()(
          events.forEach(event => {
            console.log('Evento de reputação:', event);
          });
+
+         // Desbloqueios de títulos baseados em reputação
+         const factions = hero.reputationFactions || [];
+         const allRevered = factions.length > 0 && factions.every(f => f.level === 'revered');
+         const anyHonored = factions.some(f => f.level === 'honored' || f.level === 'revered');
+         const allHonoredOrBetter = factions.length > 0 && factions.every(f => f.level === 'honored' || f.level === 'revered');
+
+         const toAdd: string[] = [];
+         if (anyHonored && !hero.titles.some(t => t.id === 'heroi-local')) toAdd.push('heroi-local');
+         if (allHonoredOrBetter && !hero.titles.some(t => t.id === 'guardiao-do-reino')) toAdd.push('guardiao-do-reino');
+         if (allRevered && !hero.titles.some(t => t.id === 'legend')) toAdd.push('legend');
+
+         if (toAdd.length) {
+           const newTitles = toAdd
+             .map(id => AVAILABLE_TITLES.find(t => t.id === id))
+             .filter(Boolean)
+             .map(tpl => ({ ...(tpl as any), unlockedAt: new Date() }));
+           get().updateHero(hero.id, {
+             titles: [...hero.titles, ...newTitles]
+           });
+         }
        },
 
       // Leaderboard functions
@@ -1715,19 +1840,22 @@ export const useHeroStore = create<HeroState>()(
           const hero = state.heroes[heroIndex];
           if (!hero.dailyGoals) return state;
 
-          const goal = hero.dailyGoals.find(g => g.id === goalId);
-          if (!goal || !goal.completed) return state;
+          const goalIndex = hero.dailyGoals.findIndex(g => g.id === goalId);
+          if (goalIndex === -1) return state;
+          const goal = hero.dailyGoals[goalIndex];
+          if (!goal || !goal.completed || goal.claimed) return state;
 
           // Give rewards
           const rewards = getDailyGoalRewards(goal);
-          const updatedHero = {
+          const updatedHero: Hero = {
             ...hero,
             progression: {
               ...hero.progression,
               xp: hero.progression.xp + rewards.xp,
               gold: hero.progression.gold + rewards.gold
-            }
-          };
+            },
+            dailyGoals: hero.dailyGoals.map((g, idx) => idx === goalIndex ? { ...g, claimed: true } : g)
+          } as Hero;
 
           // Check for level up
           const newLevel = checkLevelUp(updatedHero.progression.xp, updatedHero.progression.level);
@@ -1749,6 +1877,23 @@ export const useHeroStore = create<HeroState>()(
               const currentQuantity = updatedHero.inventory.items[item.id] || 0;
               updatedHero.inventory.items[item.id] = currentQuantity + 1;
             });
+          }
+
+          // Atualizar streak de conclusão diária se todas metas ativas foram concluídas e coletadas
+          const now = new Date();
+          const activeGoals = removeExpiredGoals(updatedHero.dailyGoals || []);
+          const allClaimed = activeGoals.length > 0 && activeGoals.every(g => g.completed && g.claimed);
+          if (allClaimed) {
+            const last = updatedHero.stats.lastDailyCompletion ? new Date(updatedHero.stats.lastDailyCompletion as any) : null;
+            const todayStr = now.toDateString();
+            const lastStr = last ? last.toDateString() : '';
+            const currentStreak = updatedHero.stats.dailyCompletionStreak || 0;
+            const newStreak = lastStr === todayStr ? currentStreak : currentStreak + 1;
+            updatedHero.stats = {
+              ...updatedHero.stats,
+              dailyCompletionStreak: newStreak,
+              lastDailyCompletion: now.toISOString()
+            };
           }
 
           const updatedHeroes = [...state.heroes];

@@ -207,6 +207,7 @@ function createDailyGoalFromTemplate(template: DailyGoalTemplate, expiresAt: Dat
     progress: 0,
     maxProgress: template.maxProgress,
     completed: false,
+    claimed: false,
     rewards: { ...template.baseRewards },
     expiresAt
   };

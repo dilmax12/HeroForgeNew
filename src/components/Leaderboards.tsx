@@ -29,6 +29,8 @@ interface DailyEntry {
 const Leaderboards: React.FC = () => {
   const { getSelectedHero, heroes } = useHeroStore();
   const selectedHero = getSelectedHero();
+  const [localHeroId, setLocalHeroId] = useState<string | null>(selectedHero?.id ?? (heroes[0]?.id ?? null));
+  const viewHero = (localHeroId ? heroes.find(h => h.id === localHeroId) : undefined) || selectedHero;
   const [selectedLeaderboard, setSelectedLeaderboard] = useState('xp');
   const [leaderboards, setLeaderboards] = useState<Leaderboard[]>([]);
   const [viewMode, setViewMode] = useState<'top' | 'around'>('top');
@@ -37,9 +39,9 @@ const Leaderboards: React.FC = () => {
   const [dailySummary, setDailySummary] = useState<any | null>(null);
 
   useEffect(() => {
-    if (selectedHero) {
+    if (viewHero) {
       // Gerar dados mock para demonstração
-      const allHeroes = generateMockLeaderboardData(selectedHero);
+      const allHeroes = generateMockLeaderboardData(viewHero);
       const generatedLeaderboards = generateAllLeaderboards(allHeroes);
       setLeaderboards(generatedLeaderboards);
 
@@ -51,14 +53,14 @@ const Leaderboards: React.FC = () => {
           setDailyEntries(Array.isArray(data.entries) ? data.entries : []);
         } catch {}
         try {
-          const summary = await getOrRunDailyResult(selectedHero);
+          const summary = await getOrRunDailyResult(viewHero);
           setDailySummary(summary);
         } catch {}
       })();
     }
-  }, [selectedHero, heroes]);
+  }, [viewHero, heroes]);
 
-  if (!selectedHero) {
+  if (!viewHero) {
     return (
       <div className="text-center p-8">
         <h2 className="text-2xl font-bold text-amber-400 mb-4">Selecione um Herói</h2>
@@ -68,7 +70,7 @@ const Leaderboards: React.FC = () => {
   }
 
   const currentLeaderboard = leaderboards.find(lb => lb.id === selectedLeaderboard);
-  const heroRanking = getHeroRanking(selectedHero, generateMockLeaderboardData(selectedHero));
+  const heroRanking = getHeroRanking(viewHero, generateMockLeaderboardData(viewHero));
   const config = LEADERBOARD_CONFIGS.find(c => c.id === selectedLeaderboard);
 
   const renderLeaderboardEntry = (entry: LeaderboardEntry, isCurrentHero: boolean = false) => (
@@ -117,13 +119,24 @@ const Leaderboards: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Ranking Diário (MVP) */}
-      {selectedHero && (
+      {viewHero && (
         <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-amber-600/30">
           <div className="flex items-center justify-between mb-3 md:mb-4">
             <h3 className="text-lg md:text-xl font-bold text-white flex items-center">
               <span className="mr-2">📅</span>
               Ranking Diário (MVP)
             </h3>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-300">Herói:</label>
+              <select
+                value={localHeroId ?? ''}
+                onChange={(e) => setLocalHeroId(e.target.value)}
+                className="bg-gray-700 text-white text-sm px-2 py-1 rounded border border-gray-600"
+              >
+                {heroes.map(h => (
+                  <option key={h.id} value={h.id}>{h.name}</option>
+                ))}
+              </select>
             <button
               onClick={async () => {
                 if (dailySubmitting) return;
@@ -132,7 +145,7 @@ const Leaderboards: React.FC = () => {
                   await fetch('/api/daily/submit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ hero: selectedHero })
+                    body: JSON.stringify({ hero: viewHero })
                   });
                   const resLb = await fetch('/api/daily/leaderboard');
                   const dataLb = await resLb.json();
@@ -162,6 +175,7 @@ const Leaderboards: React.FC = () => {
             >
               {dailySubmitting ? 'Enviando...' : 'Enviar Resultado de Hoje'}
             </button>
+            </div>
           </div>
           {dailySummary && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-3 md:mb-4 text-center">
@@ -190,11 +204,11 @@ const Leaderboards: React.FC = () => {
             ) : (
               <div className="space-y-2">
                 {dailyEntries.slice(0, 10).map(entry => (
-                  <div key={entry.heroId} className={`flex items-center justify-between p-2 md:p-3 rounded ${entry.heroId === selectedHero.id ? 'bg-amber-600/20 border border-amber-500' : 'bg-gray-700'}`}>
+                  <div key={entry.heroId} className={`flex items-center justify-between p-2 md:p-3 rounded ${entry.heroId === viewHero.id ? 'bg-amber-600/20 border border-amber-500' : 'bg-gray-700'}`}>
                     <div className="flex items-center gap-3">
                       <span className="text-white text-sm md:text-base font-medium">{entry.heroName}</span>
                       <span className="text-gray-400 text-xs md:text-sm">Nv {entry.heroLevel}</span>
-                      {entry.heroId === selectedHero.id && (
+                      {entry.heroId === viewHero.id && (
                         <span className="text-amber-400 bg-amber-600/20 px-2 py-0.5 rounded text-[11px] md:text-xs">Você</span>
                       )}
                     </div>
@@ -298,12 +312,12 @@ const Leaderboards: React.FC = () => {
               {viewMode === 'top' ? (
                 // Top 10
                 getTopHeroes(currentLeaderboard, 10).map(entry => 
-                  renderLeaderboardEntry(entry, entry.heroId === selectedHero.id)
+                  renderLeaderboardEntry(entry, entry.heroId === viewHero.id)
                 )
               ) : (
                 // Ao redor do herói
-                getHeroesAroundRank(currentLeaderboard, selectedHero.id, 5).map(entry => 
-                  renderLeaderboardEntry(entry, entry.heroId === selectedHero.id)
+                getHeroesAroundRank(currentLeaderboard, viewHero.id, 5).map(entry => 
+                  renderLeaderboardEntry(entry, entry.heroId === viewHero.id)
                 )
               )}
             </div>

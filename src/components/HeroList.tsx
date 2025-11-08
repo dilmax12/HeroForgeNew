@@ -80,11 +80,11 @@ const HeroList: React.FC = () => {
               <div className="font-medium text-sm sm:text-base">Missões</div>
             </Link>
             <Link
-              to="/guilds"
+              to="/guild-hub"
               className="bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white p-3 sm:p-4 rounded-lg text-center transition-all transform hover:scale-105 border border-purple-500/30"
             >
               <div className="text-xl sm:text-2xl mb-1 sm:mb-2">🏰</div>
-              <div className="font-medium text-sm sm:text-base">Guildas</div>
+              <div className="font-medium text-sm sm:text-base">Guilda dos Aventureiros</div>
             </Link>
             <Link
               to="/titles"

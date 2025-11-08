@@ -66,6 +66,28 @@ export const DailyGoals: React.FC<DailyGoalsProps> = ({ heroId }) => {
     }
   }, [heroId]);
 
+  // Verificação periódica para expiração/renovação (a cada 60s)
+  useEffect(() => {
+    if (!heroId) return;
+    const interval = setInterval(() => {
+      const currentHero = heroes.find(h => h.id === heroId);
+      if (!currentHero) return;
+      const now = new Date();
+      const hasValidGoals = currentHero.dailyGoals && currentHero.dailyGoals.length > 0 && 
+        currentHero.dailyGoals.some(goal => {
+          const exp = typeof (goal.expiresAt as any) === 'string' 
+            ? new Date(goal.expiresAt as unknown as string) 
+            : (goal.expiresAt as Date);
+          return exp > now;
+        });
+      if (!hasValidGoals) {
+        cleanupExpiredGoals(heroId);
+        generateDailyGoalsForHero(heroId);
+      }
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [heroId, heroes]);
+
   if (!hero || !hero.dailyGoals || hero.dailyGoals.length === 0) {
     return (
       <div className="bg-gray-800 rounded-lg p-6">
@@ -103,6 +125,7 @@ export const DailyGoals: React.FC<DailyGoalsProps> = ({ heroId }) => {
   };
 
   const completedGoals = hero.dailyGoals.filter(g => g.completed);
+  const claimableGoals = hero.dailyGoals.filter(g => g.completed && !g.claimed);
   const totalGoals = hero.dailyGoals.length;
   const completionPercentage = totalGoals > 0 ? (completedGoals.length / totalGoals) * 100 : 0;
 
@@ -126,6 +149,20 @@ export const DailyGoals: React.FC<DailyGoalsProps> = ({ heroId }) => {
             <span className="px-2 py-1 rounded-full bg-gray-700 text-orange-300 border border-orange-500/40">
               🔥 Streak: {hero.stats?.dailyCompletionStreak || 0}
             </span>
+            <button
+              onClick={() => { cleanupExpiredGoals(heroId); generateDailyGoalsForHero(heroId); }}
+              className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white border border-blue-400/40"
+            >
+              ♻️ Atualizar Metas
+            </button>
+            {claimableGoals.length > 0 && (
+              <button
+                onClick={() => claimableGoals.forEach(g => completeDailyGoal(heroId, g.id))}
+                className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white border border-green-400/40"
+              >
+                🎁 Coletar Tudo
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -154,8 +191,11 @@ export const DailyGoals: React.FC<DailyGoalsProps> = ({ heroId }) => {
                     <h4 className={`font-semibold ${difficultyColor}`}>
                       {goal.description}
                     </h4>
-                    {goal.completed && (
+                    {goal.completed && !goal.claimed && (
                       <span className="text-green-400 text-sm">✓ Completa</span>
+                    )}
+                    {goal.claimed && (
+                      <span className="text-blue-300 text-sm">🎁 Coletado</span>
                     )}
                   </div>
                   
@@ -194,7 +234,7 @@ export const DailyGoals: React.FC<DailyGoalsProps> = ({ heroId }) => {
                   </div>
                 </div>
 
-                {goal.completed && (
+                {goal.completed && !goal.claimed && (
                   <button
                     onClick={() => handleClaimReward(goal)}
                     className="ml-4 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2"

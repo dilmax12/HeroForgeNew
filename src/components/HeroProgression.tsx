@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Hero } from '../types/hero';
 import { useHeroStore } from '../store/heroStore';
 import { SHOP_ITEMS } from '../utils/shop';
@@ -11,6 +12,7 @@ interface HeroProgressionProps {
 }
 
 const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<'overview' | 'equipment' | 'achievements' | 'reputation'>('overview');
   const { useItem, equipItem, sellItem } = useHeroStore();
 
@@ -101,6 +103,17 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
     const t = setTimeout(() => setHighlightDerived(false), 1400);
     return () => clearTimeout(t);
   }, [derivedKey]);
+
+  // Se houver hash na URL, rolar suavemente para a seção correspondente
+  useEffect(() => {
+    if (location.hash) {
+      const id = location.hash.replace('#', '');
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  }, [location.hash]);
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">

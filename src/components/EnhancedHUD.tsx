@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useHeroStore } from '../store/heroStore';
 import { Hero } from '../types/hero';
 import { getOrRunDailyResult } from '../services/idleBattleService';
 import { notificationBus } from './NotificationSystem';
 import { calculateXPForLevel, LEVEL_CAP } from '../utils/progression';
+import { worldStateManager } from '../utils/worldState';
 import { trackMetric } from '../utils/metricsSystem';
 
 interface EnhancedHUDProps {
@@ -31,6 +33,12 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
   const maxMp = hero.derivedAttributes.mp || 0;
   const currentMp = hero.derivedAttributes.currentMp ?? maxMp;
   const mpPercentage = Math.max(0, Math.min(100, (currentMp / maxMp) * 100));
+
+  // UI: contadores e pulsos de recuperação
+  const [nextHpMpSeconds, setNextHpMpSeconds] = useState<number | null>(null);
+  const [nextStaminaSeconds, setNextStaminaSeconds] = useState<number | null>(null);
+  const [hpPulse, setHpPulse] = useState<number>(0);
+  const [mpPulse, setMpPulse] = useState<number>(0);
 
   // Usar stamina do objeto de estado do herói para evitar duplicidade
   const maxStamina = hero.stamina?.max ?? 100;
@@ -76,25 +84,49 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
     return () => { mounted = false; };
   }, [hero.id]);
 
-  // Auto regeneração por minuto: HP, Mana e Stamina
-  const updateHero = useHeroStore(s => s.updateHero);
+  // Pulsos: detectar aumentos em HP/MP e exibir +N por 2s
+  const prevHpRef = useRef<number>(currentHp);
+  const prevMpRef = useRef<number>(currentMp);
   useEffect(() => {
-    const tick = () => {
-      // Atualizar contadores no mundo
-      try {
-        // Clonar objeto para mutação segura
-        const h = { ...hero, derivedAttributes: { ...hero.derivedAttributes }, stamina: { ...hero.stamina! }, stats: { ...hero.stats } } as Hero;
-        // HP/Mana
-        try { (worldStateManager as any).updateVitals?.(h); } catch {}
-        // Stamina
-        try { worldStateManager.updateStamina(h); } catch {}
-        // Persistir no store
-        updateHero(h.id, { derivedAttributes: h.derivedAttributes, stamina: h.stamina, stats: h.stats });
-      } catch {}
-    };
-    const interval = setInterval(tick, 60_000);
+    const prevHp = prevHpRef.current ?? 0;
+    const prevMp = prevMpRef.current ?? 0;
+    const dhp = Math.max(0, (currentHp ?? 0) - (prevHp ?? 0));
+    const dmp = Math.max(0, (currentMp ?? 0) - (prevMp ?? 0));
+    if (dhp > 0) {
+      setHpPulse(dhp);
+      const t = setTimeout(() => setHpPulse(0), 2000);
+      return () => clearTimeout(t);
+    }
+    if (dmp > 0) {
+      setMpPulse(dmp);
+      const t = setTimeout(() => setMpPulse(0), 2000);
+      return () => clearTimeout(t);
+    }
+    prevHpRef.current = currentHp ?? 0;
+    prevMpRef.current = currentMp ?? 0;
+  }, [currentHp, currentMp]);
+
+  // Contagem regressiva local para próxima recuperação (HP/Mana e Stamina)
+  const getSelectedHero = useHeroStore(s => s.getSelectedHero);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const latest = getSelectedHero() ?? hero;
+      // HP/Mana: baseado em lastActiveAt
+      const lastAct = latest.stats?.lastActiveAt ? new Date(latest.stats.lastActiveAt).getTime() : now;
+      const ttnHpMp = Math.max(0, 60000 - ((now - lastAct) % 60000));
+      setNextHpMpSeconds(Math.ceil(ttnHpMp / 1000));
+      // Stamina: baseado em lastRecovery
+      if (latest.stamina?.lastRecovery) {
+        const lr = new Date(latest.stamina.lastRecovery).getTime();
+        const ttnSt = Math.max(0, 60000 - ((now - lr) % 60000));
+        setNextStaminaSeconds(Math.ceil(ttnSt / 1000));
+      } else {
+        setNextStaminaSeconds(null);
+      }
+    }, 1000);
     return () => clearInterval(interval);
-  }, [hero.id]);
+  }, [hero.id, getSelectedHero]);
 
   const submitDaily = async () => {
     if (!hero || submitting) return;
@@ -174,15 +206,15 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
           </div>
           <div className="w-full bg-gray-700 rounded h-7 md:h-8 flex items-center justify-between px-2 md:px-3">
             <span className="text-[11px] md:text-xs text-gray-300">Você tem pontos para gastar</span>
-            <a 
-              href="#atributos" 
+            <Link
+              to="/progression#atributos"
               title="Gaste seus pontos de atributo"
               onClick={() => {
                 try { trackMetric.featureUsed(hero.id, 'hud-attribute-link'); } catch {}
               }}
               className="text-[11px] md:text-xs bg-amber-500 hover:bg-amber-600 text-white px-2 py-1 rounded animate-pulse">
               Gastar
-            </a>
+            </Link>
           </div>
         </div>
       )}
@@ -191,7 +223,12 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
       <div className="mb-2">
         <div className="flex justify-between items-center mb-1">
           <span className="text-red-400 text-xs font-medium">Vida</span>
-          <span className="text-gray-300 text-xs">{currentHp}/{maxHp}</span>
+          <span className="text-gray-300 text-xs">
+            {currentHp}/{maxHp}
+            {hpPulse > 0 && (
+              <span className="ml-1 text-green-400 text-[10px]">+{hpPulse}</span>
+            )}
+          </span>
         </div>
         <div className="w-full bg-gray-700 rounded-full h-2">
           <div 
@@ -199,6 +236,9 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
             style={{ width: `${hpPercentage}%` }}
           />
         </div>
+        {hpPercentage < 100 && (
+          <div className="text-[10px] text-gray-400 mt-1">⏱️ Próxima recuperação em {nextHpMpSeconds ?? '--'}s</div>
+        )}
         {hpPercentage <= 0 && (
           <div className="text-xs text-red-400 mt-1 flex items-center">⚰️ Em recuperação — aguarde regeneração</div>
         )}
@@ -208,7 +248,12 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
       <div className="mb-2">
         <div className="flex justify-between items-center mb-1">
           <span className="text-indigo-400 text-xs font-medium">Mana</span>
-          <span className="text-gray-300 text-xs">{currentMp}/{maxMp}</span>
+          <span className="text-gray-300 text-xs">
+            {currentMp}/{maxMp}
+            {mpPulse > 0 && (
+              <span className="ml-1 text-green-400 text-[10px]">+{mpPulse}</span>
+            )}
+          </span>
         </div>
         <div className="w-full bg-gray-700 rounded-full h-2">
           <div 
@@ -216,6 +261,9 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
             style={{ width: `${mpPercentage}%` }}
           />
         </div>
+        {mpPercentage < 100 && (
+          <div className="text-[10px] text-gray-400 mt-1">⏱️ Próxima recuperação em {nextHpMpSeconds ?? '--'}s</div>
+        )}
       </div>
 
       {/* Stamina */}
@@ -230,6 +278,7 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
             style={{ width: `${staminaPercentage}%` }}
           />
         </div>
+        <div className="text-[10px] text-gray-400 mt-1">⏱️ Próxima recuperação em {nextStaminaSeconds ?? '--'}s</div>
         {staminaPercentage < 30 && (
           <div className="text-xs text-red-400 mt-1 flex items-center">
             ⚠️ Stamina baixa - Descanse para recuperar

@@ -98,7 +98,7 @@ const AttributeAllocationPanel: React.FC<AttributeAllocationPanelProps> = ({ her
           const inc = (pending[key] || 0) as number;
           const final = current + inc;
           return (
-            <div key={key} className="border rounded p-3">
+            <div key={key} className="border rounded p-3 overflow-hidden">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <span>{info.icon}</span>
@@ -108,9 +108,9 @@ const AttributeAllocationPanel: React.FC<AttributeAllocationPanelProps> = ({ her
                   {current} → <span className="font-semibold">{final}</span>
                 </div>
               </div>
-              <div className="mt-2 flex items-center justify-between">
-                <div className="text-xs text-gray-500">{info.description}</div>
-                <div className="flex items-center space-x-2">
+              <div className="mt-2 space-y-2">
+                <div className="text-xs text-gray-500 leading-snug min-w-0 break-words">{info.description}</div>
+                <div className="flex items-center justify-end space-x-2">
                   <button
                     className={`px-2 py-1 text-sm rounded ${canDecrease(key) ? 'bg-gray-200 hover:bg-gray-300' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
                     onClick={() => decrement(key)}

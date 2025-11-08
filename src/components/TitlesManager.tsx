@@ -9,13 +9,15 @@ import {
   getRarityColor,
   getRarityBg
 } from '../utils/titles';
+import { generateDynamicTitleForHero } from '../services/titleAIService';
 
 const TitlesManager: React.FC = () => {
-  const { getSelectedHero, setActiveTitle } = useHeroStore();
+  const { getSelectedHero, setActiveTitle, addTitleToSelectedHero } = useHeroStore();
   const selectedHero = getSelectedHero();
   const [selectedCategory, setSelectedCategory] = useState<'all' | Title['category']>('all');
   const [selectedRarity, setSelectedRarity] = useState<'all' | Title['rarity']>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [generating, setGenerating] = useState(false);
 
   if (!selectedHero) {
     return (
@@ -54,6 +56,20 @@ const TitlesManager: React.FC = () => {
     setActiveTitle(undefined);
   };
 
+  const handleGenerateAITitle = async () => {
+    if (!selectedHero || generating) return;
+    try {
+      setGenerating(true);
+      const newTitle = await generateDynamicTitleForHero(selectedHero);
+      addTitleToSelectedHero(newTitle, true);
+    } catch (err) {
+      console.error('Falha ao gerar título por IA:', err);
+      alert('Não foi possível gerar um título por IA agora. Tente novamente em instantes.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const getCategoryIcon = (category: Title['category']) => {
     switch (category) {
       case 'combat': return '⚔️';
@@ -90,7 +106,17 @@ const TitlesManager: React.FC = () => {
   return (
     <div className="container mx-auto p-6">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-amber-400 mb-4">Gerenciar Títulos</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-3xl font-bold text-amber-400">Gerenciar Títulos</h2>
+          <button
+            onClick={handleGenerateAITitle}
+            disabled={generating || !selectedHero}
+            className={`px-4 py-2 rounded-md font-medium transition-colors ${generating ? 'bg-gray-700 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-700'}`}
+            title="Gerar título personalizado por IA"
+          >
+            {generating ? 'Gerando…' : '🤖 Gerar Título IA'}
+          </button>
+        </div>
         
         {/* Título Ativo */}
         <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 mb-6">

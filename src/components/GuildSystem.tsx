@@ -23,7 +23,9 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
     depositGoldToGuild,
     withdrawGoldFromGuild,
     contributeXPToGuild,
-    ensureDefaultGuildExists
+    ensureDefaultGuildExists,
+    heroes,
+    selectHero
   } = useHeroStore();
 
   const [depositAmount, setDepositAmount] = useState('');
@@ -141,19 +143,35 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
   };
 
   const tabs = [
-    { id: 'browse', label: 'Explorar Guildas', icon: '🔍' },
-    { id: 'my-guild', label: currentGuild ? 'Minha Guilda' : 'Sem Guilda', icon: '🏰' },
-    { id: 'create', label: 'Criar Guilda', icon: '➕' }
+    { id: 'browse', label: 'Explorar Partys', icon: '🔍' },
+    { id: 'my-guild', label: currentGuild ? 'Minha Party' : 'Sem Party', icon: '👥' },
+    { id: 'create', label: 'Criar Party', icon: '➕' }
   ];
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6 rounded-lg">
-        <h1 className="text-3xl font-bold mb-2">🏰 Sistema de Guildas</h1>
-        <p className="text-lg opacity-90">
-          {currentGuild ? `Membro da ${currentGuild.name}` : 'Aventureiro Independente'}
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">👥 Sistema de Party</h1>
+            <p className="text-lg opacity-90">
+              {currentGuild ? `Membro da ${currentGuild.name}` : 'Aventureiro Independente'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm opacity-90">Herói:</label>
+            <select
+              value={hero.id}
+              onChange={(e) => selectHero(e.target.value)}
+              className="bg-white text-indigo-800 px-2 py-1 rounded shadow-sm"
+            >
+              {heroes.map(h => (
+                <option key={h.id} value={h.id}>{h.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* Navegação */}
@@ -181,7 +199,7 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
       {/* Conteúdo das Abas */}
       {activeTab === 'browse' && (
         <div className="space-y-6">
-          <h2 className="text-2xl font-bold text-gray-800">Guildas Disponíveis</h2>
+          <h2 className="text-2xl font-bold text-gray-800">Partys Disponíveis</h2>
           
           {guilds.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -201,7 +219,7 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
                       <span className="font-medium">{guild.members.length}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">XP da Guilda:</span>
+                      <span className="text-gray-600">XP da Party:</span>
                       <span className="font-medium">{guild.guildXP}</span>
                     </div>
                     <div className="flex justify-between text-sm">
@@ -212,18 +230,18 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
 
                   {hero.progression.guildId === guild.id ? (
                     <div className="bg-green-100 text-green-800 px-3 py-2 rounded text-center text-sm font-medium">
-                      ✓ Membro desta guilda
+                      ✓ Membro desta party
                     </div>
                   ) : hero.progression.guildId ? (
                     <div className="bg-gray-100 text-gray-600 px-3 py-2 rounded text-center text-sm">
-                      Já é membro de outra guilda
+                      Já é membro de outra party
                     </div>
                   ) : (
                     <button
                       onClick={() => handleJoinGuild(guild.id)}
                       className="w-full bg-purple-600 text-white py-2 px-4 rounded hover:bg-purple-700 transition-colors"
                     >
-                      Entrar na Guilda
+                      Entrar na Party
                     </button>
                   )}
                 </div>
@@ -232,8 +250,8 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
           ) : (
             <div className="text-center py-12 text-gray-500">
               <div className="text-6xl mb-4">🏰</div>
-              <h3 className="text-xl font-medium mb-2">Nenhuma guilda encontrada</h3>
-              <p>Seja o primeiro a criar uma guilda!</p>
+              <h3 className="text-xl font-medium mb-2">Nenhuma party encontrada</h3>
+              <p>Crie a primeira party!</p>
             </div>
           )}
         </div>
@@ -254,7 +272,7 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
                     onClick={handleLeaveGuild}
                     className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
                   >
-                    Sair da Guilda
+                    Sair da Party
                   </button>
                 </div>
 
@@ -265,11 +283,11 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
                   </div>
                   <div className="text-center">
                     <div className="text-3xl font-bold text-blue-600">{currentGuild.guildXP}</div>
-                    <div className="text-sm text-gray-600">XP da Guilda</div>
+                    <div className="text-sm text-gray-600">XP da Party</div>
                   </div>
                   <div className="text-center">
                     <div className="text-3xl font-bold text-indigo-600">{currentGuild.level ?? Math.max(1, Math.floor(currentGuild.guildXP / 250) + 1)}</div>
-                    <div className="text-sm text-gray-600">Nível da Guilda</div>
+                    <div className="text-sm text-gray-600">Nível da Party</div>
                   </div>
                   <div className="text-center">
                     <div className="text-3xl font-bold text-yellow-600">{currentGuild.bankGold}</div>
@@ -329,7 +347,7 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
                         Sacar
                       </button>
                     </div>
-                    <div className="text-xs text-gray-500 mt-2">Tesouro da guilda: {currentGuild.bankGold}</div>
+                    <div className="text-xs text-gray-500 mt-2">Tesouro da party: {currentGuild.bankGold}</div>
                     <div className="text-xs text-gray-500">Necessita papel: líder/oficial</div>
                   </div>
                   <div className="bg-gray-50 p-4 rounded border border-gray-200">
@@ -359,7 +377,7 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
                         Contribuir
                       </button>
                     </div>
-                    <div className="text-xs text-gray-500 mt-2">Aumenta o nível da guilda</div>
+                    <div className="text-xs text-gray-500 mt-2">Aumenta o nível da party</div>
                   </div>
                 </div>
               </div>
@@ -397,7 +415,7 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
               {/* Quadro de Missões da Guilda */}
               <div className="bg-white p-6 rounded-lg border border-gray-200">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold text-gray-800">📋 Quadro de Missões da Guilda</h3>
+                  <h3 className="text-xl font-bold text-gray-800">📋 Quadro de Missões da Party</h3>
                   <button
                     onClick={() => refreshQuests(hero.progression.level)}
                     className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md font-medium transition-colors"
@@ -503,25 +521,25 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
       {activeTab === 'create' && (
         <div className="max-w-2xl mx-auto">
           <div className="bg-white p-6 rounded-lg border border-gray-200">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">➕ Criar Nova Guilda</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">➕ Criar Nova Party</h2>
             
             {hero.progression.guildId ? (
               <div className="text-center py-8 text-gray-500">
                 <div className="text-4xl mb-2">⚠️</div>
-                <h3 className="text-lg font-medium mb-2">Você já está em uma guilda</h3>
-                <p>Saia da sua guilda atual para criar uma nova.</p>
+                <h3 className="text-lg font-medium mb-2">Você já está em uma party</h3>
+                <p>Saia da sua party atual para criar uma nova.</p>
               </div>
             ) : (
               <div className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nome da Guilda
+                    Nome da Party
                   </label>
                   <input
                     type="text"
                     value={newGuildName}
                     onChange={(e) => setNewGuildName(e.target.value)}
-                    placeholder="Digite o nome da sua guilda..."
+                    placeholder="Digite o nome da sua party..."
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     maxLength={50}
                   />
@@ -534,7 +552,7 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
                   <textarea
                     value={newGuildDescription}
                     onChange={(e) => setNewGuildDescription(e.target.value)}
-                    placeholder="Descreva o propósito e valores da sua guilda..."
+                    placeholder="Descreva o propósito e valores da sua party..."
                     rows={4}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     maxLength={200}
@@ -542,10 +560,10 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
                 </div>
                 
                 <div className="bg-blue-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-blue-800 mb-2">💡 Dicas para criar uma guilda</h4>
+                  <h4 className="font-medium text-blue-800 mb-2">💡 Dicas para criar uma party</h4>
                   <ul className="text-sm text-blue-700 space-y-1">
                     <li>• Escolha um nome único e memorável</li>
-                    <li>• Descreva claramente o foco da guilda (PvE, social, etc.)</li>
+                  <li>• Descreva claramente o foco da party (PvE, social, etc.)</li>
                     <li>• Defina expectativas para os membros</li>
                     <li>• Seja acolhedor para atrair novos aventureiros</li>
                   </ul>
@@ -556,7 +574,7 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
                   disabled={!newGuildName.trim() || !newGuildDescription.trim()}
                   className="w-full bg-purple-600 text-white py-3 px-4 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                 >
-                  Criar Guilda
+                  Criar Party
                 </button>
               </div>
             )}

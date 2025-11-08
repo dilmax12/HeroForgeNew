@@ -5,6 +5,7 @@ import { generateOutcomeNarrative } from '../services/narratorAI';
 import { resolveCombat } from '../utils/combat';
 import BattleModal from './BattleModal';
 import { worldStateManager } from '../utils/worldState';
+import { rankSystem } from '../utils/rankSystem';
 
 type StageOutcome = {
   success: boolean;
@@ -20,13 +21,32 @@ type StageOutcome = {
   chest?: { isMimic: boolean; item?: string };
 };
 
-const STAGES_TOTAL = 5;
+// Etapas por rank: F/E=3, D/C=4, B=5, A=6, S=7
+const getStageCountByRank = (rank?: 'F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S') => {
+  switch (rank) {
+    case 'F':
+    case 'E':
+      return 3;
+    case 'D':
+    case 'C':
+      return 4;
+    case 'B':
+      return 5;
+    case 'A':
+      return 6;
+    case 'S':
+      return 7;
+    default:
+      return 3;
+  }
+};
 
 export default function AIDungeonRun() {
   const hero = useHeroStore(s => s.getSelectedHero());
   const updateHero = useHeroStore(s => s.updateHero);
   const gainXP = useHeroStore(s => s.gainXP);
   const gainGold = useHeroStore(s => s.gainGold);
+  const updateDailyGoalProgress = useHeroStore(s => s.updateDailyGoalProgress);
 
   const [stageIndex, setStageIndex] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -39,6 +59,12 @@ export default function AIDungeonRun() {
   const [pendingEvent, setPendingEvent] = useState<'none' | 'combat' | 'rest' | 'chest'>('none');
   const [pendingChoice, setPendingChoice] = useState<string>('');
   const [pendingSuccess, setPendingSuccess] = useState<boolean>(false);
+  const [runCounted, setRunCounted] = useState(false);
+
+  const stagesTotal = useMemo(() => {
+    const currentRank = hero.rankData?.currentRank as ('F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S') | undefined;
+    return getStageCountByRank(currentRank);
+  }, [hero.rankData?.currentRank]);
 
   const difficulty: 'easy' | 'medium' | 'hard' = useMemo(() => {
     const lvl = hero.progression.level || 1;
@@ -61,7 +87,7 @@ export default function AIDungeonRun() {
       setLoading(true);
       setOutcome(null);
       try {
-        const ctx = `Masmorra IA — Etapa ${stageIndex + 1}/${STAGES_TOTAL}. Herói: ${hero.name} nível ${hero.progression.level}.`; 
+        const ctx = `Masmorra IA — Etapa ${stageIndex + 1}/${stagesTotal}. Herói: ${hero.name} nível ${hero.progression.level}.`; 
         const aiMission = await dynamicMissionsAI.generateMission({ hero, missionType: 'mystery', difficulty, context: ctx });
         setDescription(aiMission.description);
         // Opções genéricas com chances baseadas em atributos simples do herói
@@ -79,7 +105,7 @@ export default function AIDungeonRun() {
       }
     };
     run();
-  }, [stageIndex, hero.id, difficulty]);
+  }, [stageIndex, hero.id, difficulty, stagesTotal]);
 
   const STAMINA_COST_PER_STAGE = 2;
   const applyStaminaCost = (amount: number) => {
@@ -183,7 +209,7 @@ export default function AIDungeonRun() {
   };
 
   const nextStage = () => {
-    if (stageIndex + 1 >= STAGES_TOTAL) return;
+    if (stageIndex + 1 >= stagesTotal) return;
     setStageIndex(i => i + 1);
   };
 
@@ -193,14 +219,37 @@ export default function AIDungeonRun() {
     setChoices([]);
     setOutcome(null);
     setLog([]);
+    setRunCounted(false);
   };
 
-  const finished = stageIndex + 1 >= STAGES_TOTAL && !!outcome;
+  const finished = stageIndex + 1 >= stagesTotal && !!outcome;
+
+  // Ao concluir as etapas, contar como missão concluída para progresso de rank
+  useEffect(() => {
+    if (!finished || runCounted) return;
+    const store = useHeroStore.getState();
+    const current = store.heroes.find(h => h.id === hero.id);
+    if (!current) return;
+    const newStats = {
+      ...current.stats,
+      questsCompleted: (current.stats.questsCompleted || 0) + 1,
+      lastActiveAt: new Date().toISOString()
+    };
+    // Atualizar estatísticas do herói
+    store.updateHero(hero.id, { stats: newStats });
+    // Garantir rankData e atualizar progresso de rank
+    const ensuredRankData = current.rankData ?? rankSystem.initializeRankData(current);
+    const newRankData = rankSystem.updateRankData({ ...current, stats: newStats }, ensuredRankData);
+    store.updateHero(hero.id, { rankData: newRankData });
+    // Atualizar metas diárias de missão concluída
+    updateDailyGoalProgress(hero.id, 'quest-completed', 1);
+    setRunCounted(true);
+  }, [finished, runCounted, hero.id, updateDailyGoalProgress]);
 
   return (
     <div className="max-w-3xl mx-auto p-6">
       <h2 className="text-2xl font-bold text-white">Masmorra IA</h2>
-      <p className="text-gray-300">Etapa {stageIndex + 1} de {STAGES_TOTAL} • Dificuldade: {difficulty}</p>
+      <p className="text-gray-300">Etapa {stageIndex + 1} de {stagesTotal} • Dificuldade: {difficulty}</p>
       <div className="mt-4 p-4 border rounded bg-gray-800 border-gray-700">
         <p className="text-gray-200 whitespace-pre-line">{description}</p>
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">

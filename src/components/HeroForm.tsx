@@ -54,6 +54,7 @@ const HeroForm = () => {
   const [loadingQuoteAI, setLoadingQuoteAI] = useState(false);
   const [loadingHFStory, setLoadingHFStory] = useState(false);
   const [loadingHeroAI, setLoadingHeroAI] = useState(false);
+  const [loadingImageAI, setLoadingImageAI] = useState(false);
   const [nameOptions, setNameOptions] = useState<string[]>([]);
   const [showNameOptions, setShowNameOptions] = useState(false);
   const [showSkillDetails, setShowSkillDetails] = useState<string | null>(null);
@@ -214,6 +215,41 @@ const HeroForm = () => {
       });
     } finally {
       setLoadingHeroAI(false);
+    }
+  };
+
+  const handleGenerateImageAI = async () => {
+    setLoadingImageAI(true);
+    try {
+      const result = await generateHeroWithAI({
+        race: formData.race,
+        klass: formData.class,
+        attrs: formData.attributes as Record<string, number>
+      });
+      if (result.image) {
+        setFormData(prev => ({ ...prev, image: result.image }));
+        notificationBus.emit({
+          type: 'achievement',
+          title: 'Avatar gerado!',
+          message: 'Imagem criada com IA usando seus dados.',
+          icon: '🖼️',
+          duration: 4000
+        });
+      } else {
+        setLimitWarning('A IA não retornou uma imagem. Tente novamente.');
+      }
+    } catch (error) {
+      console.error('Erro ao gerar imagem via IA:', error);
+      setLimitWarning('Falha ao gerar imagem com IA. Tente novamente mais tarde.');
+      notificationBus.emit({
+        type: 'quest',
+        title: 'Falha na geração de imagem',
+        message: 'Tente novamente mais tarde.',
+        icon: '⚠️',
+        duration: 4500
+      });
+    } finally {
+      setLoadingImageAI(false);
     }
   };
 
@@ -517,7 +553,21 @@ const HeroForm = () => {
                 Formatos aceitos: JPG, PNG, GIF (máx. 5MB)
               </p>
             </div>
-            
+
+            <div className="flex-1">
+              <button
+                type="button"
+                onClick={handleGenerateImageAI}
+                disabled={loadingImageAI}
+                className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-md font-medium transition-colors disabled:opacity-60"
+              >
+                {loadingImageAI ? 'Gerando...' : '🤖 Gerar Avatar IA'}
+              </button>
+              <p className="text-xs text-gray-400 mt-1">
+                Usa raça, classe e atributos para criar a imagem.
+              </p>
+            </div>
+
             {formData.image && (
               <div className="w-24 h-24 bg-gray-600 rounded-md overflow-hidden">
                 <img

@@ -20,6 +20,20 @@ const QuickNavigation: React.FC = () => {
       badge: selectedHero.activeQuests.length > 0 ? selectedHero.activeQuests.length : null
     },
     {
+      id: 'guild-hub',
+      label: 'Guilda dos Aventureiros',
+      icon: '🏰',
+      path: '/guild-hub',
+      color: 'bg-yellow-600 hover:bg-yellow-700'
+    },
+    {
+      id: 'party',
+      label: 'Party',
+      icon: '👥',
+      path: '/party',
+      color: 'bg-pink-600 hover:bg-pink-700'
+    },
+    {
       id: 'training',
       label: 'Treinamento',
       icon: '💪',

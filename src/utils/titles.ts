@@ -170,6 +170,269 @@ export const AVAILABLE_TITLES: Title[] = [
     badge: '🥇',
     unlockedAt: new Date()
   }
+  ,
+  // === Propostas do usuário: Títulos de Classe ===
+  {
+    id: 'campeao-de-ferro',
+    name: 'Campeão de Ferro',
+    description: 'Guerreiro que alcançou marcos de domínio',
+    rarity: 'raro',
+    category: 'achievement',
+    badge: '🛡️',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'portador-da-lamina-sagrada',
+    name: 'Portador da Lâmina Sagrada',
+    description: 'Guerreiro celebrado por sua lâmina consagrada',
+    rarity: 'raro',
+    category: 'achievement',
+    badge: '⚔️',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'teurgo-do-veu',
+    name: 'Teurgo do Véu',
+    description: 'Mago que tocou os véus do arcano',
+    rarity: 'raro',
+    category: 'achievement',
+    badge: '🪄',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'guardiao-dos-arcanos',
+    name: 'Guardião dos Arcanos',
+    description: 'Mago que resguarda segredos antigos',
+    rarity: 'epico',
+    category: 'achievement',
+    badge: '📜',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'olho-de-falcao',
+    name: 'Olho de Falcão',
+    description: 'Arqueiro de mira impecável',
+    rarity: 'raro',
+    category: 'achievement',
+    badge: '🎯',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'cacador-das-sombras',
+    name: 'Caçador das Sombras',
+    description: 'Arqueiro que caça sem ser visto',
+    rarity: 'epico',
+    category: 'achievement',
+    badge: '🏹',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'mao-da-luz',
+    name: 'Mão da Luz',
+    description: 'Clérigo de devoção e cura',
+    rarity: 'raro',
+    category: 'achievement',
+    badge: '✨',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'protetor-das-almas',
+    name: 'Protetor das Almas',
+    description: 'Clérigo que guarda o bem-estar espiritual',
+    rarity: 'epico',
+    category: 'achievement',
+    badge: '🕊️',
+    unlockedAt: new Date()
+  },
+
+  // === Títulos de Conquista ===
+  {
+    id: 'explorador-do-desconhecido',
+    name: 'Explorador do Desconhecido',
+    description: 'Aventurou-se por territórios inexplorados',
+    rarity: 'raro',
+    category: 'exploration',
+    badge: '🧭',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'vencedor-das-profundezas',
+    name: 'Vencedor das Profundezas',
+    description: 'Concluiu uma masmorra completa',
+    rarity: 'epico',
+    category: 'exploration',
+    badge: '🔱',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'domador-da-fortuna',
+    name: 'Domador da Fortuna',
+    description: 'Encontrou vários tesouros raros',
+    rarity: 'raro',
+    category: 'exploration',
+    badge: '💰',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'sombra-invicta',
+    name: 'Sombra Invicta',
+    description: 'Venceu batalhas consecutivas com maestria',
+    rarity: 'epico',
+    category: 'combat',
+    badge: '🗡️',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'o-persistente',
+    name: 'O Persistente',
+    description: 'Não desiste diante de falhas',
+    rarity: 'comum',
+    category: 'achievement',
+    badge: '🪨',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'o-iluminado',
+    name: 'O Iluminado',
+    description: 'Atingiu grandes patamares de sabedoria',
+    rarity: 'lendario',
+    category: 'special',
+    badge: '🔆',
+    unlockedAt: new Date()
+  },
+
+  // === Progressão / Reputação ===
+  {
+    id: 'aventureiro-iniciante',
+    name: 'Aventureiro Iniciante',
+    description: 'Primeiros passos na aventura',
+    rarity: 'comum',
+    category: 'achievement',
+    badge: '🌱',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'veterano-das-estradas',
+    name: 'Veterano das Estradas',
+    description: 'Longa jornada pelos caminhos do reino',
+    rarity: 'raro',
+    category: 'achievement',
+    badge: '🛣️',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'heroi-local',
+    name: 'Herói Local',
+    description: 'Respeitado pelas pessoas da região',
+    rarity: 'raro',
+    category: 'social',
+    badge: '🏡',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'guardiao-do-reino',
+    name: 'Guardião do Reino',
+    description: 'Defensor da paz e da ordem',
+    rarity: 'epico',
+    category: 'social',
+    badge: '🛡️',
+    unlockedAt: new Date()
+  },
+  // Lenda Viva já existe como 'legend'
+
+  // === Raros / Épicos ===
+  {
+    id: 'escolhido-pelo-destino',
+    name: 'O Escolhido pelo Destino',
+    description: 'Marcado por eventos únicos',
+    rarity: 'lendario',
+    category: 'special',
+    badge: '♾️',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'andarilho-eterno',
+    name: 'Andarilho Eterno',
+    description: 'Explorou incontáveis lugares',
+    rarity: 'epico',
+    category: 'exploration',
+    badge: '🧙‍♂️',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'coracao-de-dragao',
+    name: 'Coração de Dragão',
+    description: 'Provou coragem frente ao fogo dracônico',
+    rarity: 'lendario',
+    category: 'combat',
+    badge: '❤️‍🔥',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'mente-da-eternidade',
+    name: 'Mente da Eternidade',
+    description: 'Alcançou sabedoria transcendente',
+    rarity: 'epico',
+    category: 'achievement',
+    badge: '🧠',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'o-insone',
+    name: 'O Insone',
+    description: 'Sempre presente nas vigílias noturnas',
+    rarity: 'raro',
+    category: 'special',
+    badge: '🌙',
+    unlockedAt: new Date()
+  },
+
+  // === Sociais e Cosméticos ===
+  {
+    id: 'o-generoso',
+    name: 'O Generoso',
+    description: 'Conhecido por ajudar outros heróis',
+    rarity: 'comum',
+    category: 'social',
+    badge: '🎁',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'forjador-original',
+    name: 'O Forjador Original',
+    description: 'Fundador honrado do projeto',
+    rarity: 'epico',
+    category: 'special',
+    badge: '🏅',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'lenda-do-povo',
+    name: 'A Lenda do Povo',
+    description: 'Amado e celebrado nas tavernas',
+    rarity: 'raro',
+    category: 'social',
+    badge: '🍻',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'colecionador-de-reliquias',
+    name: 'Colecionador de Relíquias',
+    description: 'Reuniu um acervo lendário',
+    rarity: 'epico',
+    category: 'achievement',
+    badge: '🏺',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'mestre-dos-herois',
+    name: 'Mestre dos Heróis',
+    description: 'Criou heróis memoráveis',
+    rarity: 'epico',
+    category: 'social',
+    badge: '👨‍👩‍👦',
+    unlockedAt: new Date()
+  }
 ];
 
 // === ACHIEVEMENTS PARA TÍTULOS ===
@@ -395,6 +658,36 @@ export const TITLE_PASSIVE_ATTRIBUTE_BONUSES: Record<string, Partial<HeroAttribu
   // Especiais
   'beta-tester': { inteligencia: 1 },
   'first-hero': { constituicao: 1 }
+  ,
+  // === Propostas do usuário: bônus mapeados a atributos existentes ===
+  'campeao-de-ferro': { constituicao: 2 }, // aproxima +defesa
+  'portador-da-lamina-sagrada': { forca: 3 },
+  'teurgo-do-veu': { inteligencia: 2 }, // aproxima +MP
+  'guardiao-dos-arcanos': { inteligencia: 1, sabedoria: 1 },
+  'olho-de-falcao': { destreza: 2 },
+  'cacador-das-sombras': { destreza: 1, forca: 1 },
+  'mao-da-luz': { sabedoria: 2 },
+  'protetor-das-almas': { sabedoria: 1, constituicao: 1 },
+  'explorador-do-desconhecido': { inteligencia: 1 },
+  'vencedor-das-profundezas': { sabedoria: 1 },
+  'domador-da-fortuna': { carisma: 1 },
+  'sombra-invicta': { destreza: 1, forca: 1 },
+  'o-persistente': { constituicao: 1 },
+  'o-iluminado': { sabedoria: 2 },
+  'aventureiro-iniciante': {},
+  'veterano-das-estradas': { carisma: 1 },
+  'heroi-local': { carisma: 1 },
+  'guardiao-do-reino': { forca: 1, destreza: 1, constituicao: 1, inteligencia: 1, sabedoria: 1, carisma: 1 },
+  'escolhido-pelo-destino': { forca: 1, destreza: 1, constituicao: 1, inteligencia: 1, sabedoria: 1, carisma: 1 },
+  'andarilho-eterno': { inteligencia: 1 },
+  'coracao-de-dragao': { constituicao: 2 },
+  'mente-da-eternidade': { inteligencia: 2 },
+  'o-insone': {},
+  'o-generoso': { carisma: 1 },
+  'forjador-original': { carisma: 1 },
+  'lenda-do-povo': { carisma: 2 },
+  'colecionador-de-reliquias': { inteligencia: 1 },
+  'mestre-dos-herois': { carisma: 1 }
 };
 
 export function getTitleAttributeBonus(titleId?: string): Partial<HeroAttributes> {

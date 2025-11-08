@@ -105,14 +105,14 @@ export const ONBOARDING_FLOWS: OnboardingFlow[] = [
     steps: [
       {
         id: 'guild-system',
-        title: 'Sistema de Guildas',
+        title: 'Guilda dos Aventureiros',
         description: 'Una-se a outros heróis!',
-        content: 'As guildas permitem colaborar com outros jogadores, compartilhar missões e competir em rankings especiais.',
+        content: 'A Guilda dos Aventureiros é o hub para colaborar, compartilhar missões e competir em rankings especiais.',
         targetElement: '[data-testid="quick-nav-guilds"]',
         position: 'top',
         action: {
           type: 'navigate',
-          target: '/guilds'
+          target: '/guild-hub'
         }
       },
       {

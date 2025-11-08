@@ -10,11 +10,12 @@ import { FlowProgress } from './FlowProgress';
 import { FlowControls } from './FlowControls';
 import DMNarrator from './DMNarrator';
 import { FLOW_STEPS, getStepIndex } from '../utils/flow';
+import { worldStateManager } from '../utils/worldState';
 
 const Layout = () => {
   const location = useLocation();
   const [hudVisible, setHudVisible] = useState(true);
-  const { getSelectedHero, heroes } = useHeroStore();
+  const { getSelectedHero, heroes, updateHero } = useHeroStore();
   const selectedHero = getSelectedHero();
   const { notifications, removeNotification, addNotification } = useNotifications();
   const currentIdx = getStepIndex(location.pathname);
@@ -26,6 +27,25 @@ const Layout = () => {
     });
     return unsubscribe;
   }, [addNotification]);
+
+  // Tick global de regeneração: mantém HP, Mana e Stamina atualizando mesmo com HUD oculto
+  useEffect(() => {
+    if (!selectedHero) return;
+    const interval = setInterval(() => {
+      try {
+        const h = {
+          ...selectedHero,
+          derivedAttributes: { ...selectedHero.derivedAttributes },
+          stamina: { ...(selectedHero.stamina as any) },
+          stats: { ...selectedHero.stats }
+        } as any;
+        try { (worldStateManager as any).updateVitals?.(h); } catch {}
+        try { worldStateManager.updateStamina(h); } catch {}
+        updateHero(h.id, { derivedAttributes: h.derivedAttributes, stamina: h.stamina, stats: h.stats });
+      } catch {}
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [selectedHero?.id]);
 
   const isActive = (path: string) => {
     return location.pathname === path;
@@ -106,8 +126,8 @@ const Layout = () => {
                   </Link>
                 </li>
                 <li>
-                  <Link to="/guilds" className={`${navLinkClass('/guilds')} text-sm md:text-base`}>
-                    🏰 Guildas
+                  <Link to="/guild-hub" className={`${navLinkClass('/guild-hub')} text-sm md:text-base`}>
+                    🏰 Guilda dos Aventureiros
                   </Link>
                 </li>
                 <li>

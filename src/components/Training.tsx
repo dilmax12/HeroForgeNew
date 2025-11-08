@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useHeroStore } from '../store/heroStore';
+import { ATTRIBUTE_CONSTRAINTS } from '../utils/attributeSystem';
 
 interface TrainingOption {
   id: string;
@@ -134,10 +135,20 @@ const TRAINING_OPTIONS: TrainingOption[] = [
 ];
 
 const Training: React.FC = () => {
-  const { getSelectedHero, updateHero } = useHeroStore();
+  const { getSelectedHero, updateHero, updateDailyGoalProgress } = useHeroStore();
   const selectedHero = getSelectedHero();
   const [activeTraining, setActiveTraining] = useState<string | null>(null);
   const [trainingEndTime, setTrainingEndTime] = useState<number | null>(null);
+  const [tick, setTick] = useState(0); // força re-render para atualizar contador
+
+  // Atualiza o contador em tempo real enquanto houver treinamento ativo
+  useEffect(() => {
+    if (!activeTraining || !trainingEndTime) return;
+    const id = setInterval(() => {
+      setTick((t) => t + 1);
+    }, 500);
+    return () => clearInterval(id);
+  }, [activeTraining, trainingEndTime]);
 
   if (!selectedHero) {
     return (
@@ -168,6 +179,31 @@ const Training: React.FC = () => {
 
   const startTraining = (option: TrainingOption) => {
     if (!canAffordTraining(option) || !meetsRequirements(option)) return;
+
+    // Verificar limite diário de treinos e reset se mudou o dia
+    const now = new Date();
+    const nowISO = now.toISOString();
+    const lastDateStr = selectedHero.stats.lastTrainingDate ? new Date(selectedHero.stats.lastTrainingDate).toDateString() : '';
+    const todayStr = now.toDateString();
+    let trainingsToday = selectedHero.stats.trainingsToday || 0;
+    const dailyLimit = selectedHero.stats.trainingDailyLimit || 5;
+
+    if (lastDateStr !== todayStr) {
+      // Reset diário
+      trainingsToday = 0;
+      updateHero(selectedHero.id, {
+        stats: {
+          ...selectedHero.stats,
+          trainingsToday: 0,
+          lastTrainingDate: nowISO
+        }
+      });
+    }
+
+    if (trainingsToday >= dailyLimit) {
+      alert(`Limite diário de treinos atingido (${dailyLimit}). Volte amanhã.`);
+      return;
+    }
 
     // Deduzir custo
     updateHero(selectedHero.id, {
@@ -207,11 +243,33 @@ const Training: React.FC = () => {
     if (option.rewards.attributes) {
       updates.attributes = { ...selectedHero.attributes };
       Object.entries(option.rewards.attributes).forEach(([attr, value]) => {
-        updates.attributes[attr] = (selectedHero.attributes[attr] || 0) + value;
+        const current = (selectedHero.attributes as any)[attr] || 0;
+        const next = current + value;
+        (updates.attributes as any)[attr] = Math.min(ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE, next);
       });
     }
 
+    // Incrementar contador diário de treinos
+    const nowISO = new Date().toISOString();
+    const trainingsToday = (selectedHero.stats.trainingsToday || 0) + 1;
+    const dailyLimit = selectedHero.stats.trainingDailyLimit || 5;
+
+    updates.stats = {
+      ...selectedHero.stats,
+      trainingsToday,
+      lastTrainingDate: nowISO,
+      trainingDailyLimit: dailyLimit
+    };
+
     updateHero(selectedHero.id, updates);
+    // Atualizar metas diárias relacionadas
+    updateDailyGoalProgress(selectedHero.id, 'attribute-trained', 1);
+    if (option.rewards.xp) {
+      updateDailyGoalProgress(selectedHero.id, 'xp-gained', option.rewards.xp);
+    }
+    if (option.rewards.gold) {
+      updateDailyGoalProgress(selectedHero.id, 'gold-earned', option.rewards.gold);
+    }
     setActiveTraining(null);
     setTrainingEndTime(null);
 
@@ -244,6 +302,11 @@ const Training: React.FC = () => {
             💰 Ouro Disponível: {selectedHero.progression.gold}g
           </span>
         </div>
+        <div className="mt-2 bg-green-100 border border-green-400 rounded-lg p-2 inline-block ml-2">
+          <span className="text-green-800 font-medium">
+            🗓️ Treinos restantes hoje: {(selectedHero.stats.trainingDailyLimit || 5) - (selectedHero.stats.trainingsToday || 0)}
+          </span>
+        </div>
       </div>
 
       {/* Status do Treinamento Ativo */}
@@ -268,7 +331,10 @@ const Training: React.FC = () => {
         {TRAINING_OPTIONS.map((option) => {
           const canAfford = canAffordTraining(option);
           const meetsReqs = meetsRequirements(option);
-          const isAvailable = canAfford && meetsReqs && !activeTraining;
+          const trainingsToday = selectedHero.stats.trainingsToday || 0;
+          const dailyLimit = selectedHero.stats.trainingDailyLimit || 5;
+          const remaining = Math.max(0, dailyLimit - trainingsToday);
+          const isAvailable = canAfford && meetsReqs && !activeTraining && remaining > 0;
 
           return (
             <div
@@ -338,6 +404,7 @@ const Training: React.FC = () => {
                 {!canAfford ? 'Ouro Insuficiente' :
                  !meetsReqs ? 'Requisitos não atendidos' :
                  activeTraining ? 'Treinamento em andamento' :
+                 remaining <= 0 ? 'Limite diário atingido' :
                  'Iniciar Treinamento'}
               </button>
             </div>

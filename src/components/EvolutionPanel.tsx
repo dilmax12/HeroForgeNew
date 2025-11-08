@@ -61,12 +61,30 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
   heroId, 
   className = '' 
 }) => {
-  const { heroes, getHeroRankProgress, getRankLeaderboard, promoteHero, updateHero } = useHeroStore();
+  const { heroes, getHeroRankProgress, getRankLeaderboard, promoteHero, updateHero, getSelectedHero } = useHeroStore();
   const [viewMode, setViewMode] = useState<ViewMode>('overview');
   const [selectedHeroForComparison, setSelectedHeroForComparison] = useState<string>('');
   const [historyFilter, setHistoryFilter] = useState<RankLevel | 'all'>('all');
+  const [localHeroId, setLocalHeroId] = useState<string | null>(
+    heroId ?? getSelectedHero()?.id ?? (heroes[0]?.id ?? null)
+  );
 
-  const currentHero = heroId ? heroes.find(h => h.id === heroId) : heroes[0];
+  // Sincronizar quando heroId de props mudar
+  useEffect(() => {
+    if (heroId) setLocalHeroId(heroId);
+  }, [heroId]);
+
+  // Garantir seleção válida ao carregar ou quando a lista de heróis muda
+  useEffect(() => {
+    if (!localHeroId && heroes.length > 0) {
+      setLocalHeroId(getSelectedHero()?.id ?? heroes[0].id);
+    }
+  }, [heroes, localHeroId]);
+
+  // Usar o herói escolhido localmente por padrão
+  const currentHero = (localHeroId ? heroes.find(h => h.id === localHeroId) : undefined)
+    || getSelectedHero() 
+    || heroes[0];
 
   // Verificar e inicializar rankData para heróis existentes (migração)
   useEffect(() => {
@@ -133,6 +151,18 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
             <p className="text-amber-300">{currentHero.class} • {currentHero.race}</p>
           </div>
           <LocalRankCard rank={rankProgress.progress.currentRank} size="large" />
+        </div>
+        <div className="mt-2 flex items-center gap-3">
+          <label className="text-xs text-amber-300">Selecionar herói:</label>
+          <select
+            value={localHeroId ?? ''}
+            onChange={(e) => setLocalHeroId(e.target.value)}
+            className="bg-slate-800 text-amber-100 text-sm px-2 py-1 rounded border border-amber-700/40"
+          >
+            {heroes.map(h => (
+              <option key={h.id} value={h.id}>{h.name}</option>
+            ))}
+          </select>
         </div>
         
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -216,11 +246,18 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
                 {(rankProgress.progress.currentXP || 0).toLocaleString()} / {(rankProgress.progress.requiredXP || 0).toLocaleString()}
               </span>
             </div>
-            <div className="w-full bg-slate-600 rounded-full h-2">
-              <div 
-                className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500"
-                style={{ width: `${((rankProgress.progress.currentXP || 0) / (rankProgress.progress.requiredXP || 1)) * 100}%` }}
-              />
+            <div className="w-full bg-slate-600 rounded-full h-2 overflow-hidden">
+              {(() => {
+                const pct = Math.max(0, Math.min(100,
+                  ((rankProgress.progress.currentXP || 0) / Math.max(1, (rankProgress.progress.requiredXP || 0))) * 100
+                ));
+                return (
+                  <div
+                    className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${pct}%` }}
+                  />
+                );
+              })()}
             </div>
             <div className="text-xs text-slate-400">
               {rankProgress.progress.nextRank ? 
@@ -238,11 +275,18 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
                 {rankProgress.progress.currentMissions || 0} / {rankProgress.progress.requiredMissions || 0}
               </span>
             </div>
-            <div className="w-full bg-slate-600 rounded-full h-2">
-              <div 
-                className="bg-gradient-to-r from-green-500 to-emerald-500 h-2 rounded-full transition-all duration-500"
-                style={{ width: `${((rankProgress.progress.currentMissions || 0) / (rankProgress.progress.requiredMissions || 1)) * 100}%` }}
-              />
+            <div className="w-full bg-slate-600 rounded-full h-2 overflow-hidden">
+              {(() => {
+                const pct = Math.max(0, Math.min(100,
+                  ((rankProgress.progress.currentMissions || 0) / Math.max(1, (rankProgress.progress.requiredMissions || 0))) * 100
+                ));
+                return (
+                  <div
+                    className="bg-gradient-to-r from-green-500 to-emerald-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${pct}%` }}
+                  />
+                );
+              })()}
             </div>
             <div className="text-xs text-slate-400">
               {rankProgress.progress.nextRank ? 
@@ -250,9 +294,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
                 'Todas as missões concluídas!'
               }
             </div>
-            <div className="text-xs text-slate-400">
-              Faltam {rankProgress.progress.requiredMissions - rankProgress.progress.currentMissions} missões
-            </div>
+            {/* Mensagem acima já cobre o restante de missões; removendo duplicação */}
           </div>
         </div>
 
