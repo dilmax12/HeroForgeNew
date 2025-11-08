@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useHeroStore } from '../store/heroStore';
 import { dynamicMissionsAI } from '../services/dynamicMissionsAI';
 import { generateOutcomeNarrative } from '../services/narratorAI';
@@ -51,9 +51,13 @@ export default function AIDungeonRun() {
   const currentHp = hero.derivedAttributes.currentHp ?? maxHp;
   const isRecovering = currentHp <= 0;
 
+  const inflightRef = useRef(false);
+
   useEffect(() => {
     // Gera a descrição e as opções da etapa atual via IA
     const run = async () => {
+      if (inflightRef.current) return; // evita chamadas concorrentes
+      inflightRef.current = true;
       setLoading(true);
       setOutcome(null);
       try {
@@ -71,10 +75,11 @@ export default function AIDungeonRun() {
         ]);
       } finally {
         setLoading(false);
+        inflightRef.current = false;
       }
     };
     run();
-  }, [stageIndex, hero, difficulty]);
+  }, [stageIndex, hero.id, difficulty]);
 
   const STAMINA_COST_PER_STAGE = 2;
   const applyStaminaCost = (amount: number) => {

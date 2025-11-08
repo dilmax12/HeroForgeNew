@@ -40,6 +40,9 @@ export interface NPCDialogue {
 }
 
 export class DynamicMissionsAI {
+  private inflightMission: Promise<DynamicMission> | null = null;
+  private lastCallTs: number = 0;
+  private readonly minIntervalMs: number = 8000;
   private getSystemPrompt(): string {
     return `Você é um mestre de RPG criando missões no mundo "A Balada do Véu Partido".
 
@@ -136,60 +139,76 @@ Formato da resposta em JSON:
   }
 
   async generateMission(request: MissionGenerationRequest): Promise<DynamicMission> {
-    try {
-      // Se o serviço de IA não estiver configurado, retorne missão fallback
-      if (!aiService.isConfigured()) {
-        return this.generateFallbackMission(request);
-      }
+    const now = Date.now();
+    // Se já há uma requisição em andamento e estamos dentro do intervalo mínimo, reutiliza a promessa
+    if (this.inflightMission && (now - this.lastCallTs) < this.minIntervalMs) {
+      return this.inflightMission;
+    }
+    this.lastCallTs = now;
 
-      const response = await aiService.generateText({
-        prompt: this.buildMissionPrompt(request),
-        systemMessage: this.getSystemPrompt(),
-        maxTokens: 800,
-        temperature: 0.8
-      });
-
-      // Parse robusto do JSON da resposta
-      let missionData: any = null;
+    this.inflightMission = (async () => {
       try {
-        missionData = JSON.parse(response.text);
-      } catch {
-        // Tentar extrair um bloco JSON da string
-        const match = response.text.match(/\{[\s\S]*\}/);
-        if (match) {
-          try { missionData = JSON.parse(match[0]); } catch {}
+        // Se o serviço de IA não estiver configurado, retorne missão fallback
+        if (!aiService.isConfigured()) {
+          return this.generateFallbackMission(request);
         }
-      }
 
-      // Validar estrutura mínima
-      if (!missionData || !missionData.title || !missionData.description || !missionData.objectives || !missionData.rewards) {
+        const response = await aiService.generateText({
+          prompt: this.buildMissionPrompt(request),
+          systemMessage: this.getSystemPrompt(),
+          // Reduzimos tokens para aliviar TPM em provedores com limite
+          maxTokens: 600,
+          temperature: 0.8
+        });
+
+        // Parse robusto do JSON da resposta
+        let missionData: any = null;
+        try {
+          missionData = JSON.parse(response.text);
+        } catch {
+          // Tentar extrair um bloco JSON da string
+          const match = response.text.match(/\{[\s\S]*\}/);
+          if (match) {
+            try { missionData = JSON.parse(match[0]); } catch {}
+          }
+        }
+
+        // Validar estrutura mínima
+        if (!missionData || !missionData.title || !missionData.description || !missionData.objectives || !missionData.rewards) {
+          return this.generateFallbackMission(request);
+        }
+        
+        return {
+          id: this.generateMissionId(),
+          title: missionData.title,
+          description: missionData.description,
+          narrative: missionData.narrative,
+          objectives: missionData.objectives.map((obj: any, index: number) => ({
+            id: `obj_${index}`,
+            description: obj.description,
+            type: obj.type,
+            target: obj.target,
+            quantity: obj.quantity,
+            completed: false,
+            optional: obj.optional || false
+          })),
+          rewards: missionData.rewards,
+          difficulty: request.difficulty,
+          type: request.missionType,
+          estimatedDuration: missionData.estimatedDuration,
+          location: missionData.location,
+          npcDialogue: missionData.npcDialogue
+        };
+      } catch (error) {
+        console.error('Error generating dynamic mission:', error);
         return this.generateFallbackMission(request);
       }
-      
-      return {
-        id: this.generateMissionId(),
-        title: missionData.title,
-        description: missionData.description,
-        narrative: missionData.narrative,
-        objectives: missionData.objectives.map((obj: any, index: number) => ({
-          id: `obj_${index}`,
-          description: obj.description,
-          type: obj.type,
-          target: obj.target,
-          quantity: obj.quantity,
-          completed: false,
-          optional: obj.optional || false
-        })),
-        rewards: missionData.rewards,
-        difficulty: request.difficulty,
-        type: request.missionType,
-        estimatedDuration: missionData.estimatedDuration,
-        location: missionData.location,
-        npcDialogue: missionData.npcDialogue
-      };
-    } catch (error) {
-      console.error('Error generating dynamic mission:', error);
-      return this.generateFallbackMission(request);
+    })();
+
+    try {
+      return await this.inflightMission;
+    } finally {
+      this.inflightMission = null;
     }
   }
 

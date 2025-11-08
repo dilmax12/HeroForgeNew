@@ -48,6 +48,24 @@ class AIService {
       .finally(() => clearTimeout(id));
   }
 
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, Math.max(0, ms)));
+  }
+
+  private parseRetrySeconds(messageOrHeader?: string | null): number | undefined {
+    if (!messageOrHeader) return undefined;
+    // Try standard Retry-After header (seconds)
+    const asNumber = Number(messageOrHeader);
+    if (!isNaN(asNumber) && asNumber > 0) return asNumber;
+    // Try to parse "Please try again in Xs" pattern
+    const match = messageOrHeader.match(/try again in\s*([\d.]+)s/i);
+    if (match) {
+      const secs = parseFloat(match[1]);
+      if (!isNaN(secs) && secs > 0) return secs;
+    }
+    return undefined;
+  }
+
   private loadConfig(): AIConfig {
     // Força configuração consistente: texto via Groq proxy backend e imagem via rota backend
     const provider: AIProvider = 'groq';
@@ -95,40 +113,72 @@ class AIService {
       // Suporte a dois proxies: /api/groq-chat (POST direto) e /api/groq-openai (OpenAI path)
       endpoint = base.includes('groq-chat') ? base : `${base}/chat/completions`;
     }
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: this.config.model,
-        messages: [
-          ...(request.systemMessage ? [{ role: 'system', content: request.systemMessage }] : []),
-          ...(request.context ? [{ role: 'user', content: request.context }] : []),
-          { role: 'user', content: request.prompt }
-        ],
-        max_tokens: request.maxTokens || this.config.maxTokens,
-        temperature: request.temperature || this.config.temperature
-      })
-    });
+    const maxRetries = 3;
+    let attempt = 0;
+    let lastErrorMsg = '';
 
-    if (!response.ok) {
+    while (attempt <= maxRetries) {
+      const maxTokensForAttempt = Math.max(200, (request.maxTokens || this.config.maxTokens || 2000) - (attempt * 200));
+
+      const response = await this.fetchWithTimeout(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: this.config.model,
+          messages: [
+            ...(request.systemMessage ? [{ role: 'system', content: request.systemMessage }] : []),
+            ...(request.context ? [{ role: 'user', content: request.context }] : []),
+            { role: 'user', content: request.prompt }
+          ],
+          max_tokens: maxTokensForAttempt,
+          temperature: request.temperature || this.config.temperature
+        })
+      }, 12000);
+
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          text: data.choices[0].message.content,
+          usage: data.usage,
+          model: data.model,
+          provider: 'openai'
+        };
+      }
+
       const raw = await response.text();
       let error: any = {};
       try { error = JSON.parse(raw); } catch { error = { error: { message: raw } }; }
+      lastErrorMsg = error.error?.message || raw || 'Unknown error occurred';
+
+      if (response.status === 429) {
+        // Rate limit: aplicar backoff exponencial com jitter e respeitar Retry-After se presente
+        const retryAfterHeader = response.headers.get('retry-after');
+        const retryAfterFromHeader = this.parseRetrySeconds(retryAfterHeader);
+        const retryAfterFromMsg = this.parseRetrySeconds(lastErrorMsg);
+        const baseWaitMs = Math.round((retryAfterFromHeader ?? retryAfterFromMsg ?? 3) * 1000);
+        const exponentialMs = baseWaitMs * Math.pow(2, attempt);
+        const jitterMs = Math.floor(Math.random() * 300);
+        await this.sleep(Math.max(1000, exponentialMs + jitterMs));
+        attempt++;
+        continue;
+      }
+
+      // Outros erros: lançar imediatamente
       throw new AIError({
         code: error.error?.code || 'unknown_error',
-        message: error.error?.message || raw || 'Unknown error occurred',
+        message: lastErrorMsg,
         provider: 'openai',
         retryable: response.status >= 500
       });
     }
 
-    const data = await response.json();
-    return {
-      text: data.choices[0].message.content,
-      usage: data.usage,
-      model: data.model,
-      provider: 'openai'
-    };
+    // Se exceder retries por rate limit, propaga erro amigável e marcando como retryable
+    throw new AIError({
+      code: 'rate_limit',
+      message: lastErrorMsg || 'Rate limit reached. Please try again later.',
+      provider: 'openai',
+      retryable: true
+    });
   }
 
   private async makeHuggingFaceTextRequest(request: AITextRequest): Promise<AITextResponse> {
