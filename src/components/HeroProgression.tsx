@@ -38,19 +38,41 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
   const equippedArmor = getEquippedItem(hero.inventory.equippedArmor);
   const equippedAccessory = getEquippedItem(hero.inventory.equippedAccessory);
 
-  // Calcular bônus totais dos equipamentos
+  // Calcular bônus totais dos equipamentos (efeitos diretos + bônus de atributos)
   const getTotalBonuses = () => {
     let bonuses = { attack: 0, defense: 0, hp: 0, mp: 0 };
-    
+
     [equippedWeapon, equippedArmor, equippedAccessory].forEach(item => {
-      if (item?.effects) {
+      if (!item) return;
+
+      // Efeitos diretos do item (se existirem)
+      if (item.effects) {
         bonuses.attack += item.effects.attack || 0;
         bonuses.defense += item.effects.defense || 0;
         bonuses.hp += item.effects.hp || 0;
         bonuses.mp += item.effects.mp || 0;
       }
+
+      // Bônus de atributos do item (convertidos para métricas exibidas)
+      if (item.bonus) {
+        const forcaBonus = item.bonus.forca || 0;
+        const destrezaBonus = item.bonus.destreza || 0;
+        const constituicaoBonus = item.bonus.constituicao || 0;
+        const inteligenciaBonus = item.bonus.inteligencia || 0;
+
+        // Ataque: refletir aumento direto de Força
+        bonuses.attack += forcaBonus;
+
+        // Defesa (Classe de Armadura): depende de Destreza (regra: +1 AC a cada 4 DEX)
+        bonuses.defense += Math.floor(destrezaBonus / 4);
+
+        // HP/MP adicionais conforme fórmula dos derivados
+        // hp = hpBase + floor(CON/2) * level ; mp = mpBase + floor(INT/2) * level
+        bonuses.hp += Math.floor(constituicaoBonus / 2) * hero.progression.level;
+        bonuses.mp += Math.floor(inteligenciaBonus / 2) * hero.progression.level;
+      }
     });
-    
+
     return bonuses;
   };
 

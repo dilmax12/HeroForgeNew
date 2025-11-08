@@ -1122,7 +1122,14 @@ export const useHeroStore = create<HeroState>()(
           }
           
           // Atualizar inventário e forçar recálculo dos atributos derivados
-          get().updateHero(heroId, { inventory: updatedInventory });
+          const derived = calculateDerivedAttributes(
+            hero.attributes,
+            hero.class,
+            hero.progression.level,
+            updatedInventory,
+            hero.activeTitle
+          );
+          get().updateHero(heroId, { inventory: updatedInventory, derivedAttributes: derived });
         }
         
         return result.success;
