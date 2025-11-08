@@ -153,7 +153,7 @@ const ReputationPanel: React.FC<ReputationPanelProps> = ({ hero }) => {
       <div className="mt-6 p-4 bg-blue-900/30 rounded-lg border border-blue-500/30">
         <h4 className="text-sm font-semibold text-blue-400 mb-2">💡 Dicas de Reputação</h4>
         <ul className="text-xs text-gray-300 space-y-1">
-          <li>• Missões narrativas afetam sua reputação com diferentes facções</li>
+          <li>• Missões do hub da Guilda afetam sua reputação com facções</li>
           <li>• Maior reputação = melhores recompensas e missões especiais</li>
           <li>• Cuidado: algumas facções são inimigas entre si</li>
           <li>• Reputação negativa pode fechar certas oportunidades</li>

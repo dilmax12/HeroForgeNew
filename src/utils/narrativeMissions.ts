@@ -523,7 +523,7 @@ export function applyChoiceConsequences(heroId: string, choice: EnhancedQuestCho
         if (typeof effect.value === 'number') store.gainXP(heroId, effect.value);
         break;
       case 'reputation':
-        if (effect.target && typeof effect.value === 'number') store.updateReputation(heroId, effect.target, effect.value);
+        if (effect.target && typeof effect.value === 'number') store.updateReputation(effect.target, effect.value);
         break;
       case 'item':
         if (effect.target) store.addItemToInventory(heroId, effect.target, 1);

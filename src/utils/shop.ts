@@ -7,6 +7,25 @@ import { Item, Hero } from '../types/hero';
 // === CATÁLOGO DE ITENS DA LOJA ===
 
 export const SHOP_ITEMS: Item[] = [
+  // === ITENS NARRATIVOS (ARTEFATOS) ===
+  {
+    id: 'orbe-amaldicoado',
+    name: 'Orbe Amaldiçoado',
+    description: 'Artefato sombrio que exala energia maligna. Não consumível.',
+    type: 'material',
+    rarity: 'epico',
+    price: 500,
+    icon: '🕳️'
+  },
+  {
+    id: 'orbe-purificado',
+    name: 'Orbe Purificado',
+    description: 'Artefato purificado por magia sagrada. Não consumível.',
+    type: 'material',
+    rarity: 'raro',
+    price: 480,
+    icon: '🔮'
+  },
   // === CONSUMÍVEIS ===
   {
     id: 'pocao-pequena',

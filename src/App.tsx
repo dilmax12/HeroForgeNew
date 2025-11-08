@@ -28,7 +28,6 @@ import { WorldStateDemo } from './components/WorldStateDemo'
 import Inventory from './components/Inventory'
 import { useEffect } from 'react'
 import { useHeroStore } from './store/heroStore'
-import { EnhancedQuestBoard } from './components/EnhancedQuestBoard'
 import { HeroJournal } from './components/HeroJournal'
 import QuickMission from './components/QuickMission'
 import JourneyFlow from './components/JourneyFlow'
@@ -255,25 +254,6 @@ function AIRecommendationsPanelWrapper() {
 }
 
 // Componente wrapper para EnhancedQuestBoard que precisa do herói selecionado
-function EnhancedQuestBoardWrapper() {
-  const { getSelectedHero } = useHeroStore();
-  const selectedHero = getSelectedHero();
-  
-  if (!selectedHero) {
-    return (
-      <div className="max-w-4xl mx-auto p-6 text-center">
-        <div className="text-6xl mb-4">📜</div>
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
-        <p className="text-gray-600 mb-6">Selecione um herói para acessar as missões narrativas.</p>
-        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
-          Voltar à Lista de Heróis
-        </Link>
-      </div>
-    );
-  }
-  
-  return <EnhancedQuestBoard hero={selectedHero} />;
-}
 
 // Componente wrapper para HeroJournal que precisa do herói selecionado
 function HeroJournalWrapper() {
@@ -395,7 +375,7 @@ function App() {
           <Route path="ai-avatar" element={<AIAvatarGeneratorWrapper />} />
           <Route path="ai-missions" element={<DynamicMissionsPanelWrapper />} />
           <Route path="ai-recommendations" element={<AIRecommendationsPanelWrapper />} />
-          <Route path="enhanced-quests" element={<EnhancedQuestBoardWrapper />} />
+          {/* Rotas de missões narrativas removidas */}
           <Route path="hero-journal" element={<HeroJournalWrapper />} />
           <Route path="quick-mission" element={<QuickMissionWrapper />} />
           <Route path="admin" element={<AdminDashboard />} />

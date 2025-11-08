@@ -64,21 +64,27 @@ const NarrativeQuest: React.FC<NarrativeQuestProps> = ({ quest, onComplete, onCl
 
     // Aplicar recompensas e mudanças
     if (result.success) {
-      // Aplicar recompensas
-      if (result.rewards.xp > 0) {
+      // XP
+      if (typeof result.rewards.xp === 'number' && result.rewards.xp !== 0) {
         gainXP(selectedHero.id, result.rewards.xp);
       }
-      if (result.rewards.gold > 0) {
+      // Ouro (permite valores negativos para escolhas como negociação)
+      if (typeof result.rewards.gold === 'number' && result.rewards.gold !== 0) {
         gainGold(selectedHero.id, result.rewards.gold);
       }
-      if (result.rewards.item) {
-        addItemToInventory(selectedHero.id, result.rewards.item);
+      // Itens (lista de IDs)
+      if (Array.isArray(result.rewards.items) && result.rewards.items.length > 0) {
+        result.rewards.items.forEach((itemId: string) => {
+          addItemToInventory(selectedHero.id, itemId, 1);
+        });
       }
       
-      // Aplicar mudanças de reputação
+      // Mudanças de reputação (por facção)
       if (result.reputationChanges) {
         Object.entries(result.reputationChanges).forEach(([faction, change]) => {
-          updateReputation(faction, change as number);
+          if (typeof change === 'number' && change !== 0) {
+            updateReputation(faction, change);
+          }
         });
       }
       

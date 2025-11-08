@@ -41,7 +41,9 @@ const HeroDetail = () => {
     const item = SHOP_ITEMS.find(i => i.id === itemId);
     return item ? item.name : itemId;
   };
-  const inventoryEntries = Object.entries(hero.inventory.items || {});
+  const inventoryEntries = Object
+    .entries(hero.inventory.items || {})
+    .filter(([, qty]) => (qty as number) > 0);
   const myInvites = getReferralInvitesForHero(hero.id);
 
   return (

@@ -156,7 +156,7 @@ export const HeroJournal: React.FC<HeroJournalProps> = ({ hero }) => {
           <div className="text-center py-8">
             <div className="text-gray-400 text-lg">Nenhuma decisão registrada ainda</div>
             <div className="text-gray-500 text-sm mt-2">
-              Complete missões narrativas para começar a construir sua história
+              Complete missões e eventos para começar a construir sua história
             </div>
           </div>
         ) : (

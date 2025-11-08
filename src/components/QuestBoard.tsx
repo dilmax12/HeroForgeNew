@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useHeroStore } from '../store/heroStore';
 import { Quest, QuestDifficulty, Hero } from '../types/hero';
 import { generateQuestBoard } from '../utils/quests';
-import { generateNarrativeMission } from '../utils/narrativeMissions';
-import NarrativeQuest from './NarrativeQuest';
 import { getClassIcon } from '../styles/medievalTheme';
 import { ELEMENT_INFO } from '../utils/elementSystem';
 import { getElementInfoSafe } from '../utils/elementSystem';
@@ -98,9 +96,7 @@ const QuestBoard: React.FC = () => {
   
   const selectedHero = getSelectedHero();
   
-  const [selectedTab, setSelectedTab] = useState<'available' | 'narrative' | 'active' | 'completed'>('available');
-  const [selectedNarrativeQuest, setSelectedNarrativeQuest] = useState<Quest | null>(null);
-  const [narrativeQuests, setNarrativeQuests] = useState<Quest[]>([]);
+  const [selectedTab, setSelectedTab] = useState<'available' | 'active' | 'completed'>('available');
   const [forceUpdate, setForceUpdate] = useState(0);
 
   // Selecionar automaticamente o primeiro herói se não há nenhum selecionado
@@ -117,17 +113,7 @@ const QuestBoard: React.FC = () => {
     console.log('Estado do herói selecionado mudou:', selectedHero?.name || 'Nenhum');
   }, [selectedHero]);
 
-  // Gerar missões narrativas quando o herói for selecionado
-  useEffect(() => {
-    if (selectedHero) {
-      const newNarrativeQuests = [];
-      // Gerar 2-3 missões narrativas baseadas no nível do herói
-      for (let i = 0; i < Math.min(3, Math.max(1, Math.floor(selectedHero.progression.level / 2))); i++) {
-        newNarrativeQuests.push(generateNarrativeMission(selectedHero.progression.level));
-      }
-      setNarrativeQuests(newNarrativeQuests);
-    }
-  }, [selectedHero?.id, selectedHero?.progression.level]);
+  // Narrativas removidas: não geramos mais missões narrativas
 
   const handleHeroSelect = (heroId: string) => {
     console.log('Clique detectado! Selecionando herói:', heroId);
@@ -150,17 +136,7 @@ const QuestBoard: React.FC = () => {
     }, 100);
   };
 
-  const handleNarrativeQuestComplete = (questId: string, outcome: any) => {
-    // Aplicar recompensas ao herói
-    if (outcome.success && selectedHero) {
-      // Aqui você aplicaria as recompensas usando o store
-      console.log('Aplicando recompensas:', outcome.rewards);
-      
-      // Remover a missão narrativa da lista
-      setNarrativeQuests(prev => prev.filter(q => q.id !== questId));
-    }
-    setSelectedNarrativeQuest(null);
-  };
+  // Removido: fluxo de conclusão de missões narrativas
 
   if (!selectedHero) {
     return (
@@ -339,16 +315,7 @@ const QuestBoard: React.FC = () => {
         >
           Disponíveis ({availableQuests.length})
         </button>
-        <button
-          onClick={() => setSelectedTab('narrative')}
-          className={`flex-1 py-2 px-4 rounded-md font-medium transition-colors ${
-            selectedTab === 'narrative'
-              ? 'bg-purple-600 text-white'
-              : 'text-gray-400 hover:text-white'
-          }`}
-        >
-          Narrativas ({narrativeQuests.length})
-        </button>
+        {/* Aba Narrativas removida */}
         <button
           onClick={() => setSelectedTab('active')}
           className={`flex-1 py-2 px-4 rounded-md font-medium transition-colors ${
@@ -374,17 +341,7 @@ const QuestBoard: React.FC = () => {
       {/* Quest Content */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {selectedTab === 'available' && availableQuests.map(quest => renderQuestCard(quest))}
-        {selectedTab === 'narrative' && narrativeQuests.map(quest => (
-          <div key={quest.id} className="bg-gradient-to-br from-purple-900/50 to-purple-800/30 rounded-lg p-6 border border-purple-500 hover:border-purple-400 transition-all">
-            {renderQuestCard(quest)}
-            <button
-              onClick={() => setSelectedNarrativeQuest(quest)}
-              className="mt-4 w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-md font-medium transition-colors"
-            >
-              Iniciar Missão Narrativa
-            </button>
-          </div>
-        ))}
+        {/* Conteúdo Narrativas removido */}
         {selectedTab === 'active' && selectedHero.activeQuests
           .map(id => availableQuests.find(q => q.id === id))
           .filter((q): q is Quest => !!q)
@@ -422,21 +379,9 @@ const QuestBoard: React.FC = () => {
         </div>
       )}
 
-      {selectedTab === 'narrative' && narrativeQuests.length === 0 && (
-        <div className="text-center p-8">
-          <p className="text-gray-400">Nenhuma missão narrativa disponível no momento.</p>
-        </div>
-      )}
+      {/* Mensagens de estado de narrativas removidas */}
 
-      {/* Narrative Quest Modal */}
-      {selectedNarrativeQuest && (
-        <NarrativeQuest
-          quest={selectedNarrativeQuest}
-          hero={selectedHero}
-          onComplete={handleNarrativeQuestComplete}
-          onClose={() => setSelectedNarrativeQuest(null)}
-        />
-      )}
+      {/* Modal narrativo removido */}
     </div>
   );
 };

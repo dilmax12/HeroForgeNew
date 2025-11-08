@@ -18,7 +18,6 @@ import { logActivity } from '../utils/activitySystem';
 import { trackMetric } from '../utils/metricsSystem';
 import { rankSystem } from '../utils/rankSystem';
 import { worldStateManager } from '../utils/worldState';
-import { rollDecision, applyChoiceConsequences, recordDecision } from '../utils/narrativeMissions';
 import { ATTRIBUTE_CONSTRAINTS } from '../utils/attributeSystem';
 import { ATTRIBUTE_POINTS_PER_LEVEL, checkLevelUp } from '../utils/progression';
 
@@ -41,7 +40,6 @@ interface HeroState {
   refreshQuests: (heroLevel?: number) => void;
   acceptQuest: (heroId: string, questId: string) => boolean;
   completeQuest: (heroId: string, questId: string, autoResolve?: boolean) => CombatResult | null;
-  makeQuestChoice: (heroId: string, questId: string, choice: EnhancedQuestChoice, partySize?: number) => boolean;
   
   // === SISTEMA DE PROGRESSÃO ===
   gainXP: (heroId: string, xp: number) => void;
@@ -644,7 +642,13 @@ export const useHeroStore = create<HeroState>()(
         // Adicionar itens das recompensas
         if (quest.rewards?.items) {
           quest.rewards.items.forEach(item => {
-            get().addItemToInventory(heroId, item.id, item.qty);
+            // Suporta tanto formato objeto { id, qty } quanto string 'itemId'
+            if (typeof (item as any) === 'string') {
+              get().addItemToInventory(heroId, item as unknown as string, 1);
+            } else {
+              const it = item as { id: string; qty?: number };
+              get().addItemToInventory(heroId, it.id, it.qty ?? 1);
+            }
           });
         }
         
@@ -737,47 +741,7 @@ export const useHeroStore = create<HeroState>()(
         return combatResult;
       },
       
-      // Registra escolhas narrativas com roll e persistência
-      makeQuestChoice: (heroId: string, questId: string, choice: EnhancedQuestChoice, partySize = 1) => {
-        const state = get();
-        const hero = state.heroes.find(h => h.id === heroId);
-        if (!hero) return false;
-
-        const outcome = rollDecision(hero, choice, partySize);
-        applyChoiceConsequences(heroId, choice, outcome.success);
-        recordDecision(heroId, questId, choice, outcome);
-
-        // Atualizar campos da missão (choiceMade, narrativa, etc.)
-        const questIndex = state.availableQuests.findIndex(q => q.id === questId);
-        if (questIndex >= 0) {
-          const q = state.availableQuests[questIndex];
-          const updated = { ...q, choiceMade: choice.id } as Quest;
-          set({
-            availableQuests: [
-              ...state.availableQuests.slice(0, questIndex),
-              updated,
-              ...state.availableQuests.slice(questIndex + 1)
-            ]
-          });
-        }
-
-        // Efeitos de mundo persistentes simplificados (exemplo)
-        // Ex.: criação de inimigo pessoal quando falha uma negociação ou escolhe saquear
-        if (!outcome.success && choice.failureEffects?.some(e => e.type === 'npc_relation')) {
-          const ws = hero.worldState || worldStateManager.initializeWorldState();
-          ws.npcStatus = ws.npcStatus || {} as any;
-          ws.npcStatus['inimigo-pessoal'] = {
-            alive: true,
-            relationToPlayer: -50,
-            lastInteraction: 'emboscada',
-            currentLocation: 'estrada-real',
-            questsAvailable: []
-          } as any;
-          set({ heroes: state.heroes.map(h => (h.id === hero.id ? { ...hero, worldState: ws } : h)) });
-        }
-
-        return outcome.success;
-      },
+      // Fluxo de escolhas narrativas removido
 
       // === SISTEMA DE PROGRESSÃO ===
       
@@ -874,21 +838,7 @@ export const useHeroStore = create<HeroState>()(
                   relatedQuests: hero.completedQuests || []
                 });
 
-                // Opcional: gerar missão narrativa associada ao capítulo
-                const questId = `narrative-chapter-${hero.id}-${m}`;
-                const narrativeQuest = {
-                  id: questId,
-                  title: `Jornada de ${hero.name}: Capítulo ${index}`,
-                  description: `Prove seu crescimento no marco de nível ${m}. Um desafio temático baseado nos feitos recentes.`,
-                  type: 'narrative' as const,
-                  difficulty: 'medio' as const,
-                  levelRequirement: m,
-                  rewards: { gold: 0, xp: 100, items: [{ id: 'pergaminho-xp', qty: 1 }] },
-                  repeatable: false,
-                  sticky: true,
-                  hasChoices: false
-                };
-                set(state => ({ availableQuests: [...state.availableQuests, narrativeQuest] }));
+                // Missões narrativas associadas ao capítulo removidas
               }
             });
             if (chaptersToAdd.length > 0) {
@@ -1606,11 +1556,13 @@ export const useHeroStore = create<HeroState>()(
          if (!hero) return;
 
          const updated = updateHeroReputation(hero, factionName, change);
+         // Usar o estado mais recente do herói ao mesclar progressão para evitar sobrescrever ouro/XP
+         const latest = get().heroes.find(h => h.id === hero.id) || hero;
          get().updateHero(hero.id, {
            reputationFactions: updated.reputationFactions,
            progression: {
-             ...hero.progression,
-             reputation: hero.progression.reputation + change
+             ...latest.progression,
+             reputation: (latest.progression?.reputation || 0) + change
            }
          });
        },
