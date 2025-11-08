@@ -3,19 +3,20 @@ import Layout from './components/Layout'
 import HeroList from './components/HeroList'
 import HeroForm from './components/HeroForm'
 import HeroDetail from './components/HeroDetail'
-import TestComponent from './components/TestComponent'
+// import TestComponent from './components/TestComponent'
 import HeroProgression from './components/HeroProgression'
 import GuildSystem from './components/GuildSystem'
-import PlaytestPanel from './components/PlaytestPanel'
+import PartySystem from './components/PartySystem'
+import AdventurersGuildHub from './components/AdventurersGuildHub'
 import QuestBoard from './components/QuestBoard'
 import TitlesManager from './components/TitlesManager'
 import Leaderboards from './components/Leaderboards'
 import DailyGoals from './components/DailyGoals'
-import OnboardingManager from './components/OnboardingManager'
-import OnboardingDetector from './components/OnboardingDetector'
+// Onboarding desativado temporariamente
+// import OnboardingManager from './components/OnboardingManager'
+// import OnboardingDetector from './components/OnboardingDetector'
 import EventsPanel from './components/EventsPanel'
 import ActivityFeed from './components/ActivityFeed'
-import MetricsDashboard from './components/MetricsDashboard'
 import { EvolutionPanel } from './components/EvolutionPanel'
 import { RankCelebrationManager } from './components/RankCelebration'
 import AIAvatarGenerator from './components/AIAvatarGenerator'
@@ -24,10 +25,16 @@ import AIRecommendationsPanel from './components/AIRecommendationsPanel'
 import Shop from './components/Shop'
 import Training from './components/Training'
 import { WorldStateDemo } from './components/WorldStateDemo'
+import Inventory from './components/Inventory'
 import { useEffect } from 'react'
 import { useHeroStore } from './store/heroStore'
 import { EnhancedQuestBoard } from './components/EnhancedQuestBoard'
 import { HeroJournal } from './components/HeroJournal'
+import QuickMission from './components/QuickMission'
+import JourneyFlow from './components/JourneyFlow'
+import MissionsHub from './components/MissionsHub'
+import AdminDashboard from './components/AdminDashboard'
+import IntroCinematic from './components/IntroCinematic'
 
 // Componente wrapper para HeroProgression que precisa do herói selecionado
 function HeroProgressionWrapper() {
@@ -69,6 +76,27 @@ function GuildSystemWrapper() {
   }
   
   return <GuildSystem hero={selectedHero} />;
+}
+
+// Componente wrapper para PartySystem que precisa do herói selecionado
+function PartySystemWrapper() {
+  const { getSelectedHero } = useHeroStore();
+  const selectedHero = getSelectedHero();
+  
+  if (!selectedHero) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 text-center">
+        <div className="text-6xl mb-4">👥</div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
+        <p className="text-gray-600 mb-6">Selecione um herói para acessar o sistema de party.</p>
+        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
+          Voltar à Lista de Heróis
+        </Link>
+      </div>
+    );
+  }
+  
+  return <PartySystem hero={selectedHero} />;
 }
 
 // Componente wrapper para DailyGoals que precisa do herói selecionado
@@ -163,7 +191,7 @@ function DynamicMissionsPanelWrapper() {
     );
   }
   
-  const handleMissionAccept = (mission: import('./services/dynamicMissionsAI').DynamicMission) => {
+  const handleMissionAccept = (_mission: import('./services/dynamicMissionsAI').DynamicMission) => {
     // Ao aceitar uma missão de IA, refletir no sistema de missões padrão
     refreshQuests(selectedHero.progression.level);
     const quest = availableQuests.find(q => selectedHero.progression.level >= q.levelRequirement && !selectedHero.activeQuests.includes(q.id));
@@ -268,21 +296,48 @@ function HeroJournalWrapper() {
   return <HeroJournal hero={selectedHero} />;
 }
 
+// Wrapper para QuickMission que precisa do herói selecionado
+function QuickMissionWrapper() {
+  const { getSelectedHero } = useHeroStore();
+  const selectedHero = getSelectedHero();
+  if (!selectedHero) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 text-center">
+        <div className="text-6xl mb-4">🗡️</div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
+        <p className="text-gray-600 mb-6">Selecione um herói para jogar uma missão rápida.</p>
+        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
+          Voltar à Lista de Heróis
+        </Link>
+      </div>
+    );
+  }
+  return <QuickMission />;
+}
+
 function App() {
   const { heroes, markCelebrationViewed } = useHeroStore();
   
   // Configuração de segurança básica
   useEffect(() => {
-    // Prevenir ataques de clickjacking
-    if (window.self !== window.top) {
-      window.top.location = window.self.location;
+    // Executar segurança apenas em produção para não interferir no preview/local
+    if (!import.meta.env.DEV) {
+      // Prevenir clickjacking: se estiver em iframe, tentar subir para o topo
+      try {
+        const topWin = window.top;
+        if (topWin && window.self !== topWin) {
+          topWin.location.href = window.self.location.href;
+        }
+      } catch {
+        // Ignorar erros de mesma origem ou restrições
+      }
+
+      // Configurar Content Security Policy via meta tag
+      const cspMeta = document.createElement('meta');
+      cspMeta.httpEquiv = 'Content-Security-Policy';
+      cspMeta.content = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;";
+      document.head.appendChild(cspMeta);
     }
-    
-    // Configurar Content Security Policy via meta tag
-    const cspMeta = document.createElement('meta');
-    cspMeta.httpEquiv = 'Content-Security-Policy';
-    cspMeta.content = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;";
-    document.head.appendChild(cspMeta);
   }, []);
 
   // Coletar todas as celebrações pendentes
@@ -303,7 +358,7 @@ function App() {
 
   return (
     <>
-      <OnboardingDetector />
+      {/* OnboardingDetector removido temporariamente */}
       
       {/* Gerenciador de Celebrações de Rank */}
       {allCelebrations.length > 0 && (
@@ -315,27 +370,35 @@ function App() {
       
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={<HeroList />} />
+          <Route index element={<JourneyFlow />} />
+          <Route path="journey" element={<JourneyFlow />} />
+          <Route path="intro" element={<IntroCinematic />} />
           <Route path="create" element={<HeroForm />} />
+          <Route path="gallery" element={<HeroList />} />
           <Route path="hero/:id" element={<HeroDetail />} />
           <Route path="progression" element={<HeroProgressionWrapper />} />
           <Route path="evolution" element={<EvolutionPanelWrapper />} />
-          <Route path="guilds" element={<GuildSystemWrapper />} />
-          <Route path="quests" element={<QuestBoard />} />
+          <Route path="guilds" element={<AdventurersGuildHub />} />
+          <Route path="party" element={<PartySystemWrapper />} />
+          {/* Centralização de modos de missão em um único hub */}
+          <Route path="quests" element={<MissionsHub />} />
+          <Route path="missions" element={<MissionsHub />} />
           <Route path="daily-goals" element={<DailyGoalsWrapper />} />
           <Route path="events" element={<EventsPanel />} />
           <Route path="activities" element={<ActivityFeed />} />
-          <Route path="tutorial" element={<OnboardingManager />} />
+          {/* Rota de tutorial removida temporariamente */}
           <Route path="titles" element={<TitlesManager />} />
           <Route path="leaderboards" element={<Leaderboards />} />
-          <Route path="metrics" element={<MetricsDashboard />} />
-          <Route path="playtest" element={<PlaytestPanel />} />
+          <Route path="metrics" element={<AdminDashboard />} />
           <Route path="ai-avatar" element={<AIAvatarGeneratorWrapper />} />
           <Route path="ai-missions" element={<DynamicMissionsPanelWrapper />} />
           <Route path="ai-recommendations" element={<AIRecommendationsPanelWrapper />} />
           <Route path="enhanced-quests" element={<EnhancedQuestBoardWrapper />} />
           <Route path="hero-journal" element={<HeroJournalWrapper />} />
+          <Route path="quick-mission" element={<QuickMissionWrapper />} />
+          <Route path="admin" element={<AdminDashboard />} />
           <Route path="shop" element={<Shop />} />
+          <Route path="inventory" element={<Inventory />} />
           <Route path="training" element={<Training />} />
           <Route path="world-state-demo" element={<WorldStateDemo />} />
         </Route>

@@ -8,6 +8,9 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
+// Memória simples para leaderboard diário (apenas em dev server)
+const dailyLeaderboardByDay = {};
+
 const HF_TOKEN = process.env.HF_TOKEN;
 const MODEL_ID = process.env.HF_TEXT_MODEL || 'mistralai/Mistral-7B-Instruct-v0.3';
 const HF_API_INFERENCE_BASE = `https://router.huggingface.co/hf-inference/models/`;
@@ -130,6 +133,154 @@ app.post('/api/groq-openai/chat/completions', async (req, res) => {
   } catch (err) {
     console.error('Groq proxy error:', err?.message || String(err));
     return res.status(500).json({ error: { message: err?.message || 'Erro ao chamar Groq' } });
+  }
+});
+
+// === Idle Daily: submissão e leaderboard (MVP Dev) ===
+function todayKey() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function pickDailyEnemies(level) {
+  if (level <= 2) return [{ type: 'Goblin', count: 2, level }, { type: 'Lobo', count: 1, level }];
+  if (level <= 5) return [{ type: 'Bandido', count: 1, level }, { type: 'Esqueleto', count: 1, level }];
+  return [{ type: 'Troll', count: 1, level }, { type: 'Bandido', count: 2, level }];
+}
+
+function simulateDailyRun(hero) {
+  const level = Number(hero?.progression?.level || hero?.level || 1);
+  const attrs = hero?.attributes || {};
+  const power = (attrs.forca || 5) + (attrs.destreza || 5) + (attrs.constituicao || 5) + level;
+  const enemies = pickDailyEnemies(level);
+  let enemyPower = 0;
+  enemies.forEach(e => { enemyPower += (e.level || 1) * (e.count || 1) * 12; });
+  const baseWinChance = level <= 2 ? 55 : level <= 5 ? 60 : 65;
+  const winChance = Math.max(30, Math.min(90, baseWinChance + (power - enemyPower) * 1));
+  const victory = Math.random() * 100 < winChance;
+  const xp = victory ? Math.max(20, Math.round(level * 12)) : Math.max(10, Math.round(level * 6));
+  const gold = victory ? Math.max(15, Math.round(level * 8)) : Math.max(5, Math.round(level * 4));
+  return { victory, xp, gold };
+}
+
+app.post('/api/daily/submit', async (req, res) => {
+  try {
+    const { hero } = req.body || {};
+    if (!hero) return res.status(400).json({ error: 'Missing hero' });
+    const level = Number(hero?.progression?.level || hero?.level || 1);
+    const runsCount = Math.max(1, Math.min(3, level <= 2 ? 1 : level <= 5 ? 2 : 3));
+    let xpTotal = 0, goldTotal = 0, victories = 0;
+    for (let i = 0; i < runsCount; i++) {
+      const r = simulateDailyRun(hero);
+      xpTotal += r.xp;
+      goldTotal += r.gold;
+      victories += r.victory ? 1 : 0;
+    }
+    const key = todayKey();
+    const heroId = hero.id || hero.name || `anon_${Math.random().toString(36).slice(2,7)}`;
+    const entry = {
+      heroId,
+      heroName: hero.name || 'Herói',
+      class: hero.class || hero.heroClass || 'Aventureiro',
+      xpToday: xpTotal,
+      goldToday: goldTotal,
+      victoriesToday: victories,
+      date: key,
+      score: xpTotal * 1.0 + goldTotal * 0.5 + victories * 5
+    };
+    dailyLeaderboardByDay[key] = dailyLeaderboardByDay[key] || [];
+    const existingIdx = dailyLeaderboardByDay[key].findIndex(e => e.heroId === heroId);
+    if (existingIdx >= 0) dailyLeaderboardByDay[key][existingIdx] = entry; else dailyLeaderboardByDay[key].push(entry);
+    return res.json({ ok: true, entry });
+  } catch (err) {
+    console.error('daily submit error:', err);
+    return res.status(500).json({ error: 'Erro ao submeter resultado diário' });
+  }
+});
+
+app.get('/api/daily/leaderboard', async (_req, res) => {
+  try {
+    const key = todayKey();
+    const entries = Array.isArray(dailyLeaderboardByDay[key]) ? dailyLeaderboardByDay[key] : [];
+    const sorted = entries.slice().sort((a, b) => b.score - a.score);
+    return res.json({ date: key, entries: sorted });
+  } catch (err) {
+    console.error('daily leaderboard error:', err);
+    return res.status(500).json({ error: 'Erro ao obter leaderboard diário' });
+  }
+});
+
+// === Criação de Herói via IA (texto + imagem) ===
+app.post('/api/hero-create', async (req, res) => {
+  try {
+    const { race = 'humano', klass = 'guerreiro', attrs = {} } = req.body || {};
+
+    let nameLine = 'Herói Desconhecido';
+    let historia = 'Um herói emerge das sombras, buscando seu destino.';
+    let frase = 'Por glória e aventura!';
+    let image = null;
+
+    // 1) Texto via Hugging Face Inference (se houver token)
+    if (HF_TOKEN) {
+      try {
+        const promptText = `Você é um narrador épico. Gere:\n- Nome (1-3 palavras) + epíteto,\n- História de origem 4-6 linhas,\n- Frase de impacto 1 linha.\nContexto: raça: ${race}, classe: ${klass}, atributos: ${JSON.stringify(attrs)}.\nSeja conciso e épico. Saída em texto puro.`;
+
+        const chat = await hfClient.chatCompletion({
+          model: MODEL_ID,
+          messages: [
+            { role: 'system', content: 'Assistente de fantasia' },
+            { role: 'user', content: promptText }
+          ],
+          max_tokens: 180,
+          temperature: 0.7
+        });
+
+        const content = chat?.choices?.[0]?.message?.content || chat?.generated_text || '';
+        const lines = content.split('\n').filter(Boolean);
+        nameLine = lines[0] || nameLine;
+        historia = lines.slice(1, 4).join('\n') || historia;
+        frase = lines.slice(4).join(' ').trim() || frase;
+      } catch (err) {
+        console.warn('HF text generation fallback:', err?.message || String(err));
+      }
+    }
+
+    // 2) Imagem via Lexica (gratuito)
+    const q = encodeURIComponent(`${nameLine}, ${race} ${klass}, fantasy portrait, detailed`);
+    try {
+      const resp = await fetch(`https://lexica.art/api/v1/search?q=${q}`);
+      const data = await resp.json();
+      image = data?.images?.[0]?.src || null;
+    } catch (err) {
+      console.warn('Lexica fetch failed:', err?.message || String(err));
+      image = null;
+    }
+
+    // 3) Fallback imagem via HF text-to-image
+    if (!image && HF_TOKEN) {
+      try {
+        const img = await hfClient.textToImage({
+          inputs: `${nameLine}, ${race} ${klass}, epic fantasy portrait, detailed, studio lighting`,
+          model: HF_IMAGE_MODEL
+        });
+        image = img ? `data:image/png;base64,${Buffer.from(img).toString('base64')}` : null;
+      } catch (err) {
+        console.warn('HF image generation fallback:', err?.message || String(err));
+      }
+    }
+
+    // 4) Placeholder final
+    if (!image) {
+      image = generatePlaceholderImage(`${nameLine} • ${race} ${klass}`);
+    }
+
+    return res.json({ name: nameLine, story: historia, phrase: frase, image });
+  } catch (err) {
+    console.error('hero-create error:', err);
+    return res.status(500).json({ error: 'Erro IA' });
   }
 });
 
@@ -619,6 +770,102 @@ app.get('/api/monetization/config', async (_req, res) => {
     stripePublicKey: stripePublic,
     storeEnabled
   });
+});
+
+// --------------------------
+// Missões: gerar e resolver
+// --------------------------
+
+function pickDifficulty(level = 1) {
+  if (level <= 3) return 'easy';
+  if (level <= 7) return 'normal';
+  return 'hard';
+}
+
+function clampProb(p) { return Math.max(0.05, Math.min(0.95, p)); }
+
+function defaultMissionFromHero(hero = {}) {
+  const name = hero.name || 'Herói';
+  const klass = hero.class || hero.klass || 'Aventureiro';
+  const level = Number(hero.level || hero.progression?.level || 1) || 1;
+  const difficulty = pickDifficulty(level);
+  const objective = `Recuperar um artefato antigo perdido`;
+  const location = `Ruínas de Valthor`;
+  const challenge = `Guardião espectral e armadilhas antigas`;
+  // Probabilidade segundo regra: 30% + atributo*5% - dificuldade*10%
+  const attrs = hero.attributes || {};
+  const diffPenalty = difficulty === 'easy' ? 0 : difficulty === 'normal' ? 0.10 : 0.20;
+  const probA = clampProb(0.30 + ((Number(attrs.sabedoria) || 0) * 0.05) - diffPenalty); // Investigação cuidadosa
+  const probB = clampProb(0.30 + ((Number(attrs.forca) || 0) * 0.05) - diffPenalty);     // Confronto direto
+  const probC = clampProb(0.30 + ((Number(attrs.destreza) || 0) * 0.05) - diffPenalty);  // Astúcia/infiltração
+  return {
+    id: `m-${Date.now()}`,
+    description: `${name} — ${klass} — Nível ${level}. Objetivo: ${objective}. Local: ${location}. Desafio: ${challenge}.`,
+    objective,
+    location,
+    challenge,
+    difficulty,
+    choices: [
+      { key: 'A', text: 'Investigar rotas alternativas com cautela', success: probA },
+      { key: 'B', text: 'Confrontar o guardião diretamente', success: probB },
+      { key: 'C', text: 'Usar astúcia para distrair e infiltrar-se', success: probC }
+    ]
+  };
+}
+
+app.post('/api/mission/generate', async (req, res) => {
+  try {
+    const { hero = {}, context = {} } = req.body || {};
+    // Se desejar, poderíamos chamar IA aqui usando hfClient, mas manteremos simples e robusto
+    const mission = defaultMissionFromHero({ ...hero, ...context });
+    return res.json({ mission });
+  } catch (err) {
+    console.error('mission/generate error:', err?.message || String(err));
+    return res.status(500).json({ error: 'Falha ao gerar missão' });
+  }
+});
+
+function resolveOutcome(mission, choiceKey, level = 1) {
+  const choice = (mission?.choices || []).find(c => c.key === choiceKey);
+  const prob = choice ? Number(choice.success) : 0.5;
+  const roll = Math.random();
+  const success = roll <= prob;
+  const difficulty = mission?.difficulty || pickDifficulty(level);
+  // XP curto 10–50: base + multiplicador
+  const baseByDiff = difficulty === 'easy' ? 12 : difficulty === 'normal' ? 20 : 26;
+  const baseWithLevel = baseByDiff + Math.min(10, Math.floor(level / 2));
+  const xpRaw = success ? Math.round(baseWithLevel * 1.6) : Math.round(baseWithLevel * 0.6);
+  const xp = Math.max(10, Math.min(50, xpRaw));
+  const lootChance = success ? 0.35 : 0.1;
+  const titleChance = success ? 0.2 : 0.05;
+  const gotLoot = Math.random() < lootChance;
+  const gotTitle = Math.random() < titleChance;
+  const loot = gotLoot ? 'Relíquia menor das Ruínas' : '';
+  const title = gotTitle ? (difficulty === 'hard' ? 'Quebrador de Guardiões' : 'Eco das Ruínas') : '';
+  const outcomeTextSuccess = `Com determinação e ${choice?.text?.toLowerCase() || 'tática cuidadosa'}, o herói supera o desafio em ${mission?.location}. O artefato é recuperado e o caminho fica marcado por passos seguros.`;
+  const outcomeTextFail = `A abordagem ${choice?.text?.toLowerCase() || 'arrisca'} sai do controle. O guardião repele o avanço e o herói recua, aprendendo com cada ferida e armadilha ativada.`;
+  return {
+    success,
+    xp,
+    title,
+    loot,
+    narrative: success ? outcomeTextSuccess : outcomeTextFail,
+    roll,
+    prob
+  };
+}
+
+app.post('/api/mission/resolve', async (req, res) => {
+  try {
+    const { mission, choice, hero = {} } = req.body || {};
+    const level = Number(hero.level || hero.progression?.level || 1) || 1;
+    if (!mission || !choice) return res.status(400).json({ error: 'Campos "mission" e "choice" são obrigatórios' });
+    const result = resolveOutcome(mission, String(choice), level);
+    return res.json({ result });
+  } catch (err) {
+    console.error('mission/resolve error:', err?.message || String(err));
+    return res.status(500).json({ error: 'Falha ao resolver missão' });
+  }
 });
 
 const PORT = process.env.PORT || 3001;

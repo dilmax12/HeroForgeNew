@@ -219,8 +219,7 @@ export class EventManager {
   }
 
   private rotateDailyEvents(): void {
-    // Archive current daily events
-    const currentDailyEvents = this.events.filter(e => e.type === 'daily');
+    // Arquivo de eventos diários não é utilizado; removido para evitar variáveis não usadas
     
     // Generate new daily events
     const newDailyEvents = this.generateDailyEvents();

@@ -3,7 +3,7 @@
  * Versão 3.0 - Forjador de Heróis
  */
 
-import { Skill, HeroClass, Element } from '../types/hero';
+import { Skill, HeroClass } from '../types/hero';
 
 export const CLASS_SKILLS: Record<HeroClass, Skill[]> = {
   guerreiro: [

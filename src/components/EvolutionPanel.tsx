@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 // import { motion, AnimatePresence } from 'framer-motion'; // Temporariamente comentado
 import { useHeroStore } from '../store/heroStore';
+import { resumeAudioContextIfNeeded, playLevelUp } from '../utils/audioEffects';
 import { Hero } from '../types/hero';
 import { RankLevel, RankHistory, RankComparison } from '../types/ranks';
 import { RankProgressAnimation, FloatingRankBadge } from './RankAnimations';
@@ -114,7 +115,11 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
 
   const handlePromotion = () => {
     if (rankProgress.progress.canPromote) {
-      promoteHero(currentHero.id);
+      const promoted = promoteHero(currentHero.id);
+      if (promoted) {
+        resumeAudioContextIfNeeded();
+        playLevelUp();
+      }
     }
   };
 
@@ -496,12 +501,12 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
         </div>
 
         {/* Navigation */}
-        <div className="flex space-x-1 bg-slate-700 rounded-lg p-1">
+        <div className="flex flex-wrap gap-2 sm:space-x-1 bg-slate-700 rounded-lg p-1 overflow-x-auto">
           {viewModes.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setViewMode(id as ViewMode)}
-              className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`flex items-center px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                 viewMode === id
                   ? 'bg-slate-600 text-slate-100'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-600/50'

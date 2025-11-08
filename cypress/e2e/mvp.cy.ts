@@ -5,16 +5,17 @@ describe('MVP E2E', () => {
     // Preenche nome
     cy.contains('label', 'Nome').parent().find('input').type('Arthas');
 
-    // Distribui pontos: 5 forca, 5 destreza, 4 constituicao, 4 inteligencia
+    // Distribui pontos respeitando o total disponível (12 pontos)
+    // Ajuste: 4 força, 4 destreza, 2 constituição, 2 inteligência = 12
     const inc = (attr: string, times: number) => {
       for (let i = 0; i < times; i++) {
         cy.contains('label', attr).parent().find('button').contains('+').click();
       }
     };
-    inc('forca', 5);
-    inc('destreza', 5);
-    inc('constituicao', 4);
-    inc('inteligencia', 4);
+    inc('forca', 4);
+    inc('destreza', 4);
+    inc('constituicao', 2);
+    inc('inteligencia', 2);
 
     // Valida pontos restantes 0
     cy.contains('Pontos restantes: 0');

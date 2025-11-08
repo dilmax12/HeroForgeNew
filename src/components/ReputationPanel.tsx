@@ -2,7 +2,6 @@ import React from 'react';
 import { Hero } from '../types/hero';
 import { 
   getReputationLevel, 
-  getReputationColor, 
   FACTION_DESCRIPTIONS,
   calculateReputationModifiers 
 } from '../utils/reputationSystem';
@@ -13,7 +12,6 @@ interface ReputationPanelProps {
 
 const ReputationPanel: React.FC<ReputationPanelProps> = ({ hero }) => {
   const getProgressPercentage = (reputation: number) => {
-    const level = getReputationLevel(reputation);
     const nextLevelIndex = Math.min(
       6, // Máximo índice
       Math.max(0, 

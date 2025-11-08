@@ -1,10 +1,12 @@
 // CACHE BUSTER - TIMESTAMP: 2024-12-19-19:52
 import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { HeroCreationData, HeroRace, HeroClass, Alignment, Element, HeroAttributes } from '../types/hero';
 import { useHeroStore } from '../store/heroStore';
 import { generateStory } from '../utils/story';
 import { gerarTexto } from '../services/groqTextService';
+import { generateHeroWithAI } from '../services/heroCreateService';
+import { notificationBus } from './NotificationSystem';
 
 import { 
   generateName, 
@@ -51,14 +53,18 @@ const HeroForm = () => {
   const [loadingNameAI, setLoadingNameAI] = useState(false);
   const [loadingQuoteAI, setLoadingQuoteAI] = useState(false);
   const [loadingHFStory, setLoadingHFStory] = useState(false);
+  const [loadingHeroAI, setLoadingHeroAI] = useState(false);
   const [nameOptions, setNameOptions] = useState<string[]>([]);
   const [showNameOptions, setShowNameOptions] = useState(false);
   const [showSkillDetails, setShowSkillDetails] = useState<string | null>(null);
   const [showElementTooltip, setShowElementTooltip] = useState(false);
   const [limitWarning, setLimitWarning] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { createHero } = useHeroStore();
+  const { createHero, acceptReferralInvite } = useHeroStore();
   const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const referralCode = searchParams.get('ref') || undefined;
 
   const remainingPoints = calculateRemainingPoints(formData.attributes);
   const classSkills = getClassSkills(formData.class);
@@ -151,11 +157,63 @@ const HeroForm = () => {
       const frase = await gerarTexto('frase');
       if (frase) {
         setFormData(prev => ({ ...prev, battleQuote: frase }));
+        notificationBus.emit({
+          type: 'achievement',
+          title: 'Frase gerada!',
+          message: 'A frase de batalha foi atualizada.',
+          icon: '💬',
+          duration: 3500
+        });
       }
     } catch (error) {
       console.error('Erro ao gerar frase via IA:', error);
+      notificationBus.emit({
+        type: 'quest',
+        title: 'Falha ao gerar frase',
+        message: 'Verifique a chave de IA e a conexão.',
+        icon: '⚠️',
+        duration: 4500
+      });
     } finally {
       setLoadingQuoteAI(false);
+    }
+  };
+
+  const handleGenerateHeroAI = async () => {
+    setLoadingHeroAI(true);
+    try {
+      const result = await generateHeroWithAI({
+        race: formData.race,
+        klass: formData.class,
+        attrs: formData.attributes as Record<string, number>
+      });
+      setFormData(prev => ({
+        ...prev,
+        name: result.name || prev.name,
+        backstory: result.story || prev.backstory,
+        battleQuote: result.phrase || prev.battleQuote,
+        image: result.image || prev.image
+      }));
+      setShowNameOptions(false);
+      notificationBus.emit({
+        type: 'achievement',
+        title: 'Herói gerado!',
+        message: 'Nome, história, frase e imagem atualizados.',
+        icon: '🧙',
+        duration: 4500
+      });
+    } catch (error) {
+      console.error('Erro ao gerar herói via IA:', error);
+      setLimitWarning('Falha ao gerar herói com IA. Tente novamente.');
+      notificationBus.emit({
+        type: 'quest',
+        title: 'Falha ao gerar herói',
+        message: 'Tente novamente mais tarde.',
+        icon: '⚠️',
+        duration: 4500
+      });
+    } finally {
+      setLoadingHeroAI(false);
     }
   };
 
@@ -192,7 +250,10 @@ const HeroForm = () => {
     }
     
     try {
-      createHero(formData);
+      const created = createHero(formData);
+      if (referralCode) {
+        acceptReferralInvite(referralCode, created.id);
+      }
       navigate('/');
     } catch (error) {
       console.error('Erro ao criar herói:', error);
@@ -214,7 +275,7 @@ const HeroForm = () => {
               <select
                 value={formData.race}
                 onChange={(e) => setFormData({...formData, race: e.target.value as HeroRace})}
-                className="mt-1 block w-full rounded-md bg-gray-600 border-gray-500 text-white"
+                className="mt-1 block w-full rounded-md bg-gray-600 border-gray-500 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="humano">Humano</option>
                 <option value="elfo">Elfo</option>
@@ -231,7 +292,7 @@ const HeroForm = () => {
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="mt-1 block w-full rounded-md bg-gray-600 border-gray-500 text-white"
+                  className="mt-1 block w-full rounded-md bg-gray-600 border-gray-500 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                   placeholder="Nome do herói"
                   required
                 />
@@ -251,6 +312,7 @@ const HeroForm = () => {
                 >
                   {loadingNameAI ? '...' : '🤖 IA'}
                 </button>
+                {/* Botão 'Gerar com IA' removido por não estar em uso */}
               </div>
               
               {showNameOptions && (
@@ -282,7 +344,7 @@ const HeroForm = () => {
             <select
               value={formData.class}
               onChange={(e) => handleClassChange(e.target.value as HeroClass)}
-              className="mt-1 block w-full rounded-md bg-gray-600 border-gray-500 text-white"
+              className="mt-1 block w-full rounded-md bg-gray-600 border-gray-500 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             >
               <option value="guerreiro">Guerreiro</option>
               <option value="mago">Mago</option>
@@ -492,7 +554,7 @@ const HeroForm = () => {
             value={formData.battleQuote || ''}
             onChange={(e) => setFormData({...formData, battleQuote: e.target.value})}
             rows={2}
-            className="w-full rounded-md bg-gray-600 border-gray-500 text-white"
+            className="w-full rounded-md bg-gray-600 border-gray-500 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             placeholder="Digite uma frase épica para seu herói..."
           />
         </div>
@@ -504,7 +566,7 @@ const HeroForm = () => {
             <select
               value={formData.alignment}
               onChange={(e) => setFormData({...formData, alignment: e.target.value as Alignment})}
-              className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"
+              className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             >
               <option value="leal-bom">Leal e Bom</option>
               <option value="neutro-bom">Neutro e Bom</option>
@@ -523,7 +585,7 @@ const HeroForm = () => {
             <select
               value={formData.background}
               onChange={(e) => setFormData({...formData, background: e.target.value})}
-              className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"
+              className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             >
               <option value="">Selecione um antecedente</option>
               <option value="acolyte">Acólito</option>
@@ -563,8 +625,22 @@ const HeroForm = () => {
                   const contexto = `${formData.name || 'Herói'}, classe ${formData.class}, raça ${formData.race}, elemento ${formData.element}, alinhamento ${formData.alignment}${formData.background ? ', antecedente ' + formData.background : ''}`;
                   const historia = await gerarTexto('historia', contexto);
                   setFormData(prev => ({ ...prev, backstory: historia }));
+                  notificationBus.emit({
+                    type: 'achievement',
+                    title: 'História gerada!',
+                    message: 'A história do herói foi atualizada.',
+                    icon: '📖',
+                    duration: 4000
+                  });
                 } catch (error) {
                   console.error('Erro ao gerar história via IA:', error);
+                  notificationBus.emit({
+                    type: 'quest',
+                    title: 'Falha ao gerar história',
+                    message: 'Verifique a chave de IA e a conexão.',
+                    icon: '⚠️',
+                    duration: 4500
+                  });
                 } finally {
                   setLoadingHFStory(false);
                 }
@@ -579,7 +655,7 @@ const HeroForm = () => {
             value={formData.backstory || ''}
             onChange={(e) => setFormData({...formData, backstory: e.target.value})}
             rows={4}
-            className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"
+            className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             placeholder="Conte a história do seu herói..."
           />
         </div>

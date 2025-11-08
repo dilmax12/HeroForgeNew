@@ -25,7 +25,7 @@ export type Alignment = 'leal-bom' | 'neutro-bom' | 'caotico-bom' |
 export type QuestType = 'contrato' | 'caca' | 'exploracao' | 'historia' | 'narrative';
 export type QuestDifficulty = 'rapida' | 'padrao' | 'epica' | 'facil' | 'medio' | 'dificil';
 export type ItemRarity = 'comum' | 'raro' | 'epico' | 'lendario';
-export type ItemType = 'weapon' | 'armor' | 'accessory' | 'consumable' | 'cosmetic';
+export type ItemType = 'weapon' | 'armor' | 'accessory' | 'consumable' | 'cosmetic' | 'material';
 
 // === NOVOS TIPOS PARA SISTEMA DE DECISÕES E MUNDO ===
 
@@ -189,6 +189,7 @@ export interface Quest {
   rewards: QuestReward;
   repeatable: boolean;
   isGuildQuest?: boolean;
+  sticky?: boolean; // manter visível entre atualizações do quadro
   failurePenalty?: {
     gold?: number;
     reputation?: number;
@@ -349,6 +350,10 @@ export interface Guild {
   bankGold: number;
   createdAt: string;
   quests: Quest[];
+  // Nível da guilda (derivado de guildXP, mas armazenado para conveniência)
+  level?: number;
+  // Papéis dos membros na guilda
+  roles?: Record<string, 'lider' | 'oficial' | 'membro'>;
 }
 
 export interface CombatResult {
@@ -388,7 +393,9 @@ export interface HeroProgression {
   reputation: number;
   titles: string[]; // IDs dos títulos conquistados
   achievements: Achievement[];
+  stars?: number; // Estrelas acumuladas por level up
   guildId?: string;
+  partyId?: string;
 }
 
 export interface HeroInventory {
@@ -423,6 +430,7 @@ export interface Hero {
   alignment: Alignment;
   background: string;
   attributes: HeroAttributes;
+  attributePoints?: number;
   derivedAttributes: DerivedAttributes;
   progression: HeroProgression;
   inventory: HeroInventory;
@@ -452,6 +460,9 @@ export interface Hero {
     achievementsUnlocked: number;
     loginStreak: number;
     lastLogin: Date;
+    // Streak de metas diárias: incrementa ao menos uma meta concluída por dia
+    dailyCompletionStreak?: number;
+    lastDailyCompletion?: Date | string;
   };
   
   // Advanced Features
@@ -472,6 +483,8 @@ export interface Hero {
     lastRecovery: string; // ISO timestamp
     recoveryRate: number; // pontos por hora
   };
+  // Capítulos da Jornada (persistentes)
+  journeyChapters?: JourneyChapter[];
 }
 
 export interface HeroCreationData {
@@ -497,4 +510,30 @@ export interface Party {
   createdAt: string;
   sharedLoot?: boolean;
   sharedXP?: boolean;
+  leaderId?: string;
+  invites?: string[]; // hero IDs convidados que ainda não aceitaram
+}
+
+// === Tipos de Capítulos da Jornada ===
+export interface JourneyChapter {
+  id: string;
+  index: number; // 1..5
+  title: string;
+  summary: string;
+  createdAt: string;
+  levelMilestone: number; // 4,8,12,16,20
+  locked: boolean; // registro fixo após criação
+  relatedQuests?: string[]; // IDs de quests relacionadas
+}
+
+// Sistema de convites/indicações
+export interface ReferralInvite {
+  id: string;
+  code: string; // código único compartilhável
+  inviterHeroId: string;
+  createdAt: string;
+  status: 'pending' | 'accepted' | 'expired';
+  acceptedHeroId?: string;
+  acceptedAt?: string;
+  rewardGranted?: boolean;
 }

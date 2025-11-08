@@ -70,7 +70,7 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
           </div>
 
           {/* Controles */}
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Busca */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -79,7 +79,7 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
                 placeholder="Buscar heróis..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 bg-black/30 border border-yellow-500/30 rounded-md text-white placeholder-gray-400 focus:outline-none focus:border-yellow-400 w-64"
+                className="pl-10 pr-4 py-2 bg-black/30 border border-yellow-500/30 rounded-md text-white placeholder-gray-400 focus:outline-none focus:border-yellow-400 w-40 sm:w-64"
               />
             </div>
 
@@ -123,7 +123,7 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
             {showCreateButton && (
               <button
                 onClick={onCreateHero}
-                className="bg-yellow-600 hover:bg-yellow-500 text-white px-4 py-2 rounded-md font-bold transition-colors flex items-center space-x-2"
+                className="bg-yellow-600 hover:bg-yellow-500 text-white px-3 sm:px-4 py-2 rounded-md font-bold transition-colors flex items-center gap-2 text-sm sm:text-base w-full sm:w-auto"
               >
                 <Plus className="w-4 h-4" />
                 <span>Criar Herói</span>

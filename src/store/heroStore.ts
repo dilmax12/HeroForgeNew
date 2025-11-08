@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
-import { Hero, HeroCreationData, HeroAttributes, DerivedAttributes, Quest, Achievement, Guild, Item, CombatResult } from '../types/hero';
+import { Hero, HeroCreationData, HeroAttributes, DerivedAttributes, Quest, Achievement, Guild, CombatResult } from '../types/hero';
 import type { HeroInventory, Party } from '../types/hero';
-import type { DailyGoal } from '../types/hero';
+import type { ReferralInvite } from '../types/hero';
 import type { EnhancedQuestChoice } from '../types/hero';
 import { generateQuestBoard, QUEST_ACHIEVEMENTS } from '../utils/quests';
 import { resolveCombat, autoResolveCombat } from '../utils/combat';
@@ -11,7 +11,7 @@ import { purchaseItem, sellItem, equipItem, useConsumable, SHOP_ITEMS } from '..
 import { updateHeroReputation, generateReputationEvents } from '../utils/reputationSystem';
 import { generateAllLeaderboards, getHeroRanking, calculateTotalScore } from '../utils/leaderboardSystem';
 import { generateDailyGoals, updateDailyGoalProgress, checkPerfectDayGoal, removeExpiredGoals, getDailyGoalRewards } from '../utils/dailyGoalsSystem';
-import { getTitleAttributeBonus } from '../utils/titles';
+import { getTitleAttributeBonus, AVAILABLE_TITLES } from '../utils/titles';
 import { onboardingManager } from '../utils/onboardingSystem';
 import { eventManager } from '../utils/eventSystem';
 import { logActivity } from '../utils/activitySystem';
@@ -19,12 +19,16 @@ import { trackMetric } from '../utils/metricsSystem';
 import { rankSystem } from '../utils/rankSystem';
 import { worldStateManager } from '../utils/worldState';
 import { rollDecision, applyChoiceConsequences, recordDecision } from '../utils/narrativeMissions';
+import { ATTRIBUTE_CONSTRAINTS } from '../utils/attributeSystem';
+import { ATTRIBUTE_POINTS_PER_LEVEL, checkLevelUp } from '../utils/progression';
 
 interface HeroState {
   heroes: Hero[];
   selectedHeroId: string | null;
   availableQuests: Quest[];
   guilds: Guild[];
+  parties: Party[];
+  referralInvites: ReferralInvite[];
   
   // === AÇÕES BÁSICAS ===
   createHero: (heroData: HeroCreationData) => Hero;
@@ -44,6 +48,8 @@ interface HeroState {
   gainGold: (heroId: string, gold: number) => void;
   addItemToInventory: (heroId: string, itemId: string, quantity?: number) => void;
   checkAchievements: (heroId: string) => Achievement[];
+  // Pontos de atributo
+  allocateAttributePoints: (heroId: string, allocations: Partial<HeroAttributes>) => boolean;
   
   // === SISTEMA DE LOJA ===
   buyItem: (heroId: string, itemId: string) => boolean;
@@ -55,6 +61,12 @@ interface HeroState {
   createGuild: (heroId: string, guildName: string, description: string) => Guild | null;
   joinGuild: (heroId: string, guildId: string) => boolean;
   leaveGuild: (heroId: string) => boolean;
+  depositGoldToGuild: (heroId: string, amount: number) => boolean;
+  withdrawGoldFromGuild: (heroId: string, amount: number) => boolean;
+  contributeXPToGuild: (heroId: string, amount: number) => boolean;
+  setGuildRole: (guildId: string, actorId: string, targetId: string, role: 'lider' | 'oficial' | 'membro') => boolean;
+  transferGuildLeadership: (guildId: string, actorId: string, newLeaderId: string) => boolean;
+  ensureDefaultGuildExists: () => void;
   
   // === SISTEMA DE TÍTULOS E REPUTAÇÃO ===
   setActiveTitle: (titleId?: string) => void;
@@ -89,10 +101,22 @@ interface HeroState {
   getHeroQuests: (heroId: string) => Quest[];
   getHeroGuild: (heroId: string) => Guild | undefined;
 
-  // Party
-  createParty?: (name: string, memberIds: string[]) => Party;
-  addToParty?: (partyId: string, heroId: string) => boolean;
-  removeFromParty?: (partyId: string, heroId: string) => boolean;
+  // === SISTEMA DE PARTY ===
+  createParty: (heroId: string, name: string) => Party | null;
+  joinParty: (heroId: string, partyId: string) => boolean;
+  leaveParty: (heroId: string) => boolean;
+  getHeroParty: (heroId: string) => Party | undefined;
+  inviteHeroToParty: (partyId: string, inviterId: string, targetHeroId: string) => boolean;
+  acceptPartyInvite: (heroId: string, partyId: string) => boolean;
+  transferPartyLeadership: (partyId: string, actorId: string, newLeaderId: string) => boolean;
+  togglePartySharedLoot: (partyId: string, actorId: string, value?: boolean) => boolean;
+  togglePartySharedXP: (partyId: string, actorId: string, value?: boolean) => boolean;
+  removeMemberFromParty: (partyId: string, actorId: string, targetHeroId: string) => boolean;
+
+  // === SISTEMA DE CONVITES ===
+  createReferralInvite: (inviterHeroId: string) => ReferralInvite | null;
+  getReferralInvitesForHero: (heroId: string) => ReferralInvite[];
+  acceptReferralInvite: (code: string, newHeroId: string) => boolean;
 }
 
 // === VALIDAÇÃO E CÁLCULOS ===
@@ -214,17 +238,7 @@ const calculateDerivedAttributes = (
   };
 };
 
-function calculateXPForLevel(level: number): number {
-  return level * 100 + (level - 1) * 50; // Progressão: 100, 250, 450, 700...
-}
-
-function checkLevelUp(currentXP: number, currentLevel: number): number {
-  let newLevel = currentLevel;
-  while (currentXP >= calculateXPForLevel(newLevel + 1)) {
-    newLevel++;
-  }
-  return newLevel;
-}
+// Progressão centralizada em utils/progression.ts
 
 // === STORE PRINCIPAL ===
 
@@ -235,6 +249,8 @@ export const useHeroStore = create<HeroState>()(
       selectedHeroId: null,
       availableQuests: [],
       guilds: [],
+      parties: [],
+      referralInvites: [],
       
       // === AÇÕES BÁSICAS ===
       
@@ -259,6 +275,7 @@ export const useHeroStore = create<HeroState>()(
           id: uuidv4(),
           ...heroData,
           level: 1,
+          attributePoints: 0,
           derivedAttributes: calculateDerivedAttributes(heroData.attributes, heroData.class, 1, initialInventory, 'novato'),
           element: heroData.element,
           skills: heroData.skills,
@@ -270,8 +287,10 @@ export const useHeroStore = create<HeroState>()(
             gold: 100, // Ouro inicial
             reputation: 0,
             titles: [],
-            achievements: []
+            achievements: [],
+            stars: 0
           },
+          journeyChapters: [],
           // Título inicial para novos heróis
           titles: [{
             id: 'novato',
@@ -314,7 +333,7 @@ export const useHeroStore = create<HeroState>()(
           current: 100,
           max: 100,
           lastRecovery: timestamp,
-          recoveryRate: 10
+          recoveryRate: 5
         };
         
         set(state => ({
@@ -329,10 +348,69 @@ export const useHeroStore = create<HeroState>()(
           timestamp: timestamp
         });
         
+        // Garantir guilda padrão
+        get().ensureDefaultGuildExists();
         // Gerar missões iniciais
         get().refreshQuests(1);
         
         return newHero;
+      },
+
+      // === SISTEMA DE CONVITES / INDICAÇÕES ===
+      createReferralInvite: (inviterHeroId: string): ReferralInvite | null => {
+        const state = get();
+        const inviter = state.heroes.find(h => h.id === inviterHeroId);
+        if (!inviter) return null;
+        const code = uuidv4().slice(0, 8);
+        const invite: ReferralInvite = {
+          id: uuidv4(),
+          code,
+          inviterHeroId,
+          createdAt: new Date().toISOString(),
+          status: 'pending',
+          rewardGranted: false
+        };
+        set(s => ({ referralInvites: [...(s.referralInvites || []), invite] }));
+        // Métrica de criação de convite
+        trackMetric.custom?.('referral_created', { inviterHeroId, code });
+        return invite;
+      },
+
+      getReferralInvitesForHero: (heroId: string): ReferralInvite[] => {
+        const state = get();
+        return (state.referralInvites || []).filter(i => i.inviterHeroId === heroId);
+      },
+
+      acceptReferralInvite: (code: string, newHeroId: string): boolean => {
+        const state = get();
+        const inviteIndex = (state.referralInvites || []).findIndex(i => i.code === code && i.status === 'pending');
+        if (inviteIndex === -1) return false;
+        const invite = state.referralInvites[inviteIndex];
+        const inviter = state.heroes.find(h => h.id === invite.inviterHeroId);
+        const newHero = state.heroes.find(h => h.id === newHeroId);
+        if (!inviter || !newHero) return false;
+        // Marcar aceitação
+        const updatedInvite: ReferralInvite = {
+          ...invite,
+          status: 'accepted',
+          acceptedHeroId: newHeroId,
+          acceptedAt: new Date().toISOString()
+        };
+        set(s => ({
+          referralInvites: s.referralInvites.map((i, idx) => idx === inviteIndex ? updatedInvite : i)
+        }));
+        // Conceder bônus ao convidador
+        const bonusGold = 100;
+        const bonusXP = 150;
+        get().gainGold(inviter.id, bonusGold);
+        get().gainXP(inviter.id, bonusXP);
+        // Marcar recompensa concedida
+        set(s => ({
+          referralInvites: s.referralInvites.map(i => i.id === updatedInvite.id ? { ...i, rewardGranted: true } : i)
+        }));
+        // Métrica de aceite de convite
+        trackMetric.custom?.('referral_accepted', { inviterHeroId: inviter.id, newHeroId, code, bonusGold, bonusXP });
+        return true;
       },
       
       updateHero: (id, heroData) => {
@@ -398,17 +476,59 @@ export const useHeroStore = create<HeroState>()(
         const selectedHero = state.getSelectedHero();
         let guildLevel = 0;
         
-        // Verificar se o herói selecionado está em uma guilda
-        if (selectedHero && selectedHero.progression.guildId) {
-          const guild = state.guilds.find(g => g.id === selectedHero.progression.guildId);
-          if (guild) {
-            guildLevel = guild.level || 1;
-            console.log('🏰 Herói está na guilda:', guild.name, 'Nível:', guildLevel);
+        // Usar a Foja dos Herois como hub global para missões/ranking
+        const defaultGuild = state.guilds.find(g => g.name === 'Foja dos Herois');
+        if (defaultGuild) {
+          const calcLevel = (xp: number) => Math.max(1, Math.floor(xp / 250) + 1);
+          guildLevel = defaultGuild.level ?? calcLevel(defaultGuild.guildXP);
+          if (defaultGuild.level !== guildLevel) {
+            set(state => ({
+              guilds: state.guilds.map(g => g.id === defaultGuild.id ? { ...g, level: guildLevel } : g)
+            }));
           }
+          console.log('🏰 Hub da Guilda encontrado:', defaultGuild.name, 'Nível:', guildLevel);
         }
         
         console.log('🔄 Gerando missões - Herói Level:', heroLevel, 'Guilda Level:', guildLevel);
         const newQuests = generateQuestBoard(heroLevel, guildLevel);
+
+        // Manter missões sticky da lista anterior (evitar desaparecer em refresh)
+        const previousSticky = state.availableQuests.filter(q => q.sticky);
+        const stickyIds = new Set(previousSticky.map(q => q.id));
+
+        // Inserir Missão de Desafio da Guilda para Promoção de Rank, se elegível
+        if (selectedHero) {
+          const progress = rankSystem.calculateProgress(selectedHero);
+          if (progress.canPromote && progress.nextRank) {
+            const promoQuestId = `guild-promotion-${Date.now()}`;
+            const rankInfo = (rankSystem as any).getRankInfo?.(progress.nextRank);
+            const title = rankInfo ? `Desafio de Promoção: ${rankInfo.name}` : `Desafio de Promoção de Rank ${progress.nextRank}`;
+            const description = rankInfo ? `A guilda convoca ${selectedHero.name} para provar seu valor e ascender ao rank ${progress.nextRank} - ${rankInfo.description}` : `Prove seu valor para ascender ao rank ${progress.nextRank}. Complete objetivos desafiadores sob avaliação da guilda.`;
+            newQuests.push({
+              id: promoQuestId,
+              title,
+              description,
+              type: 'historia',
+              difficulty: 'epica',
+              levelRequirement: Math.max(1, selectedHero.progression.level),
+              timeLimit: 3,
+              enemies: [{ type: 'Campeão da Guilda', count: 1, level: selectedHero.progression.level }],
+              rewards: { gold: 200, xp: 150, items: [{ id: 'pergaminho-xp', qty: 1 }] },
+              repeatable: false,
+              isGuildQuest: true,
+              sticky: true,
+              failurePenalty: { gold: 50, reputation: -10 }
+            });
+            console.log('🏰 Missão de promoção de rank inserida:', title);
+          }
+        }
+        // Reaplicar missões sticky anteriores que não conflitem por id
+        previousSticky.forEach(stq => {
+          if (!stickyIds.has(stq.id)) {
+            newQuests.push(stq);
+          }
+        });
+
         console.log('📋 Missões geradas:', newQuests.length, 'total,', newQuests.filter(q => q.isGuildQuest).length, 'de guilda');
         set({ availableQuests: newQuests });
       },
@@ -543,6 +663,13 @@ export const useHeroStore = create<HeroState>()(
             lastActiveAt: new Date().toISOString()
           }
         });
+
+        // Se a missão era sticky, removê-la do quadro disponível
+        if (quest.sticky) {
+          set((state) => ({
+            availableQuests: state.availableQuests.filter(q => q.id !== questId)
+          }));
+        }
         
         // Verificar achievements
         get().checkAchievements(heroId);
@@ -654,27 +781,116 @@ export const useHeroStore = create<HeroState>()(
         const hero = get().heroes.find(h => h.id === heroId);
         if (!hero) return;
         
-        const newXP = hero.progression.xp + xp;
+        const newXP = Math.max(0, hero.progression.xp + xp);
         const newLevel = checkLevelUp(newXP, hero.progression.level);
+        const prevLevel = hero.progression.level;
+        const levelsGained = Math.max(0, newLevel - prevLevel);
+        const currentStars = hero.progression.stars || 0;
+        const thresholdTitles = [
+          { level: 2, id: 'aprendiz' },
+          { level: 5, id: 'veterano' },
+          { level: 10, id: 'campeao' }
+        ];
+        const crossed = thresholdTitles.filter(t => prevLevel < t.level && newLevel >= t.level);
+        const titleToAward = crossed.length > 0 ? crossed[crossed.length - 1].id : undefined;
         
-        const updates: Partial<Hero> = {
-          progression: {
-            ...hero.progression,
-            xp: newXP,
-            level: newLevel
+        const progressionUpdated = {
+          ...hero.progression,
+          xp: newXP,
+          level: newLevel,
+          stars: currentStars + levelsGained,
+          titles: hero.progression.titles || []
+        };
+
+        let titlesUpdated = hero.titles ? [...hero.titles] : [];
+        if (titleToAward) {
+          const hasAlready = titlesUpdated.some(t => t.id === titleToAward);
+          if (!hasAlready) {
+            const base = AVAILABLE_TITLES.find(t => t.id === titleToAward);
+            const newTitle = base ? { ...base, unlockedAt: new Date() } : {
+              id: titleToAward,
+              name: titleToAward === 'aprendiz' ? 'Aprendiz' : titleToAward === 'veterano' ? 'Veterano' : 'Campeão',
+              description: 'Recompensa por subir de nível',
+              rarity: 'comum' as const,
+              category: 'achievement' as const,
+              badge: titleToAward === 'aprendiz' ? '⭐' : titleToAward === 'veterano' ? '🌟' : '🏆',
+              unlockedAt: new Date()
+            };
+            titlesUpdated = [...titlesUpdated, newTitle];
           }
+          if (!(progressionUpdated.titles || []).includes(titleToAward)) {
+            progressionUpdated.titles = [...(progressionUpdated.titles || []), titleToAward];
+          }
+        }
+
+        const updates: Partial<Hero> = {
+          progression: progressionUpdated,
+          titles: titlesUpdated
         };
         
         // Se subiu de nível, recalcular atributos derivados
         if (newLevel > hero.progression.level) {
           updates.level = newLevel;
+          if (titleToAward) {
+            updates.activeTitle = titleToAward;
+          }
+          // Conceder pontos de atributo por level-up
+          updates.attributePoints = (hero.attributePoints || 0) + levelsGained * ATTRIBUTE_POINTS_PER_LEVEL;
           updates.derivedAttributes = calculateDerivedAttributes(
             hero.attributes,
             hero.class,
             newLevel,
             hero.inventory,
-            hero.activeTitle
+            titleToAward || hero.activeTitle
           );
+
+          // Gerar Capítulos da Jornada a cada 4 níveis (4, 8, 12, 16, 20)
+          const milestones = [4, 8, 12, 16, 20];
+          const crossedMilestones = milestones.filter(m => prevLevel < m && newLevel >= m);
+          if (crossedMilestones.length > 0) {
+            const now = new Date().toISOString();
+            const existing = hero.journeyChapters || [];
+            let chaptersToAdd = [] as any[];
+            crossedMilestones.forEach(m => {
+              const already = existing.some(c => c.levelMilestone === m);
+              if (!already) {
+                const index = (existing.length + chaptersToAdd.length) + 1;
+                const relatedQuestTitles = (hero.completedQuests || [])
+                  .map(qId => get().availableQuests.find(q => q.id === qId)?.title)
+                  .filter(Boolean) as string[];
+                const summary = `No marco de nível ${m}, ${hero.name} consolidou sua jornada como ${hero.class}. Conquistas recentes incluem: ${(relatedQuestTitles.slice(-3).join('; ') || 'missões iniciais da guilda')}. Combates: ${hero.stats.totalCombats || 0}, inimigos derrotados: ${hero.stats.enemiesDefeated || 0}, itens obtidos: ${hero.stats.itemsFound || 0}.`;
+                chaptersToAdd.push({
+                  id: `chapter-${hero.id}-${m}`,
+                  index,
+                  title: `Capítulo ${index}: Marco de Nível ${m}`,
+                  summary,
+                  createdAt: now,
+                  levelMilestone: m,
+                  locked: true,
+                  relatedQuests: hero.completedQuests || []
+                });
+
+                // Opcional: gerar missão narrativa associada ao capítulo
+                const questId = `narrative-chapter-${hero.id}-${m}`;
+                const narrativeQuest = {
+                  id: questId,
+                  title: `Jornada de ${hero.name}: Capítulo ${index}`,
+                  description: `Prove seu crescimento no marco de nível ${m}. Um desafio temático baseado nos feitos recentes.`,
+                  type: 'narrative' as const,
+                  difficulty: 'medio' as const,
+                  levelRequirement: m,
+                  rewards: { gold: 0, xp: 100, items: [{ id: 'pergaminho-xp', qty: 1 }] },
+                  repeatable: false,
+                  sticky: true,
+                  hasChoices: false
+                };
+                set(state => ({ availableQuests: [...state.availableQuests, narrativeQuest] }));
+              }
+            });
+            if (chaptersToAdd.length > 0) {
+              updates.journeyChapters = [...existing, ...chaptersToAdd];
+            }
+          }
         }
         
         get().updateHero(heroId, updates);
@@ -975,7 +1191,9 @@ export const useHeroStore = create<HeroState>()(
           guildXP: 0,
           bankGold: 0,
           createdAt: new Date().toISOString(),
-          quests: []
+          quests: [],
+          level: 1,
+          roles: { [heroId]: 'lider' }
         };
         
         set(state => ({
@@ -1002,7 +1220,11 @@ export const useHeroStore = create<HeroState>()(
         set(state => ({
           guilds: state.guilds.map(g => 
             g.id === guildId 
-              ? { ...g, members: [...g.members, heroId] }
+              ? { 
+                  ...g, 
+                  members: [...g.members, heroId],
+                  roles: { ...(g.roles || {}), [heroId]: 'membro' }
+                }
               : g
           )
         }));
@@ -1024,7 +1246,20 @@ export const useHeroStore = create<HeroState>()(
         set(state => ({
           guilds: state.guilds.map(g => 
             g.id === hero.progression.guildId
-              ? { ...g, members: g.members.filter(id => id !== heroId) }
+              ? { 
+                  ...g, 
+                  members: g.members.filter(id => id !== heroId),
+                  roles: (() => {
+                    const roles = { ...(g.roles || {}) } as Record<string, 'lider'|'oficial'|'membro'>;
+                    delete roles[heroId];
+                    // Se o líder saiu, promover primeiro oficial ou primeiro membro
+                    if (Object.values(roles).includes('lider') === false && g.members.length > 0) {
+                      const candidate = g.members.find(id => id !== heroId);
+                      if (candidate) roles[candidate] = 'lider';
+                    }
+                    return roles;
+                  })()
+                }
               : g
           )
         }));
@@ -1036,6 +1271,196 @@ export const useHeroStore = create<HeroState>()(
           }
         });
         
+        return true;
+      },
+
+      depositGoldToGuild: (heroId: string, amount: number) => {
+        if (amount <= 0) return false;
+        const state = get();
+        const hero = state.heroes.find(h => h.id === heroId);
+        if (!hero || !hero.progression.guildId) return false;
+        if (hero.progression.gold < amount) return false;
+        const guildId = hero.progression.guildId;
+        set(state => ({
+          guilds: state.guilds.map(g => g.id === guildId ? { ...g, bankGold: g.bankGold + amount } : g)
+        }));
+        get().updateHero(heroId, {
+          progression: { ...hero.progression, gold: hero.progression.gold - amount }
+        });
+        return true;
+      },
+
+      withdrawGoldFromGuild: (heroId: string, amount: number) => {
+        if (amount <= 0) return false;
+        const state = get();
+        const hero = state.heroes.find(h => h.id === heroId);
+        if (!hero || !hero.progression.guildId) return false;
+        const guild = state.guilds.find(g => g.id === hero.progression.guildId);
+        if (!guild) return false;
+        const role = guild.roles?.[heroId] || 'membro';
+        if (role === 'membro') return false; // Apenas líder/oficial podem sacar
+        if (guild.bankGold < amount) return false;
+        set(state => ({
+          guilds: state.guilds.map(g => g.id === guild.id ? { ...g, bankGold: g.bankGold - amount } : g)
+        }));
+        get().updateHero(heroId, {
+          progression: { ...hero.progression, gold: hero.progression.gold + amount }
+        });
+        return true;
+      },
+
+      contributeXPToGuild: (heroId: string, amount: number) => {
+        if (amount <= 0) return false;
+        const state = get();
+        const hero = state.heroes.find(h => h.id === heroId);
+        if (!hero || !hero.progression.guildId) return false;
+        const guildId = hero.progression.guildId;
+        const calcLevel = (xp: number) => Math.max(1, Math.floor(xp / 250) + 1);
+        let newLevel = 0;
+        set(state => ({
+          guilds: state.guilds.map(g => {
+            if (g.id !== guildId) return g;
+            const newXP = g.guildXP + amount;
+            newLevel = calcLevel(newXP);
+            return { ...g, guildXP: newXP, level: newLevel };
+          })
+        }));
+        // Pequeno bônus de reputação de guilda como efeito colateral (se existir no futuro)
+        return true;
+      },
+
+      setGuildRole: (guildId, actorId, targetId, role) => {
+        const state = get();
+        const guild = state.guilds.find(g => g.id === guildId);
+        if (!guild) return false;
+        const actorRole = guild.roles?.[actorId] || 'membro';
+        if (actorRole !== 'lider') return false; // só líder pode alterar papéis
+        set(state => ({
+          guilds: state.guilds.map(g => g.id === guildId ? { ...g, roles: { ...(g.roles || {}), [targetId]: role } } : g)
+        }));
+        return true;
+      },
+
+      transferGuildLeadership: (guildId, actorId, newLeaderId) => {
+        const state = get();
+        const guild = state.guilds.find(g => g.id === guildId);
+        if (!guild) return false;
+        const actorRole = guild.roles?.[actorId] || 'membro';
+        if (actorRole !== 'lider') return false;
+        if (!guild.members.includes(newLeaderId)) return false;
+        set(state => ({
+          guilds: state.guilds.map(g => {
+            if (g.id !== guildId) return g;
+            const newRoles = { ...(g.roles || {}) } as Record<string, 'lider'|'oficial'|'membro'>;
+            // Demote current leader, promote new leader
+            Object.entries(newRoles).forEach(([hid, r]) => {
+              if (r === 'lider') newRoles[hid] = 'oficial';
+            });
+            newRoles[newLeaderId] = 'lider';
+            return { ...g, roles: newRoles };
+          })
+        }));
+        return true;
+      },
+
+      ensureDefaultGuildExists: () => {
+        const state = get();
+        if (state.guilds.some(g => g.name === 'Foja dos Herois')) return;
+        const defaultGuild: Guild = {
+          id: uuidv4(),
+          name: 'Foja dos Herois',
+          description: 'A casa acolhedora de todos os heróis iniciantes. Cooperativa, social e focada em aprender e evoluir juntos.',
+          members: [],
+          guildXP: 0,
+          bankGold: 0,
+          createdAt: new Date().toISOString(),
+          quests: [],
+          level: 1,
+          roles: {}
+        };
+        set(state => ({ guilds: [...state.guilds, defaultGuild] }));
+      },
+
+      // === SISTEMA DE PARTY ===
+      createParty: (heroId: string, name: string) => {
+        const hero = get().heroes.find(h => h.id === heroId);
+        if (!hero) return null;
+        const party: Party = { id: uuidv4(), name, members: [heroId], createdAt: new Date().toISOString(), sharedLoot: true, sharedXP: true, leaderId: heroId, invites: [] };
+        set(state => ({ parties: [...state.parties, party] }));
+        // Atribuir partyId ao herói
+        get().updateHero(heroId, { progression: { ...hero.progression, partyId: party.id } as any });
+        return party;
+      },
+      joinParty: (heroId: string, partyId: string) => {
+        const hero = get().heroes.find(h => h.id === heroId);
+        const party = get().parties.find(p => p.id === partyId);
+        if (!hero || !party) return false;
+        if (party.members.includes(heroId)) return true;
+        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, members: [...p.members, heroId], invites: (p.invites || []).filter(id => id !== heroId) } : p) }));
+        get().updateHero(heroId, { progression: { ...hero.progression, partyId } as any });
+        return true;
+      },
+      leaveParty: (heroId: string) => {
+        const hero = get().heroes.find(h => h.id === heroId);
+        if (!hero || !hero.progression.partyId) return false;
+        const partyId = hero.progression.partyId;
+        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, members: p.members.filter(id => id !== heroId), leaderId: p.leaderId === heroId ? p.members.find(id => id !== heroId) : p.leaderId } : p) }));
+        get().updateHero(heroId, { progression: { ...hero.progression, partyId: undefined } as any });
+        return true;
+      },
+      getHeroParty: (heroId: string) => {
+        const hero = get().heroes.find(h => h.id === heroId);
+        if (!hero || !hero.progression.partyId) return undefined;
+        return get().parties.find(p => p.id === hero.progression.partyId);
+      },
+      inviteHeroToParty: (partyId: string, inviterId: string, targetHeroId: string) => {
+        const party = get().parties.find(p => p.id === partyId);
+        if (!party || party.leaderId !== inviterId) return false;
+        if (party.members.includes(targetHeroId)) return false;
+        if ((party.invites || []).includes(targetHeroId)) return true;
+        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, invites: [...(p.invites || []), targetHeroId] } : p) }));
+        return true;
+      },
+      acceptPartyInvite: (heroId: string, partyId: string) => {
+        const party = get().parties.find(p => p.id === partyId);
+        const hero = get().heroes.find(h => h.id === heroId);
+        if (!party || !hero) return false;
+        if (!(party.invites || []).includes(heroId)) return false;
+        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, members: [...p.members, heroId], invites: (p.invites || []).filter(id => id !== heroId) } : p) }));
+        get().updateHero(heroId, { progression: { ...hero.progression, partyId } as any });
+        return true;
+      },
+      transferPartyLeadership: (partyId: string, actorId: string, newLeaderId: string) => {
+        const party = get().parties.find(p => p.id === partyId);
+        if (!party || party.leaderId !== actorId) return false;
+        if (!party.members.includes(newLeaderId)) return false;
+        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, leaderId: newLeaderId } : p) }));
+        return true;
+      },
+      togglePartySharedLoot: (partyId: string, actorId: string, value?: boolean) => {
+        const party = get().parties.find(p => p.id === partyId);
+        if (!party || party.leaderId !== actorId) return false;
+        const newValue = value !== undefined ? value : !party.sharedLoot;
+        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, sharedLoot: newValue } : p) }));
+        return true;
+      },
+      togglePartySharedXP: (partyId: string, actorId: string, value?: boolean) => {
+        const party = get().parties.find(p => p.id === partyId);
+        if (!party || party.leaderId !== actorId) return false;
+        const newValue = value !== undefined ? value : !party.sharedXP;
+        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, sharedXP: newValue } : p) }));
+        return true;
+      },
+      removeMemberFromParty: (partyId: string, actorId: string, targetHeroId: string) => {
+        const party = get().parties.find(p => p.id === partyId);
+        if (!party || party.leaderId !== actorId) return false;
+        if (targetHeroId === actorId) return false;
+        if (!party.members.includes(targetHeroId)) return false;
+        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, members: p.members.filter(id => id !== targetHeroId) } : p) }));
+        const hero = get().heroes.find(h => h.id === targetHeroId);
+        if (hero) {
+          get().updateHero(targetHeroId, { progression: { ...hero.progression, partyId: undefined } as any });
+        }
         return true;
       },
       
@@ -1166,21 +1591,113 @@ export const useHeroStore = create<HeroState>()(
 
           // Remove expired goals first
           const activeGoals = removeExpiredGoals(hero.dailyGoals);
-          
+
+          // Contagem antes da atualização para detectar novas conclusões
+          const previouslyCompletedCount = activeGoals.filter(g => g.completed).length;
+
           // Update progress
           let updatedGoals = updateDailyGoalProgress(activeGoals, goalType, amount);
-          
+
           // Check perfect day goal
           updatedGoals = checkPerfectDayGoal(updatedGoals);
+
+          // Contagem após atualização
+          const nowCompletedCount = updatedGoals.filter(g => g.completed).length;
+
+          // Lógica de streak: se houve nova conclusão hoje e ainda não marcada hoje
+          let updatedStats = { ...hero.stats };
+          if (nowCompletedCount > previouslyCompletedCount) {
+            const today = new Date();
+            const todayStart = new Date(today);
+            todayStart.setHours(0, 0, 0, 0);
+            const lastCompletionRaw = hero.stats?.lastDailyCompletion;
+            const lastCompletion = lastCompletionRaw ? new Date(lastCompletionRaw as any) : undefined;
+            const isSameDay = lastCompletion &&
+              lastCompletion.getFullYear() === today.getFullYear() &&
+              lastCompletion.getMonth() === today.getMonth() &&
+              lastCompletion.getDate() === today.getDate();
+
+            if (!isSameDay) {
+              // Verifica se foi ontem para incrementar, caso contrário reinicia em 1
+              const yesterday = new Date(today);
+              yesterday.setDate(yesterday.getDate() - 1);
+              const wasYesterday = lastCompletion &&
+                lastCompletion.getFullYear() === yesterday.getFullYear() &&
+                lastCompletion.getMonth() === yesterday.getMonth() &&
+                lastCompletion.getDate() === yesterday.getDate();
+
+              const currentStreak = updatedStats.dailyCompletionStreak || 0;
+              updatedStats.dailyCompletionStreak = wasYesterday ? currentStreak + 1 : 1;
+              updatedStats.lastDailyCompletion = today.toISOString();
+            }
+          }
 
           const updatedHeroes = [...state.heroes];
           updatedHeroes[heroIndex] = {
             ...hero,
-            dailyGoals: updatedGoals
+            dailyGoals: updatedGoals,
+            stats: updatedStats
           };
 
           return { ...state, heroes: updatedHeroes };
         });
+      },
+
+      // Alocar pontos de atributo ganhos por level-up
+      allocateAttributePoints: (heroId: string, allocations: Partial<HeroAttributes>) => {
+        const hero = get().heroes.find(h => h.id === heroId);
+        if (!hero) return false;
+
+        const availablePoints = hero.attributePoints || 0;
+        const increments = Object.entries(allocations)
+          .filter(([_, inc]) => typeof inc === 'number' && (inc as number) > 0)
+          .map(([key, inc]) => ({ key: key as keyof HeroAttributes, inc: inc as number }));
+
+        const pointsToSpend = increments.reduce((sum, item) => sum + item.inc, 0);
+
+        if (pointsToSpend <= 0) return false;
+        if (pointsToSpend > availablePoints) return false;
+
+        // Validar limites máximos por atributo
+        const newAttributes = { ...hero.attributes };
+        for (const { key, inc } of increments) {
+          const current = newAttributes[key];
+          const proposed = current + inc;
+          if (proposed > ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE) {
+            return false;
+          }
+          newAttributes[key] = proposed;
+        }
+
+        // Atualizar herói: atributos, pontos restantes e derivados
+        const remainingPoints = Math.max(0, availablePoints - pointsToSpend);
+        const derived = calculateDerivedAttributes(
+          newAttributes,
+          hero.class,
+          hero.progression.level,
+          hero.inventory,
+          hero.activeTitle
+        );
+
+        get().updateHero(heroId, {
+          attributes: newAttributes,
+          attributePoints: remainingPoints,
+          derivedAttributes: derived
+        });
+
+        // Métrica de uso de feature
+        trackMetric.featureUsed(heroId, 'attribute-allocation');
+        // Métrica específica de alocação
+        const allocationsSummary = increments.reduce((acc, { key, inc }) => {
+          acc[key as string] = inc;
+          return acc;
+        }, {} as Record<string, number>);
+        trackMetric.attributePointsAllocated(heroId, {
+          totalSpent: pointsToSpend,
+          allocations: allocationsSummary
+        });
+
+        return true;
       },
 
       completeDailyGoal: (heroId: string, goalId: string) => {
@@ -1366,19 +1883,6 @@ export const useHeroStore = create<HeroState>()(
           }
         });
       },
-
-      // Party
-      createParty: (name: string, memberIds: string[]) => {
-        const party: Party = { id: crypto.randomUUID(), name, members: memberIds, createdAt: new Date().toISOString(), sharedLoot: true, sharedXP: true };
-        // Persistência simplificada (pode mover para um store dedicado)
-        return party;
-      },
-      addToParty: (partyId: string, heroId: string) => {
-        return true;
-      },
-      removeFromParty: (partyId: string, heroId: string) => {
-        return true;
-      }
     }),
     {
       name: 'hero-forge-epic-storage',
@@ -1386,9 +1890,11 @@ export const useHeroStore = create<HeroState>()(
         heroes: state.heroes,
         selectedHeroId: state.selectedHeroId,
         availableQuests: state.availableQuests,
-        guilds: state.guilds
+        guilds: state.guilds,
+        parties: state.parties,
+        referralInvites: state.referralInvites
       }),
-      migrate: (persistedState: any, version: number) => {
+      migrate: (persistedState: any, _version: number) => {
         // Migração para garantir que heróis tenham as propriedades necessárias
         if (persistedState?.heroes) {
           persistedState.heroes = persistedState.heroes.map((hero: any) => {
@@ -1411,7 +1917,8 @@ export const useHeroStore = create<HeroState>()(
                 itemsFound: 0,
                 achievementsUnlocked: 0,
                 loginStreak: 0,
-                lastLogin: new Date()
+                lastLogin: new Date(),
+                dailyCompletionStreak: 0
               }
             };
             
@@ -1422,6 +1929,10 @@ export const useHeroStore = create<HeroState>()(
             
             return migratedHero;
           });
+        }
+        // Garantir array de convites
+        if (!persistedState?.referralInvites) {
+          persistedState.referralInvites = [];
         }
         return persistedState;
       }

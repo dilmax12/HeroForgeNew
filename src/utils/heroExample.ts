@@ -3,7 +3,7 @@
  * Demonstra todas as funcionalidades implementadas
  */
 
-import { Hero, HeroCreationData } from '../types/hero';
+import { HeroCreationData } from '../types/hero';
 import { getClassSkills } from './skillSystem';
 import { generateName, getBattleQuote } from './nameGenerator';
 import { createInitialAttributes } from './attributeSystem';

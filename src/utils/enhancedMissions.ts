@@ -3,7 +3,7 @@
  * Implementa o novo sistema de narrativa procedural
  */
 
-import { EnhancedQuest, EnhancedQuestChoice, QuestChoiceEffect, Hero } from '../types/hero';
+import { EnhancedQuest, EnhancedQuestChoice, Hero } from '../types/hero';
 import { worldStateManager } from './worldState';
 
 // Templates de missões com decisões complexas
@@ -291,7 +291,7 @@ export class EnhancedMissionGenerator {
   /**
    * Gera uma missão de fallback quando nenhum template está disponível
    */
-  private generateFallbackMission(hero: Hero): EnhancedQuest {
+  private generateFallbackMission(_hero: Hero): EnhancedQuest {
     return {
       id: `fallback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       title: 'Tarefa Simples',

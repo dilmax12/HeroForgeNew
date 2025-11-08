@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { RankLevel, RankProgress, RANK_CONFIG } from '../types/ranks';
-import { rankSystem } from '../utils/rankSystem';
 import { medievalTheme, getRankGradient, getRankIcon } from '../styles/medievalTheme';
 
 interface RankCardProps {
@@ -73,8 +72,10 @@ export const RankCard: React.FC<RankCardProps> = ({
           ${getRankStyles()}
           ${getGlowEffect()}
           ${animated ? 'hover:scale-110' : ''}
-          relative overflow-hidden
+          relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-indigo-500
         `}
+        tabIndex={onClick ? 0 : -1}
+        role={onClick ? 'button' : undefined}
         onClick={onClick}
       >
         {/* Rank Letter */}
@@ -143,7 +144,12 @@ export const RankHistory: React.FC<RankHistoryProps> = ({
   return (
     <div className="flex items-center space-x-2 overflow-x-auto pb-2">
       {ranks.map((rank, index) => (
-        <div key={index} className="flex-shrink-0">
+        <div
+          key={index}
+          className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded"
+          tabIndex={0}
+          aria-label={`Rank ${rank}`}
+        >
           <RankCard
             rank={rank}
             size={size}
@@ -180,10 +186,11 @@ export const RankComparison: React.FC<RankComparisonProps> = ({
         <div>
           <div className="font-semibold text-white">{heroName}</div>
           <div className="text-sm text-amber-600">{RANK_CONFIG[heroRank].name}</div>
+        </div>
       </div>
-      
+
       <div className="text-amber-400 text-xl font-bold">⚔️</div>
-      
+
       <div className="flex items-center space-x-3">
         <div className="text-right">
           <div className="font-semibold text-white">{compareName}</div>

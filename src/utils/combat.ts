@@ -2,8 +2,9 @@
  * Sistema de Combate - RNG + Atributos
  */
 
-import { Hero, CombatResult, QuestEnemy, Item, Skill } from '../types/hero';
-import { getElementMultiplier } from './elementSystem';
+import { Hero, CombatResult, QuestEnemy, Item, Skill, Element } from '../types/hero';
+import { SHOP_ITEMS } from './shop';
+import { getElementMultiplier, generateRandomElement } from './elementSystem';
 
 // === TIPOS DE COMBATE ===
 
@@ -168,7 +169,7 @@ function heroToCombatEntity(hero: Hero): CombatEntity {
   };
 }
 
-function resolveAttack(attacker: CombatEntity, defender: CombatEntity): AttackResult {
+function resolveAttack(attacker: CombatEntity, defender: CombatEntity, opts?: { ramp?: number; attackElement?: Element; defendElement?: Element; skillBonus?: number }): AttackResult {
   // Calcular chance de acerto baseada em destreza
   const baseHit = 50 + (attacker.destreza - defender.destreza) * 3;
   const hitChance = Math.max(5, Math.min(95, baseHit)); // Entre 5% e 95%
@@ -178,27 +179,28 @@ function resolveAttack(attacker: CombatEntity, defender: CombatEntity): AttackRe
   if (roll <= hitChance) {
     // Acertou! Calcular dano
     const weaponAtk = attacker.weapon?.atk || 0;
-    const baseDamage = attacker.forca + weaponAtk;
+    const baseDamage = attacker.forca + weaponAtk + (opts?.skillBonus || 0);
     
     // Verificar crítico
     const critChance = attacker.weapon?.critChance || 0.05;
     const isCrit = Math.random() < critChance;
     
-    // Aplicar multiplicador de crítico e redução de armadura
+    // Multiplicadores: crítico, ramp de dano e elemento
+    const ramp = opts?.ramp || 1;
+    const elemMult = getElementMultiplier(opts?.attackElement || 'physical', opts?.defendElement || 'physical');
     const finalDamage = Math.max(1, Math.floor(
-      baseDamage * (isCrit ? 1.5 : 1) - defender.armor
+      baseDamage * (isCrit ? 1.5 : 1) * ramp * elemMult - defender.armor
     ));
-    
-    defender.hp = Math.max(0, defender.hp - finalDamage);
     
     const weaponName = attacker.weapon?.name || 'punhos';
     const critText = isCrit ? ' CRÍTICO!' : '';
+    const elemText = elemMult > 1 ? ' (super efetivo!)' : (elemMult < 1 ? ' (pouco efetivo)' : '');
     
     return {
       hit: true,
       damage: finalDamage,
       crit: isCrit,
-      message: `${attacker.name} ataca com ${weaponName} e causa ${finalDamage} de dano${critText}`
+      message: `${attacker.name} ataca com ${weaponName} e causa ${finalDamage} de dano${critText}${elemText}`
     };
   } else {
     return {
@@ -255,7 +257,6 @@ export interface SkillUseResult {
  * Resolve o uso de uma habilidade em combate
  */
 export function resolveSkillUse(user: Hero, target: Hero | CombatEntity, skill: Skill): SkillUseResult {
-  const userElement = user.element || 'physical';
   const targetElement = (target as Hero).element || 'physical';
   
   // Calcular poder base da habilidade
@@ -348,36 +349,76 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[]): CombatResult {
   
   const heroEntity = heroToCombatEntity(hero);
   combatLog.push(`${heroEntity.name} entra em combate!`);
+
+  const heroElement: Element = hero.element || 'physical';
   
   // Processar cada inimigo
   for (const questEnemy of enemies) {
     for (let i = 0; i < questEnemy.count; i++) {
       const enemy = createEnemyFromTemplate(questEnemy.type, questEnemy.level || 1);
+      const enemyElement: Element = generateRandomElement();
       combatLog.push(`\n--- Enfrentando ${enemy.name} ---`);
+      combatLog.push(`Elemento do inimigo: ${enemyElement}`);
       
       // Combate por turnos
       let turn = 1;
-      while (heroEntity.hp > 0 && enemy.hp > 0 && turn <= 10) { // Máximo 10 turnos
+      let enemyFled = false;
+      const maxTurns = 20; // aumentar teto de turnos
+      while (heroEntity.hp > 0 && enemy.hp > 0 && turn <= maxTurns) {
         // Determinar quem ataca primeiro (baseado em destreza)
         const heroFirst = heroEntity.destreza >= enemy.destreza;
+        const ramp = 1 + Math.min(0.10 + turn * 0.06, 2.0); // ramp de dano progressivo
         
         if (heroFirst) {
           // Herói ataca primeiro
-          const heroAttack = resolveAttack(heroEntity, enemy);
-          combatLog.push(`Turno ${turn}: ${heroAttack.message}`);
+          // Chance de usar habilidade ofensiva
+          const useSkill = (hero.skills && hero.skills.length > 0) && Math.random() < 0.35;
+          if (useSkill) {
+            const atkSkill = hero.skills.find(s => (s as any).type === 'attack') || hero.skills[0];
+            const skillRes = resolveSkillUse(hero, enemy, atkSkill as any);
+            enemy.hp = Math.max(0, enemy.hp - Math.floor(skillRes.damage * ramp));
+            combatLog.push(`Turno ${turn}: ${skillRes.message}`);
+          } else {
+            const heroAttack = resolveAttack(heroEntity, enemy, { ramp, attackElement: heroElement, defendElement: enemyElement });
+            enemy.hp = Math.max(0, enemy.hp - heroAttack.damage);
+            combatLog.push(`Turno ${turn}: ${heroAttack.message}`);
+          }
           
           if (enemy.hp > 0) {
-            const enemyAttack = resolveAttack(enemy, heroEntity);
+            const enemyAttack = resolveAttack(enemy, heroEntity, { ramp, attackElement: enemyElement, defendElement: heroElement });
+            heroEntity.hp = Math.max(0, heroEntity.hp - enemyAttack.damage);
             combatLog.push(`${enemyAttack.message}`);
           }
         } else {
           // Inimigo ataca primeiro
-          const enemyAttack = resolveAttack(enemy, heroEntity);
+          const enemyAttack = resolveAttack(enemy, heroEntity, { ramp, attackElement: enemyElement, defendElement: heroElement });
+          heroEntity.hp = Math.max(0, heroEntity.hp - enemyAttack.damage);
           combatLog.push(`Turno ${turn}: ${enemyAttack.message}`);
           
           if (heroEntity.hp > 0) {
-            const heroAttack = resolveAttack(heroEntity, enemy);
-            combatLog.push(`${heroAttack.message}`);
+            const useSkill = (hero.skills && hero.skills.length > 0) && Math.random() < 0.35;
+            if (useSkill) {
+              const atkSkill = hero.skills.find(s => (s as any).type === 'attack') || hero.skills[0];
+              const skillRes = resolveSkillUse(hero, enemy, atkSkill as any);
+              enemy.hp = Math.max(0, enemy.hp - Math.floor(skillRes.damage * ramp));
+              combatLog.push(`${skillRes.message}`);
+            } else {
+              const heroAttack = resolveAttack(heroEntity, enemy, { ramp, attackElement: heroElement, defendElement: enemyElement });
+              enemy.hp = Math.max(0, enemy.hp - heroAttack.damage);
+              combatLog.push(`${heroAttack.message}`);
+            }
+          }
+        }
+        
+        // Lógica de fuga do inimigo quando em desvantagem
+        const enemyLow = enemy.hp / enemy.maxHp <= 0.25;
+        const heroHealthy = heroEntity.hp / heroEntity.maxHp >= 0.5;
+        if (!enemyFled && turn >= 8 && enemyLow && heroHealthy) {
+          const fleeChance = 0.5 + (0.2 * (heroEntity.destreza > enemy.destreza ? 1 : 0));
+          if (Math.random() < fleeChance) {
+            enemyFled = true;
+            combatLog.push(`${enemy.name} tenta fugir e consegue! Combate encerrado.`);
+            break;
           }
         }
         
@@ -404,6 +445,30 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[]): CombatResult {
         const xp = calculateXpReward(enemy, hero.progression.level);
         const gold = calculateGoldReward(enemy);
         const loot = generateLoot(questEnemy.type);
+
+        // Drop universal: Núcleos de Mana
+        const level = questEnemy.level || 1;
+        const coreCandidates: { id: string; chance: number }[] =
+          level >= 20
+            ? [
+                { id: 'nucleo-mana-raro', chance: 0.20 },
+                { id: 'nucleo-ancestral', chance: 0.10 }
+              ]
+            : level >= 10
+            ? [
+                { id: 'nucleo-mana', chance: 0.35 },
+                { id: 'nucleo-mana-raro', chance: 0.10 }
+              ]
+            : [
+                { id: 'nucleo-mana-menor', chance: 0.40 },
+                { id: 'nucleo-mana', chance: 0.15 }
+              ];
+        coreCandidates.forEach(({ id, chance }) => {
+          if (Math.random() < chance) {
+            const coreItem = SHOP_ITEMS.find(i => i.id === id);
+            if (coreItem) loot.push(coreItem);
+          }
+        });
         
         totalXp += xp;
         totalGold += gold;
@@ -414,7 +479,11 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[]): CombatResult {
           combatLog.push(`Itens encontrados: ${loot.map(item => item.name).join(', ')}`);
         }
       } else {
-        combatLog.push(`Combate inconclusivo - ${enemy.name} foge!`);
+        // inimigo fugiu ou combate encerrou por tempo
+        const baseXp = calculateXpReward(enemy, hero.progression.level);
+        const reducedXp = Math.floor(baseXp * 0.4);
+        totalXp += reducedXp;
+        combatLog.push(`Combate inconclusivo - ${enemy.name} foge! Recompensa reduzida: +${reducedXp} XP`);
       }
     }
   }
@@ -508,7 +577,32 @@ export function autoResolveCombat(hero: Hero, enemies: QuestEnemy[], isGuildQues
         const enemy = createEnemyFromTemplate(questEnemy.type, questEnemy.level || 1);
         totalXp += calculateXpReward(enemy, hero.progression.level);
         totalGold += calculateGoldReward(enemy);
-        allLoot.push(...generateLoot(questEnemy.type));
+        const loot = generateLoot(questEnemy.type);
+
+        // Drop universal de Núcleos de Mana também no auto-resolve
+        const level = questEnemy.level || 1;
+        const coreCandidates: { id: string; chance: number }[] =
+          level >= 20
+            ? [
+                { id: 'nucleo-mana-raro', chance: 0.20 },
+                { id: 'nucleo-ancestral', chance: 0.10 }
+              ]
+            : level >= 10
+            ? [
+                { id: 'nucleo-mana', chance: 0.35 },
+                { id: 'nucleo-mana-raro', chance: 0.10 }
+              ]
+            : [
+                { id: 'nucleo-mana-menor', chance: 0.40 },
+                { id: 'nucleo-mana', chance: 0.15 }
+              ];
+        coreCandidates.forEach(({ id, chance }) => {
+          if (Math.random() < chance) {
+            const coreItem = SHOP_ITEMS.find(i => i.id === id);
+            if (coreItem) loot.push(coreItem);
+          }
+        });
+        allLoot.push(...loot);
       }
     });
     

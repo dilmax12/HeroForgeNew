@@ -218,7 +218,7 @@ export const RankProgress: React.FC<RankProgressProps> = ({
       {/* Promotion Button */}
       {progress.canPromote && (
         <div className="text-center">
-          <button className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-yellow-900 font-bold py-3 px-8 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-lg">
+          <button className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-yellow-900 font-bold py-3 px-8 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
             🎉 Promover para {nextRankInfo?.name}!
           </button>
         </div>

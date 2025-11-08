@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Quest, Hero, QuestChoice } from '../types/hero';
 import { useHeroStore } from '../store/heroStore';
 import { processQuestChoice } from '../utils/narrativeMissions';
+import { generateOutcomeNarrative } from '../services/narratorAI';
 
 interface NarrativeQuestProps {
   quest: Quest;
@@ -15,6 +16,8 @@ const NarrativeQuest: React.FC<NarrativeQuestProps> = ({ quest, onComplete, onCl
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [showOutcome, setShowOutcome] = useState(false);
   const [outcome, setOutcome] = useState<any>(null);
+  const [dmLine, setDmLine] = useState<string>('');
+  const [dmLoading, setDmLoading] = useState<boolean>(false);
 
   if (!selectedHero) {
     return null;
@@ -37,6 +40,27 @@ const NarrativeQuest: React.FC<NarrativeQuestProps> = ({ quest, onComplete, onCl
 
     setOutcome(result);
     setShowOutcome(true);
+
+    // Gerar narrativa emocional do resultado
+    setDmLoading(true);
+    const rewardSummaryParts: string[] = [];
+    if (result.rewards?.xp) rewardSummaryParts.push(`+${result.rewards.xp} XP`);
+    if (typeof result.rewards?.gold === 'number') rewardSummaryParts.push(`${result.rewards.gold > 0 ? '+' : ''}${result.rewards.gold} ouro`);
+    if (Array.isArray(result.rewards?.items) && result.rewards.items.length > 0) rewardSummaryParts.push(`itens: ${result.rewards.items.join(', ')}`);
+    const rewardSummary = rewardSummaryParts.join(', ');
+    const consequence = typeof result.reputationChange === 'number' && result.reputationChange !== 0
+      ? `${result.reputationChange > 0 ? '+' : ''}${result.reputationChange} reputação`
+      : '';
+    generateOutcomeNarrative({
+      heroName: selectedHero.name,
+      questTitle: quest.title,
+      success: !!result.success,
+      consequence,
+      rewardSummary,
+    })
+      .then(text => setDmLine(text))
+      .catch(() => setDmLine('O destino registra este momento: vitória ou lição, ambas forjam a alma.'))
+      .finally(() => setDmLoading(false));
 
     // Aplicar recompensas e mudanças
     if (result.success) {
@@ -115,6 +139,17 @@ const NarrativeQuest: React.FC<NarrativeQuestProps> = ({ quest, onComplete, onCl
             <h2 className="text-2xl font-bold text-amber-400 mb-4">
               {outcome.success ? '✅ Sucesso!' : '❌ Falha'}
             </h2>
+            {/* Narrativa do Mestre do Jogo para o resultado */}
+            {dmLine && (
+              <div className="bg-gray-700 rounded-lg p-4 mb-6 text-left">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">🎙️</span>
+                  <span className="font-semibold">Mestre do Jogo</span>
+                  {dmLoading && <span className="text-xs text-gray-300">gerando...</span>}
+                </div>
+                <p className="text-sm text-gray-200 leading-relaxed">{dmLine}</p>
+              </div>
+            )}
             
             <div className="bg-gray-700 rounded-lg p-6 mb-6">
               <p className="text-gray-300 text-lg leading-relaxed">

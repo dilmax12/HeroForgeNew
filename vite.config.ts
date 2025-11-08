@@ -3,7 +3,6 @@ import reactSWC from '@vitejs/plugin-react-swc'
 
 // Detectar plataforma de deploy
 const isGitHubPages = process.env.VITE_GITHUB_PAGES === 'true' || process.env.GITHUB_ACTIONS === 'true'
-const isVercel = process.env.VERCEL === '1'
 
 export default defineConfig({
   plugins: [reactSWC()],

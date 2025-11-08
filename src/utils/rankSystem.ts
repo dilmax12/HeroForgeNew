@@ -135,15 +135,6 @@ export class RankSystem {
     const newRank = progress.nextRank;
     const celebration = this.createCelebration(newRank, hero);
     
-    // Atualizar histórico
-    const historyEntry: RankHistory = {
-      rank: newRank,
-      achievedAt: new Date(),
-      heroLevel: hero.progression.level,
-      notableAchievement: this.getNotableAchievement(hero, newRank),
-      celebrationViewed: false
-    };
-    
     // Log da atividade de promoção
     logActivity.rankPromotion({
       heroId: hero.id,
@@ -185,7 +176,7 @@ export class RankSystem {
   /**
    * Determina uma conquista notável para o histórico
    */
-  private getNotableAchievement(hero: Hero, rank: RankLevel): string {
+  private getNotableAchievement(hero: Hero, _rank: RankLevel): string {
     const achievements = [
       `Alcançou ${hero.progression.xp} XP total`,
       `Completou ${hero.stats.questsCompleted || 0} missões`,

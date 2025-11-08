@@ -7,6 +7,34 @@ import { Title, Achievement, ReputationFaction, Hero, HeroAttributes } from '../
 // === TÍTULOS PREDEFINIDOS ===
 
 export const AVAILABLE_TITLES: Title[] = [
+  // Títulos simples por level
+  {
+    id: 'aprendiz',
+    name: 'Aprendiz',
+    description: 'Alcançou o nível 2',
+    rarity: 'comum',
+    category: 'achievement',
+    badge: '⭐',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'veterano',
+    name: 'Veterano',
+    description: 'Alcançou o nível 5',
+    rarity: 'raro',
+    category: 'achievement',
+    badge: '🌟',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'campeao',
+    name: 'Campeão',
+    description: 'Alcançou o nível 10',
+    rarity: 'epico',
+    category: 'achievement',
+    badge: '🏆',
+    unlockedAt: new Date()
+  },
   // Títulos de Combate
   {
     id: 'wolf-slayer',
@@ -339,6 +367,10 @@ export function updateAchievementProgress(hero: Hero): Achievement[] {
 export const TITLE_PASSIVE_ATTRIBUTE_BONUSES: Record<string, Partial<HeroAttributes>> = {
   // Título inicial
   'novato': {},
+  // Level-based simples
+  'aprendiz': { inteligencia: 1 },
+  'veterano': { constituicao: 1 },
+  'campeao': { carisma: 1 },
 
   // Combate
   'wolf-slayer': { forca: 1 },

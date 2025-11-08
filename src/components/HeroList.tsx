@@ -53,7 +53,7 @@ const HeroList: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800">
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto p-4 sm:p-6">
         {/* Input oculto para upload de imagem */}
         <input
           ref={fileInputRef}
@@ -64,58 +64,41 @@ const HeroList: React.FC = () => {
         />
 
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-amber-400 mb-2">⚔️ Hero Forge</h1>
-          <p className="text-gray-300">Gerencie seus heróis épicos</p>
-          
-          {/* Botão para criar herói de exemplo */}
-          <div className="mt-4">
-            <button
-              onClick={handleCreateExampleHero}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md text-sm transition-colors"
-            >
-              🧙‍♂️ Criar Herói de Exemplo
-            </button>
-          </div>
+        <div className="text-center mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-4xl font-bold text-amber-400 mb-1 sm:mb-2">⚔️ Hero Forge</h1>
+          <p className="text-gray-300 text-sm sm:text-base">Gerencie seus heróis épicos</p>
         </div>
 
         {/* Seção de Navegação Rápida */}
-        <div className="mb-8">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="mb-6 sm:mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4">
             <Link
               to="/quests"
-              className="bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white p-4 rounded-lg text-center transition-all transform hover:scale-105 border border-blue-500/30"
+              className="bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white p-3 sm:p-4 rounded-lg text-center transition-all transform hover:scale-105 border border-blue-500/30"
             >
-              <div className="text-2xl mb-2">⚔️</div>
-              <div className="font-medium">Missões</div>
+              <div className="text-xl sm:text-2xl mb-1 sm:mb-2">⚔️</div>
+              <div className="font-medium text-sm sm:text-base">Missões</div>
             </Link>
             <Link
               to="/guilds"
-              className="bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white p-4 rounded-lg text-center transition-all transform hover:scale-105 border border-purple-500/30"
+              className="bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white p-3 sm:p-4 rounded-lg text-center transition-all transform hover:scale-105 border border-purple-500/30"
             >
-              <div className="text-2xl mb-2">🏰</div>
-              <div className="font-medium">Guildas</div>
+              <div className="text-xl sm:text-2xl mb-1 sm:mb-2">🏰</div>
+              <div className="font-medium text-sm sm:text-base">Guildas</div>
             </Link>
             <Link
               to="/titles"
-              className="bg-gradient-to-br from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white p-4 rounded-lg text-center transition-all transform hover:scale-105 border border-amber-500/30"
+              className="bg-gradient-to-br from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white p-3 sm:p-4 rounded-lg text-center transition-all transform hover:scale-105 border border-amber-500/30"
             >
-              <div className="text-2xl mb-2">👑</div>
-              <div className="font-medium">Títulos</div>
+              <div className="text-xl sm:text-2xl mb-1 sm:mb-2">👑</div>
+              <div className="font-medium text-sm sm:text-base">Títulos</div>
             </Link>
             <Link
               to="/leaderboards"
-              className="bg-gradient-to-br from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600 text-white p-4 rounded-lg text-center transition-all transform hover:scale-105 border border-yellow-500/30"
+              className="bg-gradient-to-br from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600 text-white p-3 sm:p-4 rounded-lg text-center transition-all transform hover:scale-105 border border-yellow-500/30"
             >
-              <div className="text-2xl mb-2">🏆</div>
-              <div className="font-medium">Rankings</div>
-            </Link>
-            <Link
-              to="/playtest"
-              className="bg-gradient-to-br from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white p-4 rounded-lg text-center transition-all transform hover:scale-105 border border-green-500/30"
-            >
-              <div className="text-2xl mb-2">📊</div>
-              <div className="font-medium">Playtest</div>
+              <div className="text-xl sm:text-2xl mb-1 sm:mb-2">🏆</div>
+              <div className="font-medium text-sm sm:text-base">Rankings</div>
             </Link>
           </div>
         </div>

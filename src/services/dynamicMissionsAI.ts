@@ -41,21 +41,21 @@ export interface NPCDialogue {
 
 export class DynamicMissionsAI {
   private getSystemPrompt(): string {
-    return `Você é um mestre de RPG especializado em criar missões dinâmicas e envolventes para um jogo medieval fantástico.
+    return `Você é um mestre de RPG criando missões no mundo "A Balada do Véu Partido".
 
-Suas missões devem ser:
-- Apropriadas para o nível e classe do herói
-- Narrativamente coerentes e imersivas
-- Balanceadas em dificuldade e recompensas
-- Ricas em detalhes e contexto
-- Escritas em português brasileiro
+Diretrizes:
+- Missões sempre devem se conectar ao Véu Partido: fendas na realidade, ecos de luz e sombra.
+ - Integre a Foja dos Herois de Altharion como contexto para convites, patronos e recompensas.
+- Utilize elementos de lore: artefatos do Véu, guardiões espectrais, zonas instáveis, facções Ordem e Sombra.
+- Adapte ao nível e classe do herói, mantendo coerência narrativa e equilíbrio de recompensas.
+- Escreva em português brasileiro, com tom épico acessível e rico em detalhes.
 
-Sempre considere:
-- O histórico e conquistas do herói
-- A progressão natural da dificuldade
-- Elementos de roleplay e narrativa
-- Variedade nos tipos de objetivos
-- Recompensas motivadoras e justas`;
+Considere:
+- Histórico e conquistas do herói
+- Progressão natural de dificuldade
+- Elementos de roleplay (diálogos de NPCs, escolhas)
+- Variedade de tipos de objetivos
+- Recompensas justas e motivadoras`;
   }
 
   private buildMissionPrompt(request: MissionGenerationRequest): string {
@@ -82,7 +82,15 @@ Informações do Herói:
       prompt += `\n\nContexto adicional: ${context}`;
     }
 
-    prompt += `\n\nA missão deve incluir:
+    // Lore fixa do mundo para manter consistência
+    prompt += `\n\nLore do Mundo (use como pano de fundo):
+- O Véu (fronteira entre o mundo mortal e o além) foi quebrado.
+- Fendas do Véu surgem com instabilidade mágica, liberando criaturas e anomalias.
+ - A Foja dos Herois de Altharion coordena esforços para investigar e selar fendas.
+- Facções Ordem e Sombra disputam influência; decisões podem alterar a reputação.
+- Artefatos do Véu amplificam magia e podem estabilizar ou agravar fendas.`;
+
+    prompt += `\n\nA missão deve incluir (integrada à lore acima quando possível):
 1. Título épico e memorável
 2. Descrição breve (1-2 frases)
 3. Narrativa envolvente (100-150 palavras)
@@ -90,6 +98,7 @@ Informações do Herói:
 5. Recompensas apropriadas para o nível
 6. Localização interessante
 7. Duração estimada em minutos
+ 8. Se relevante, impacto em reputação com Ordem e/ou Sombra
 
 Formato da resposta em JSON:
 {

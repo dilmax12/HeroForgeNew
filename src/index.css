@@ -128,3 +128,15 @@ button:hover {
 button:active {
   filter: brightness(0.9);
 }
+/* Suporte básico a safe-areas em dispositivos móveis */
+:root {
+  --safe-bottom: env(safe-area-inset-bottom);
+  --safe-top: env(safe-area-inset-top);
+}
+
+body {
+  padding-bottom: var(--safe-bottom);
+  padding-top: var(--safe-top);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}

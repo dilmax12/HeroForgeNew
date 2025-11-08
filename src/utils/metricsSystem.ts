@@ -6,8 +6,6 @@ import {
   GameplayAnalytics, 
   PerformanceMetrics,
   KPIDashboard,
-  MetricFilter,
-  MetricAggregation,
   AlertRule,
   MetricAlert
 } from '../types/metrics';
@@ -152,7 +150,6 @@ export class MetricsManager {
     const cutoffDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
     
     const recentSessions = this.sessions.filter(s => s.startTime >= cutoffDate);
-    const uniqueUsers = new Set(recentSessions.map(s => s.heroId).filter(Boolean));
     
     const dailyUsers = this.getUniqueUsersInPeriod(1);
     const weeklyUsers = this.getUniqueUsersInPeriod(7);
@@ -527,6 +524,45 @@ export class MetricsManager {
     return 'low';
   }
 
+  // Métodos públicos para regras e alertas
+  addAlertRule(rule: AlertRule): void {
+    const exists = this.alertRules.some(r => r.id === rule.id);
+    if (exists) {
+      this.alertRules = this.alertRules.map(r => (r.id === rule.id ? rule : r));
+    } else {
+      this.alertRules.unshift(rule);
+    }
+  }
+
+  removeAlertRule(ruleId: string): void {
+    this.alertRules = this.alertRules.filter(r => r.id !== ruleId);
+  }
+
+  getAlertRules(): AlertRule[] {
+    return [...this.alertRules];
+  }
+
+  getAlerts(): MetricAlert[] {
+    return [...this.alerts];
+  }
+
+  acknowledgeAlert(alertId: string): void {
+    this.alerts = this.alerts.map(a => (a.id === alertId ? { ...a, acknowledged: true } : a));
+  }
+
+  clearAlerts(): void {
+    this.alerts = [];
+  }
+
+  // Expor eventos/sessões para análises avançadas
+  getEvents(): GameplayMetric[] {
+    return [...this.metrics];
+  }
+
+  getSessions(): SessionMetrics[] {
+    return [...this.sessions];
+  }
+
   // === PERSISTÊNCIA ===
 
   private getUserId(): string {
@@ -631,7 +667,10 @@ export const trackMetric = {
     metricsManager.trackEvent('page-visited', heroId, { page }),
   
   featureUsed: (heroId: string, feature: string) => 
-    metricsManager.trackEvent('feature-used', heroId, { feature })
+    metricsManager.trackEvent('feature-used', heroId, { feature }),
+
+  attributePointsAllocated: (heroId: string, data: { totalSpent: number; allocations: Record<string, number> }) =>
+    metricsManager.trackEvent('attribute-increased', heroId, data)
 };
 
 // Finalizar sessão quando a página é fechada

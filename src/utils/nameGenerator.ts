@@ -186,7 +186,7 @@ export function validateCustomName(name: string): { valid: boolean; message?: st
   }
   
   // Verifica caracteres especiais inválidos
-  const invalidChars = /[<>{}[\]\\\/\|`~!@#$%^&*()+=;:'"?]/;
+  const invalidChars = /[<>{}[\]\\/|`~!@#$%^&*()+=;:'"?]/;
   if (invalidChars.test(name)) {
     return { valid: false, message: "Nome contém caracteres inválidos" };
   }

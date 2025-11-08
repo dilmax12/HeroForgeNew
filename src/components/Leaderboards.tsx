@@ -11,7 +11,20 @@ import {
   getHeroesAroundRank,
   generateMockLeaderboardData
 } from '../utils/leaderboardSystem';
-import { Leaderboard, LeaderboardEntry } from '../types/hero';
+import type { Leaderboard, LeaderboardEntry } from '../types/hero';
+import { getOrRunDailyResult } from '../services/idleBattleService';
+import { notificationBus } from './NotificationSystem';
+
+interface DailyEntry {
+  heroId: string;
+  heroName: string;
+  heroLevel: number;
+  score: number;
+  xpToday: number;
+  goldToday: number;
+  victoriesToday: number;
+  timestamp: number;
+}
 
 const Leaderboards: React.FC = () => {
   const { getSelectedHero, heroes } = useHeroStore();
@@ -19,6 +32,9 @@ const Leaderboards: React.FC = () => {
   const [selectedLeaderboard, setSelectedLeaderboard] = useState('xp');
   const [leaderboards, setLeaderboards] = useState<Leaderboard[]>([]);
   const [viewMode, setViewMode] = useState<'top' | 'around'>('top');
+  const [dailyEntries, setDailyEntries] = useState<DailyEntry[]>([]);
+  const [dailySubmitting, setDailySubmitting] = useState(false);
+  const [dailySummary, setDailySummary] = useState<any | null>(null);
 
   useEffect(() => {
     if (selectedHero) {
@@ -26,6 +42,19 @@ const Leaderboards: React.FC = () => {
       const allHeroes = generateMockLeaderboardData(selectedHero);
       const generatedLeaderboards = generateAllLeaderboards(allHeroes);
       setLeaderboards(generatedLeaderboards);
+
+      // Carregar ranking diário e resumo
+      (async () => {
+        try {
+          const res = await fetch('/api/daily/leaderboard');
+          const data = await res.json();
+          setDailyEntries(Array.isArray(data.entries) ? data.entries : []);
+        } catch {}
+        try {
+          const summary = await getOrRunDailyResult(selectedHero);
+          setDailySummary(summary);
+        } catch {}
+      })();
     }
   }, [selectedHero, heroes]);
 
@@ -87,41 +116,134 @@ const Leaderboards: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Ranking Diário (MVP) */}
+      {selectedHero && (
+        <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-amber-600/30">
+          <div className="flex items-center justify-between mb-3 md:mb-4">
+            <h3 className="text-lg md:text-xl font-bold text-white flex items-center">
+              <span className="mr-2">📅</span>
+              Ranking Diário (MVP)
+            </h3>
+            <button
+              onClick={async () => {
+                if (dailySubmitting) return;
+                setDailySubmitting(true);
+                try {
+                  await fetch('/api/daily/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ hero: selectedHero })
+                  });
+                  const resLb = await fetch('/api/daily/leaderboard');
+                  const dataLb = await resLb.json();
+                  setDailyEntries(Array.isArray(dataLb.entries) ? dataLb.entries : []);
+                  notificationBus.emit({
+                    type: 'achievement',
+                    title: 'Ranking Diário',
+                    message: 'Resultado enviado com sucesso! Confira o Top do dia.',
+                    icon: '📅',
+                    duration: 3500
+                  });
+                } catch {
+                  notificationBus.emit({
+                    type: 'quest',
+                    title: 'Falha no envio',
+                    message: 'Não foi possível enviar seu resultado diário.',
+                    icon: '⚠️',
+                    duration: 4000
+                  });
+                } finally {
+                  setDailySubmitting(false);
+                }
+              }}
+              className={`px-3 md:px-4 py-2 rounded-lg font-medium transition-colors text-sm md:text-base ${
+                dailySubmitting ? 'bg-gray-700 text-gray-400' : 'bg-amber-600 text-white hover:bg-amber-700'
+              }`}
+            >
+              {dailySubmitting ? 'Enviando...' : 'Enviar Resultado de Hoje'}
+            </button>
+          </div>
+          {dailySummary && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-3 md:mb-4 text-center">
+              <div className="bg-gray-700 rounded p-2 md:p-3">
+                <div className="text-blue-400 text-base md:text-lg">✨ XP Hoje</div>
+                <div className="text-white text-lg md:text-xl font-bold">{dailySummary.xpTotal ?? 0}</div>
+              </div>
+              <div className="bg-gray-700 rounded p-2 md:p-3">
+                <div className="text-yellow-400 text-base md:text-lg">🪙 Ouro Hoje</div>
+                <div className="text-white text-lg md:text-xl font-bold">{dailySummary.goldTotal ?? 0}</div>
+              </div>
+              <div className="bg-gray-700 rounded p-2 md:p-3">
+                <div className="text-green-400 text-base md:text-lg">✅ Vitórias</div>
+                <div className="text-white text-lg md:text-xl font-bold">{dailySummary.victories ?? 0}</div>
+              </div>
+              <div className="bg-gray-700 rounded p-2 md:p-3">
+                <div className="text-purple-400 text-base md:text-lg">♻️ Execuções</div>
+                <div className="text-white text-lg md:text-xl font-bold">{Array.isArray(dailySummary.runs) ? dailySummary.runs.length : 0}</div>
+              </div>
+            </div>
+          )}
+          <div>
+            <h4 className="text-base md:text-lg font-semibold text-white mb-2">Top de Hoje</h4>
+            {dailyEntries.length === 0 ? (
+              <div className="text-gray-400">Nenhuma entrada enviada ainda.</div>
+            ) : (
+              <div className="space-y-2">
+                {dailyEntries.slice(0, 10).map(entry => (
+                  <div key={entry.heroId} className={`flex items-center justify-between p-2 md:p-3 rounded ${entry.heroId === selectedHero.id ? 'bg-amber-600/20 border border-amber-500' : 'bg-gray-700'}`}>
+                    <div className="flex items-center gap-3">
+                      <span className="text-white text-sm md:text-base font-medium">{entry.heroName}</span>
+                      <span className="text-gray-400 text-xs md:text-sm">Nv {entry.heroLevel}</span>
+                      {entry.heroId === selectedHero.id && (
+                        <span className="text-amber-400 bg-amber-600/20 px-2 py-0.5 rounded text-[11px] md:text-xs">Você</span>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-white text-sm md:text-base font-bold">{Math.round(entry.score)} pts</div>
+                      <div className="text-gray-400 text-[11px] md:text-xs">{entry.victoriesToday} vitórias • {entry.xpToday} XP • {entry.goldToday} ouro</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {/* Header com Ranking do Herói */}
-      <div className="bg-gradient-to-r from-amber-900/50 to-amber-800/30 rounded-lg p-6 border border-amber-500/30">
-        <h2 className="text-2xl font-bold text-amber-400 mb-4 flex items-center">
-          <span className="text-3xl mr-3">🏆</span>
+      <div className="bg-gradient-to-r from-amber-900/50 to-amber-800/30 rounded-lg p-4 md:p-6 border border-amber-500/30">
+        <h2 className="text-xl md:text-2xl font-bold text-amber-400 mb-3 md:mb-4 flex items-center">
+          <span className="text-2xl md:text-3xl mr-2 md:mr-3">🏆</span>
           Rankings & Leaderboards
         </h2>
         
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <div className="text-center">
-            <div className="text-2xl font-bold text-yellow-400">#{heroRanking.globalRank}</div>
-            <div className="text-sm text-gray-400">Ranking Global</div>
+            <div className="text-xl md:text-2xl font-bold text-yellow-400">#{heroRanking.globalRank}</div>
+            <div className="text-xs md:text-sm text-gray-400">Ranking Global</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-blue-400">#{heroRanking.classRank}</div>
-            <div className="text-sm text-gray-400">Ranking da Classe</div>
+            <div className="text-xl md:text-2xl font-bold text-blue-400">#{heroRanking.classRank}</div>
+            <div className="text-xs md:text-sm text-gray-400">Ranking da Classe</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-purple-400">{heroRanking.achievements}</div>
-            <div className="text-sm text-gray-400">Conquistas</div>
+            <div className="text-xl md:text-2xl font-bold text-purple-400">{heroRanking.achievements}</div>
+            <div className="text-xs md:text-sm text-gray-400">Conquistas</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-green-400">{heroRanking.totalScore.toLocaleString()}</div>
-            <div className="text-sm text-gray-400">Pontuação Total</div>
+            <div className="text-xl md:text-2xl font-bold text-green-400">{heroRanking.totalScore.toLocaleString()}</div>
+            <div className="text-xs md:text-sm text-gray-400">Pontuação Total</div>
           </div>
         </div>
       </div>
 
       {/* Seletor de Leaderboard */}
-      <div className="bg-gray-800 rounded-lg p-6">
-        <div className="flex flex-wrap gap-2 mb-6">
+      <div className="bg-gray-800 rounded-lg p-4 md:p-6">
+        <div className="flex flex-wrap gap-2 mb-4 md:mb-6">
           {LEADERBOARD_CONFIGS.map(config => (
             <button
               key={config.id}
               onClick={() => setSelectedLeaderboard(config.id)}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+              className={`flex items-center space-x-2 px-3 md:px-4 py-2 rounded-lg font-medium transition-colors text-sm md:text-base ${
                 selectedLeaderboard === config.id
                   ? 'bg-amber-600 text-white'
                   : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -134,10 +256,10 @@ const Leaderboards: React.FC = () => {
         </div>
 
         {/* Modo de Visualização */}
-        <div className="flex space-x-2 mb-4">
+        <div className="flex space-x-2 mb-3 md:mb-4">
           <button
             onClick={() => setViewMode('top')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            className={`px-3 md:px-4 py-2 rounded-lg font-medium transition-colors text-sm md:text-base ${
               viewMode === 'top'
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -147,7 +269,7 @@ const Leaderboards: React.FC = () => {
           </button>
           <button
             onClick={() => setViewMode('around')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            className={`px-3 md:px-4 py-2 rounded-lg font-medium transition-colors text-sm md:text-base ${
               viewMode === 'around'
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'

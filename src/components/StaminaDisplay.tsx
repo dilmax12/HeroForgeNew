@@ -45,9 +45,11 @@ export const StaminaDisplay: React.FC = () => {
   // Calcular tempo até próxima recuperação
   const lastRecoveryMs = new Date(lastRecovery).getTime();
   const timeSinceLastRecovery = currentTime - lastRecoveryMs;
-  const timeToNextRecovery = Math.max(0, 3600000 - (timeSinceLastRecovery % 3600000)); // 1 hora em ms
+  const timeToNextRecovery = Math.max(0, 60000 - (timeSinceLastRecovery % 60000)); // 1 minuto em ms
   const minutesToNext = Math.floor(timeToNextRecovery / 60000);
   const secondsToNext = Math.floor((timeToNextRecovery % 60000) / 1000);
+  const ratePerMinute = recoveryRate || 2;
+  const minutesToFull = current < max ? Math.ceil((max - current) / ratePerMinute) : 0;
 
   const getStaminaColor = () => {
     if (percentage >= 80) return 'from-green-500 to-green-600';
@@ -86,7 +88,7 @@ export const StaminaDisplay: React.FC = () => {
       <div className="space-y-2 text-sm">
         <div className="flex justify-between text-gray-300">
           <span>Taxa de Recuperação:</span>
-          <span>{recoveryRate}/hora</span>
+          <span>{ratePerMinute}/min</span>
         </div>
         
         {current < max && (
@@ -96,6 +98,13 @@ export const StaminaDisplay: React.FC = () => {
               {minutesToNext.toString().padStart(2, '0')}:
               {secondsToNext.toString().padStart(2, '0')}
             </span>
+          </div>
+        )}
+
+        {current < max && (
+          <div className="flex justify-between text-gray-300">
+            <span>Tempo para encher:</span>
+            <span className="font-mono">~ {minutesToFull} min</span>
           </div>
         )}
       </div>

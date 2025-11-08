@@ -1,5 +1,4 @@
 import { aiService } from './aiService';
-import { AIImageRequest } from '../types/ai';
 import { Hero } from '../types/hero';
 
 export class ImageAIService {

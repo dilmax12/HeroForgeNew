@@ -21,7 +21,7 @@ const QuickNavigation: React.FC = () => {
     },
     {
       id: 'training',
-      label: 'Treino',
+      label: 'Treinamento',
       icon: '💪',
       path: '/training',
       color: 'bg-red-600 hover:bg-red-700',
@@ -42,48 +42,6 @@ const QuickNavigation: React.FC = () => {
       path: '/daily-goals',
       color: 'bg-indigo-600 hover:bg-indigo-700',
       badge: selectedHero.dailyGoals ? selectedHero.dailyGoals.filter(g => g.completed).length : null
-    },
-    {
-      id: 'tutorial',
-      label: 'Tutorial',
-      icon: '🎓',
-      path: '/tutorial',
-      color: 'bg-orange-600 hover:bg-orange-700'
-    },
-    {
-      id: 'events',
-      label: 'Eventos',
-      icon: '🎪',
-      path: '/events',
-      color: 'bg-pink-600 hover:bg-pink-700'
-    },
-    {
-      id: 'activities',
-      label: 'Atividades',
-      icon: '📰',
-      path: '/activities',
-      color: 'bg-cyan-600 hover:bg-cyan-700'
-    },
-    {
-      id: 'guilds',
-      label: 'Guildas',
-      icon: '🏰',
-      path: '/guilds',
-      color: 'bg-purple-600 hover:bg-purple-700'
-    },
-    {
-      id: 'leaderboards',
-      label: 'Rankings',
-      icon: '🏆',
-      path: '/leaderboards',
-      color: 'bg-yellow-600 hover:bg-yellow-700'
-    },
-    {
-      id: 'metrics',
-      label: 'Métricas',
-      icon: '📊',
-      path: '/metrics',
-      color: 'bg-blue-600 hover:bg-blue-700'
     }
   ];
 

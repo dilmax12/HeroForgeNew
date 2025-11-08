@@ -83,7 +83,7 @@ export class RecommendationAI {
     const cleaned = escapeNewlinesInStrings(stripFences(text));
     try {
       return JSON.parse(cleaned);
-    } catch (_) {
+    } catch {
       // Fallback: tentar extrair o primeiro objeto JSON entre chaves
       const start = cleaned.indexOf('{');
       const end = cleaned.lastIndexOf('}');
@@ -201,7 +201,7 @@ TIPOS DE RECOMENDAÇÃO:
 
       const data = this.parseJsonResponse(response.text);
       
-      return data.recommendations.map((rec: any, index: number) => ({
+      return data.recommendations.map((rec: any) => ({
         id: this.generateRecommendationId(),
         type: rec.type,
         priority: rec.priority,

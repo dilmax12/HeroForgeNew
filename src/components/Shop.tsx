@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useHeroStore } from '../store/heroStore';
-import { SHOP_ITEMS, SHOP_CATEGORIES, purchaseItem, canAfford, getDailyOffers, getDiscountedPrice, RARITY_CONFIG } from '../utils/shop';
+import { SHOP_CATEGORIES, purchaseItem, canAfford, getDailyOffers, getDiscountedPrice, RARITY_CONFIG } from '../utils/shop';
 import { Item } from '../types/hero';
 
 const Shop: React.FC = () => {
@@ -12,11 +12,11 @@ const Shop: React.FC = () => {
 
   if (!selectedHero) {
     return (
-      <div className="max-w-4xl mx-auto p-6 text-center">
+      <div className="max-w-full sm:max-w-4xl mx-auto p-4 sm:p-6 text-center">
         <div className="text-6xl mb-4">🏪</div>
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">Loja do Aventureiro</h2>
-        <p className="text-gray-600 mb-6">Selecione um herói para acessar a loja.</p>
-        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">Loja do Aventureiro</h2>
+        <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">Selecione um herói para acessar a loja.</p>
+        <Link to="/" className="bg-blue-600 text-white px-4 sm:px-6 py-2 rounded hover:bg-blue-700 transition-colors text-sm sm:text-base">
           Voltar à Lista de Heróis
         </Link>
       </div>
@@ -110,7 +110,7 @@ const Shop: React.FC = () => {
             canBuy
               ? 'bg-green-600 hover:bg-green-700 text-white'
               : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-          }`}
+          } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
         >
           {canBuy ? 'Comprar' : 'Ouro Insuficiente'}
         </button>
@@ -121,37 +121,45 @@ const Shop: React.FC = () => {
   const dailyOffers = getDailyOffers();
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="max-w-full lg:max-w-7xl mx-auto p-4 sm:p-6">
       {/* Header */}
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-gray-800 mb-2">
+      <div className="text-center mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-4xl font-bold text-gray-800 mb-2">
           🏪 Loja do Aventureiro
         </h1>
-        <p className="text-gray-600">
+        <p className="text-gray-600 text-sm sm:text-base">
           Equipamentos, consumíveis e itens especiais para sua jornada
         </p>
-        <div className="mt-4 bg-yellow-100 border border-yellow-400 rounded-lg p-3 inline-block">
-          <span className="text-yellow-800 font-medium">
+        <div className="mt-3 sm:mt-4 bg-yellow-100 border border-yellow-400 rounded-lg p-2 sm:p-3 inline-block">
+          <span className="text-yellow-800 font-medium text-sm sm:text-base">
             💰 Ouro Disponível: {selectedHero.progression.gold}g
           </span>
+        </div>
+        <div className="mt-3 sm:mt-4">
+          <a
+            href="#cosmetics"
+            className="inline-block px-3 sm:px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors text-sm sm:text-base"
+          >
+            💖 Apoie o projeto (Cosméticos)
+          </a>
         </div>
       </div>
 
       {/* Navegação */}
-      <div className="flex flex-wrap justify-center gap-2 mb-6">
+      <div className="flex flex-wrap justify-center gap-2 mb-4 sm:mb-6">
         <button
           onClick={() => setShowDailyOffers(false)}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+          className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
             !showDailyOffers ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
+          } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
         >
           Catálogo Geral
         </button>
         <button
           onClick={() => setShowDailyOffers(true)}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+          className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
             showDailyOffers ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
+          } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
         >
           ⭐ Ofertas Diárias
         </button>
@@ -160,10 +168,10 @@ const Shop: React.FC = () => {
       {showDailyOffers ? (
         /* Ofertas Diárias */
         <div>
-          <h2 className="text-2xl font-bold text-center mb-6 text-orange-600">
+          <h2 className="text-xl sm:text-2xl font-bold text-center mb-4 sm:mb-6 text-orange-600">
             ⭐ Ofertas Especiais do Dia (20% OFF)
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {dailyOffers.map(renderItem)}
           </div>
         </div>
@@ -171,16 +179,16 @@ const Shop: React.FC = () => {
         /* Catálogo Geral */
         <div>
           {/* Categorias */}
-          <div className="flex flex-wrap justify-center gap-2 mb-6">
+          <div className="flex flex-wrap justify-center gap-2 mb-4 sm:mb-6">
             {Object.entries(SHOP_CATEGORIES).map(([key, category]) => (
               <button
                 key={key}
                 onClick={() => setActiveCategory(key)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
                   activeCategory === key
                     ? 'bg-purple-600 text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+                } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
               >
                 {category.icon} {category.name}
               </button>
@@ -188,8 +196,40 @@ const Shop: React.FC = () => {
           </div>
 
           {/* Itens da categoria */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             {SHOP_CATEGORIES[activeCategory as keyof typeof SHOP_CATEGORIES].items.map(renderItem)}
+          </div>
+
+          {/* Cosméticos (placeholder) */}
+          <div id="cosmetics" className="mt-8 sm:mt-12">
+            <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-800">🎨 Cosméticos (visual)</h2>
+            <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">Personalize molduras e fundos do herói. Desbloqueios naturais por XP e reputação.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
+              {[{
+                id: 'frame-gold', name: 'Moldura Dourada', icon: '🟨', req: '500 XP', unlocked: (selectedHero.progression.xp || 0) >= 500
+              }, {
+                id: 'frame-royal', name: 'Moldura Real', icon: '👑', req: 'Rank B+', unlocked: (selectedHero.rankData?.currentRank || 'F') <= 'B'
+              }, {
+                id: 'bg-aurora', name: 'Fundo Aurora', icon: '🌌', req: 'Reputação 10+', unlocked: (selectedHero.progression.reputation || 0) >= 10
+              }].map(c => (
+                <div key={c.id} className={`p-3 sm:p-4 rounded-lg border ${c.unlocked ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-gray-50'}`}>
+                  <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">{c.icon}</div>
+                  <div className="font-semibold text-sm sm:text-base">{c.name}</div>
+                  <div className="text-xs sm:text-sm text-gray-600">Requisito: {c.req}</div>
+                  <div className="mt-2 sm:mt-3">
+                    <button
+                      disabled={!c.unlocked}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium ${c.unlocked ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'} focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                    >
+                      {c.unlocked ? 'Aplicar' : 'Bloqueado'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 text-sm text-gray-500">
+              Em breve: compra de cosméticos premium para apoiar o projeto.
+            </div>
           </div>
         </div>
       )}

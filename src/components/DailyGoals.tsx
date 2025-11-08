@@ -122,6 +122,11 @@ export const DailyGoals: React.FC<DailyGoalsProps> = ({ heroId }) => {
               style={{ width: `${completionPercentage}%` }}
             />
           </div>
+          <div className="mt-2 inline-flex items-center gap-2 text-sm">
+            <span className="px-2 py-1 rounded-full bg-gray-700 text-orange-300 border border-orange-500/40">
+              🔥 Streak: {hero.stats?.dailyCompletionStreak || 0}
+            </span>
+          </div>
         </div>
       </div>
 

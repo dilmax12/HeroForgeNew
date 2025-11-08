@@ -274,8 +274,10 @@ export const AIAvatarGenerator: React.FC<AIAvatarGeneratorProps> = ({
               exit={{ opacity: 0, scale: 0.8 }}
               transition={{ duration: 0.5 }}
               onError={() => {
-                setError('Falha ao carregar imagem.');
-                setGeneratedAvatar(null);
+                setError('Imagem remota indisponível, usando fallback.');
+                // Fallback visual imediato para evitar UI quebrada
+                const fallback = imageAIService.getFallbackAvatar(hero);
+                setGeneratedAvatar(fallback);
               }}
             />
           ) : (

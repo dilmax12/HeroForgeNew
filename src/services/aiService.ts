@@ -9,6 +9,7 @@ import {
   AICache,
   AIUsageStats
 } from '../types/ai';
+import { getCachedImage, setCachedImage } from '../utils/imageCache';
 
 class AIError extends Error implements AIErrorInterface {
   code: string;
@@ -40,15 +41,24 @@ class AIService {
     this.config = this.loadConfig();
   }
 
+  private fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, timeoutMs = 8000): Promise<Response> {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), Math.max(1000, timeoutMs));
+    return fetch(input, { ...(init || {}), signal: controller.signal })
+      .finally(() => clearTimeout(id));
+  }
+
   private loadConfig(): AIConfig {
     // Força configuração consistente: texto via Groq proxy backend e imagem via rota backend
     const provider: AIProvider = 'groq';
+    const isDev = typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.DEV;
     return {
       provider,
       apiKey: '',
       model: 'llama-3.1-8b-instant',
       imageModel: 'stabilityai/sd-turbo',
-      baseURL: '/api/groq-chat',
+      // Em dev usamos o proxy Express 
+      baseURL: isDev ? '/api/groq-openai' : '/api/groq-chat',
       maxTokens: 2000,
       temperature: 0.7
     };
@@ -101,10 +111,12 @@ class AIService {
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const raw = await response.text();
+      let error: any = {};
+      try { error = JSON.parse(raw); } catch { error = { error: { message: raw } }; }
       throw new AIError({
         code: error.error?.code || 'unknown_error',
-        message: error.error?.message || 'Unknown error occurred',
+        message: error.error?.message || raw || 'Unknown error occurred',
         provider: 'openai',
         retryable: response.status >= 500
       });
@@ -230,11 +242,26 @@ class AIService {
   }
 
   private async makeHuggingFaceImageRequest(request: AIImageRequest): Promise<AIImageResponse> {
-    const response = await fetch('/api/gerar-imagem', {
+    // Persistent cache check by prompt (Lexica/Pollinations URLs)
+    const cacheEnabled = import.meta.env.VITE_AI_CACHE_ENABLED !== 'false';
+    if (cacheEnabled) {
+      const cachedUrl = getCachedImage(request.prompt);
+      if (cachedUrl) {
+        return {
+          url: cachedUrl,
+          revisedPrompt: request.prompt,
+          size: request.size || '512x512',
+          model: this.config.imageModel || 'stabilityai/sd-turbo',
+          provider: 'cache'
+        } as any;
+      }
+    }
+
+    const response = await this.fetchWithTimeout('/api/gerar-imagem', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt: request.prompt })
-    });
+    }, 9000);
 
     const data = await response.json().catch(() => ({ imagem: '' }));
     if (!response.ok) {
@@ -250,18 +277,29 @@ class AIService {
     // Se o backend retornou placeholder SVG ou vazio, tentar fallback gratuito Lexica
     if (!imageUrl || (typeof imageUrl === 'string' && imageUrl.startsWith('data:image/svg+xml'))) {
       try {
-        const res2 = await fetch(`/api/hero-image?prompt=${encodeURIComponent(request.prompt)}`, { method: 'GET' });
+        const res2 = await this.fetchWithTimeout(`/api/hero-image?prompt=${encodeURIComponent(request.prompt)}`, { method: 'GET' }, 7000);
         const data2 = await res2.json().catch(() => ({ image: '' }));
         if (res2.ok && typeof data2?.image === 'string' && data2.image.length > 0) {
           imageUrl = data2.image;
         }
-      } catch (_) {
+      } catch {
         // Ignorar e manter placeholder
       }
       // Fallback gratuito adicional: Pollinations
       if (!imageUrl || (typeof imageUrl === 'string' && imageUrl.startsWith('data:image/svg+xml'))) {
-        imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(request.prompt)}?n=1&size=${encodeURIComponent(request.size || '512x512')}`;
+        // Prefer width/height params for Pollinations for broader compatibility
+        const size = (request.size || '512x512').split('x');
+        const width = encodeURIComponent(size[0] || '512');
+        const height = encodeURIComponent(size[1] || '512');
+        imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(request.prompt)}?n=1&width=${width}&height=${height}`;
       }
+    }
+
+    // Persist cache for http(s) URLs (avoid data URIs)
+    if (cacheEnabled && typeof imageUrl === 'string' && /^https?:\/\//.test(imageUrl)) {
+      const srcType = imageUrl.includes('lexica.art') ? 'lexica' : (imageUrl.includes('pollinations.ai') ? 'pollinations' : 'hf');
+      // Cache for 7 days by default
+      setCachedImage(request.prompt, imageUrl, 7 * 24 * 60 * 60 * 1000, srcType as any);
     }
 
     return {
@@ -346,7 +384,8 @@ class AIService {
     const cacheKey = this.generateCacheKey(request);
 
     // Check cache first
-    if (import.meta.env.VITE_AI_CACHE_ENABLED === 'true') {
+    const cacheEnabled = import.meta.env.VITE_AI_CACHE_ENABLED !== 'false';
+    if (cacheEnabled) {
       const cached = this.cache.get(cacheKey);
       if (cached && this.isValidCache(cached)) {
         return cached.response as AIImageResponse;
@@ -367,7 +406,7 @@ class AIService {
       this.updateUsageStats(startTime, 0, 'image');
 
       // Cache the response
-      if (import.meta.env.VITE_AI_CACHE_ENABLED === 'true') {
+      if (cacheEnabled) {
         this.cache.set(cacheKey, {
           key: cacheKey,
           response,

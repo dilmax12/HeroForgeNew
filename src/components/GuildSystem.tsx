@@ -19,8 +19,16 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
     leaveGuild,
     acceptQuest,
     completeQuest,
-    refreshQuests
+    refreshQuests,
+    depositGoldToGuild,
+    withdrawGoldFromGuild,
+    contributeXPToGuild,
+    ensureDefaultGuildExists
   } = useHeroStore();
+
+  const [depositAmount, setDepositAmount] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [contributeXPAmount, setContributeXPAmount] = useState('');
 
   const currentGuild = hero.progression.guildId ? 
     guilds.find(g => g.id === hero.progression.guildId) : null;
@@ -43,6 +51,15 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
     if (currentGuild) {
       leaveGuild(hero.id, currentGuild.id);
       setActiveTab('browse');
+    }
+  };
+
+  const handleQuickJoinDefaultGuild = () => {
+    ensureDefaultGuildExists();
+    const defaultGuild = guilds.find(g => g.name === 'Foja dos Herois');
+    if (defaultGuild) {
+      joinGuild(hero.id, defaultGuild.id);
+      setActiveTab('my-guild');
     }
   };
 
@@ -251,8 +268,98 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
                     <div className="text-sm text-gray-600">XP da Guilda</div>
                   </div>
                   <div className="text-center">
+                    <div className="text-3xl font-bold text-indigo-600">{currentGuild.level ?? Math.max(1, Math.floor(currentGuild.guildXP / 250) + 1)}</div>
+                    <div className="text-sm text-gray-600">Nível da Guilda</div>
+                  </div>
+                  <div className="text-center">
                     <div className="text-3xl font-bold text-yellow-600">{currentGuild.bankGold}</div>
                     <div className="text-sm text-gray-600">Tesouro</div>
+                  </div>
+                </div>
+
+                {/* Operações de Tesouro/Contribuição */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                  <div className="bg-gray-50 p-4 rounded border border-gray-200">
+                    <div className="text-sm font-medium text-gray-800 mb-2">Depositar Ouro</div>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        value={depositAmount}
+                        onChange={e => setDepositAmount(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        placeholder="Quantidade"
+                      />
+                      <button
+                        onClick={() => {
+                          const amt = parseInt(depositAmount, 10);
+                          if (!isNaN(amt) && amt > 0) {
+                            const ok = depositGoldToGuild(hero.id, amt);
+                            if (ok) setDepositAmount('');
+                          }
+                        }}
+                        className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                      >
+                        Depositar
+                      </button>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-2">Seu ouro: {hero.progression.gold}</div>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded border border-gray-200">
+                    <div className="text-sm font-medium text-gray-800 mb-2">Sacar Ouro</div>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        value={withdrawAmount}
+                        onChange={e => setWithdrawAmount(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        placeholder="Quantidade"
+                      />
+                      <button
+                        onClick={() => {
+                          const amt = parseInt(withdrawAmount, 10);
+                          if (!isNaN(amt) && amt > 0) {
+                            const ok = withdrawGoldFromGuild(hero.id, amt);
+                            if (ok) setWithdrawAmount('');
+                          }
+                        }}
+                        className="px-3 py-2 bg-amber-600 text-white rounded hover:bg-amber-700"
+                      >
+                        Sacar
+                      </button>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-2">Tesouro da guilda: {currentGuild.bankGold}</div>
+                    <div className="text-xs text-gray-500">Necessita papel: líder/oficial</div>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded border border-gray-200">
+                    <div className="text-sm font-medium text-gray-800 mb-2">Contribuir XP</div>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        value={contributeXPAmount}
+                        onChange={e => setContributeXPAmount(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        placeholder="Quantidade"
+                      />
+                      <button
+                        onClick={() => {
+                          const amt = parseInt(contributeXPAmount, 10);
+                          if (!isNaN(amt) && amt > 0) {
+                            const ok = contributeXPToGuild(hero.id, amt);
+                            if (ok) {
+                              refreshQuests(hero.progression.level);
+                              setContributeXPAmount('');
+                            }
+                          }
+                        }}
+                        className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                      >
+                        Contribuir
+                      </button>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-2">Aumenta o nível da guilda</div>
                   </div>
                 </div>
               </div>
@@ -275,6 +382,11 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
                             </div>
                           </div>
                           {isCurrentHero && <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Você</span>}
+                          {currentGuild.roles && currentGuild.roles[memberId] && (
+                            <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded">
+                              {currentGuild.roles[memberId] === 'lider' ? 'Líder' : currentGuild.roles[memberId] === 'oficial' ? 'Oficial' : 'Membro'}
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
@@ -376,6 +488,12 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
                 >
                   Criar Guilda
                 </button>
+                <button
+                  onClick={handleQuickJoinDefaultGuild}
+                  className="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700 transition-colors"
+                >
+                  Entrar na Foja dos Herois
+                </button>
               </div>
             </div>
           )}
@@ -404,7 +522,7 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
                     value={newGuildName}
                     onChange={(e) => setNewGuildName(e.target.value)}
                     placeholder="Digite o nome da sua guilda..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     maxLength={50}
                   />
                 </div>
@@ -418,7 +536,7 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
                     onChange={(e) => setNewGuildDescription(e.target.value)}
                     placeholder="Descreva o propósito e valores da sua guilda..."
                     rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     maxLength={200}
                   />
                 </div>

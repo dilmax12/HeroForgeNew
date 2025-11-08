@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Hero } from '../types/hero';
 import { useHeroStore } from '../store/heroStore';
 import { SHOP_ITEMS } from '../utils/shop';
 import AchievementsList from './AchievementsList';
 import ReputationPanel from './ReputationPanel';
+import AttributeAllocationPanel from './AttributeAllocationPanel';
 
 interface HeroProgressionProps {
   hero: Hero;
@@ -18,11 +19,14 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
     return level * 100 + (level - 1) * 50;
   };
 
+  const LEVEL_CAP = 20;
+  const isMaxLevel = hero.progression.level >= LEVEL_CAP;
   const currentLevelXP = calculateXPForLevel(hero.progression.level);
-  const nextLevelXP = calculateXPForLevel(hero.progression.level + 1);
-  const xpProgress = hero.progression.xp - currentLevelXP;
-  const xpNeeded = nextLevelXP - currentLevelXP;
-  const xpPercentage = Math.max(0, Math.min(100, (xpProgress / xpNeeded) * 100));
+  const nextLevelXP = isMaxLevel ? currentLevelXP : calculateXPForLevel(hero.progression.level + 1);
+  const xpProgressRaw = hero.progression.xp - currentLevelXP;
+  const xpProgress = Math.max(0, xpProgressRaw);
+  const xpNeeded = Math.max(1, nextLevelXP - currentLevelXP);
+  const xpPercentage = isMaxLevel ? 100 : Math.max(0, Math.min(100, (xpProgress / xpNeeded) * 100));
 
   // Obter informações dos itens equipados
   const getEquippedItem = (itemId: string | undefined) => {
@@ -58,6 +62,23 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
     { id: 'achievements', label: 'Conquistas', icon: '🏆' },
     { id: 'reputation', label: 'Reputação', icon: '⭐' }
   ];
+
+  // Destaque quando atributos derivados mudarem
+  const derivedKey = useMemo(() => (
+    [
+      hero.derivedAttributes.hp,
+      hero.derivedAttributes.mp,
+      hero.derivedAttributes.armorClass,
+      hero.derivedAttributes.initiative,
+      hero.derivedAttributes.luck
+    ].join('-')
+  ), [hero.derivedAttributes.hp, hero.derivedAttributes.mp, hero.derivedAttributes.armorClass, hero.derivedAttributes.initiative, hero.derivedAttributes.luck]);
+  const [highlightDerived, setHighlightDerived] = useState(false);
+  useEffect(() => {
+    setHighlightDerived(true);
+    const t = setTimeout(() => setHighlightDerived(false), 1400);
+    return () => clearTimeout(t);
+  }, [derivedKey]);
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
@@ -95,10 +116,17 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }
-              `}
+              focus:outline-none focus:ring-2 focus:ring-indigo-500`}
             >
               <span>{tab.icon}</span>
-              <span>{tab.label}</span>
+              <span className="flex items-center gap-2">
+                {tab.label}
+                {tab.id === 'overview' && typeof hero.attributePoints === 'number' && hero.attributePoints > 0 && (
+                  <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-amber-500 text-white animate-pulse">
+                    {hero.attributePoints} pts
+                  </span>
+                )}
+              </span>
             </button>
           ))}
         </nav>
@@ -115,7 +143,7 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span>Experiência</span>
-                  <span>{hero.progression.xp} XP</span>
+                  <span>{isMaxLevel ? 'MAX' : `${hero.progression.xp} XP`}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-3">
                   <div 
@@ -124,7 +152,7 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
                   />
                 </div>
                 <div className="text-xs text-gray-500 mt-1">
-                  {xpProgress}/{xpNeeded} XP para o nível {hero.progression.level + 1}
+                  {isMaxLevel ? 'Nível Máximo' : `${xpProgress}/${xpNeeded} XP para o nível ${hero.progression.level + 1}`}
                 </div>
               </div>
 
@@ -142,79 +170,91 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
           </div>
 
           {/* Atributos e Bônus */}
-          <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <div id="atributos" className="bg-white p-6 rounded-lg border border-gray-200 text-gray-900">
             <h3 className="text-xl font-bold mb-4 text-gray-800">💪 Atributos</h3>
+            {/* Painel de Alocação de Pontos */}
+            <div className="mb-4">
+              <AttributeAllocationPanel hero={hero} />
+            </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Força</span>
-                  <span className="font-medium">{hero.attributes.forca}</span>
+                  <span className="text-sm text-gray-900">Força</span>
+                  <span className="font-medium text-gray-900">{hero.attributes.forca}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Destreza</span>
-                  <span className="font-medium">{hero.attributes.destreza}</span>
+                  <span className="text-sm text-gray-900">Destreza</span>
+                  <span className="font-medium text-gray-900">{hero.attributes.destreza}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Constituição</span>
-                  <span className="font-medium">{hero.attributes.constituicao}</span>
+                  <span className="text-sm text-gray-900">Constituição</span>
+                  <span className="font-medium text-gray-900">{hero.attributes.constituicao}</span>
                 </div>
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Inteligência</span>
-                  <span className="font-medium">{hero.attributes.inteligencia}</span>
+                  <span className="text-sm text-gray-900">Inteligência</span>
+                  <span className="font-medium text-gray-900">{hero.attributes.inteligencia}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Sabedoria</span>
-                  <span className="font-medium">{hero.attributes.sabedoria}</span>
+                  <span className="text-sm text-gray-900">Sabedoria</span>
+                  <span className="font-medium text-gray-900">{hero.attributes.sabedoria}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Carisma</span>
-                  <span className="font-medium">{hero.attributes.carisma}</span>
+                  <span className="text-sm text-gray-900">Carisma</span>
+                  <span className="font-medium text-gray-900">{hero.attributes.carisma}</span>
                 </div>
               </div>
             </div>
 
             {/* Atributos Derivados */}
-            <div className="mt-6 pt-4 border-t">
-              <h4 className="font-semibold mb-3 text-gray-700">Atributos Derivados</h4>
+            <div className={`mt-6 pt-4 border-t transition ${highlightDerived ? 'ring-2 ring-amber-300 rounded-md' : ''}`}>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-gray-900">Atributos Derivados</h4>
+                {highlightDerived && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-700">
+                    <span>⚡</span>
+                    <span>Atributos atualizados</span>
+                  </span>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">HP</span>
-                  <span className="font-medium">
+                  <span className="text-sm text-gray-900">HP</span>
+                  <span className="font-medium text-gray-900">
                     {hero.derivedAttributes.currentHp}/{hero.derivedAttributes.hp}
                     {totalBonuses.hp > 0 && <span className="text-green-600"> (+{totalBonuses.hp})</span>}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">MP</span>
-                  <span className="font-medium">
+                  <span className="text-sm text-gray-900">MP</span>
+                  <span className="font-medium text-gray-900">
                     {hero.derivedAttributes.currentMp}/{hero.derivedAttributes.mp}
                     {totalBonuses.mp > 0 && <span className="text-blue-600"> (+{totalBonuses.mp})</span>}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Ataque</span>
-                  <span className="font-medium">
+                  <span className="text-sm text-gray-900">Ataque</span>
+                  <span className="font-medium text-gray-900">
                     {hero.attributes.forca}
                     {totalBonuses.attack > 0 && <span className="text-red-600"> (+{totalBonuses.attack})</span>}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Defesa</span>
-                  <span className="font-medium">
+                  <span className="text-sm text-gray-900">Defesa</span>
+                  <span className="font-medium text-gray-900">
                     {hero.derivedAttributes.armorClass}
                     {totalBonuses.defense > 0 && <span className="text-blue-600"> (+{totalBonuses.defense})</span>}
                   </span>
                 </div>
               </div>
-            </div>
+          </div>
           </div>
 
           {/* Inventário Rápido */}
-          <div className="bg-white p-6 rounded-lg border border-gray-200 lg:col-span-2">
-            <h3 className="text-xl font-bold mb-4 text-gray-800">🎒 Inventário</h3>
+          <div className="bg-white p-6 rounded-lg border border-gray-200 lg:col-span-2 text-gray-900">
+            <h3 className="text-xl font-bold mb-4 text-gray-900">🎒 Inventário</h3>
             
             {Object.keys(hero.inventory.items).length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -225,12 +265,12 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
                   return (
                     <div key={itemId} className="bg-gray-50 p-3 rounded-lg text-center">
                       <div className="text-2xl mb-1">{item.icon}</div>
-                      <div className="text-sm font-medium">{item.name}</div>
-                      <div className="text-xs text-gray-500">x{quantity}</div>
+                      <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                      <div className="text-xs text-gray-700">x{quantity}</div>
                       {item.type === 'consumable' && (
                         <button
                           onClick={() => useItem(hero.id, itemId)}
-                          className="mt-2 px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 transition-colors"
+                          className="mt-2 px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         >
                           Usar
                         </button>
@@ -382,7 +422,7 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
               <div className="space-y-2">
                 {Object.entries(hero.inventory.items).map(([itemId, quantity]) => {
                   const item = SHOP_ITEMS.find(i => i.id === itemId);
-                  if (!item || quantity <= 0 || item.type === 'consumable' || item.type === 'cosmetic') return null;
+                  if (!item || quantity <= 0 || item.type === 'consumable' || item.type === 'cosmetic' || item.type === 'material') return null;
                   
                   const isEquipped = 
                     hero.inventory.equippedWeapon === itemId ||
@@ -395,7 +435,7 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
                     <button
                       key={itemId}
                       onClick={() => equipItem(hero.id, itemId)}
-                      className="w-full flex items-center space-x-2 p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
+                      className="w-full flex items-center space-x-2 p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <span>{item.icon}</span>
                       <span className="text-sm">{item.name}</span>

@@ -9,6 +9,7 @@ import { useHeroStore } from '../store/heroStore';
 import { EnhancedQuest, EnhancedQuestChoice, Hero } from '../types/hero';
 import { enhancedMissionGenerator } from '../utils/enhancedMissions';
 import { worldStateManager } from '../utils/worldState';
+import { resumeAudioContextIfNeeded, playSuccess, playFailure } from '../utils/audioEffects';
 
 interface EnhancedQuestBoardProps {
   hero: Hero;
@@ -54,6 +55,7 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
     setIsProcessing(true);
     
     try {
+      resumeAudioContextIfNeeded();
       const result = enhancedMissionGenerator.processEnhancedChoice(hero, mission, choice.id);
       
       // Aplicar recompensas/penalidades
@@ -78,6 +80,8 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
       
       setLastResult(result);
       setSelectedMission(null);
+      // Áudio de feedback simples
+      playSuccess();
       
       // Regenerar missões após completar uma
       setTimeout(() => {
@@ -86,6 +90,9 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
       
     } catch (error) {
       console.error('Erro ao processar escolha:', error);
+      // Áudio de falha
+      resumeAudioContextIfNeeded();
+      playFailure();
     } finally {
       setIsProcessing(false);
     }

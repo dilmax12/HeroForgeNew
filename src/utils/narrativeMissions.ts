@@ -1,5 +1,5 @@
-import { Quest, QuestChoice, HeroClass } from '../types/hero';
-import { Hero, EnhancedQuestChoice, QuestChoiceEffect, DecisionLogEntry } from '../types/hero';
+import { Quest, HeroClass } from '../types/hero';
+import { Hero, EnhancedQuestChoice, DecisionLogEntry } from '../types/hero';
 import { useHeroStore } from '../store/heroStore';
 
 // Templates de missões narrativas com escolhas

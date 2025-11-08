@@ -214,3 +214,25 @@ export const useNotifications = () => {
 };
 
 export default NotificationSystem;
+
+// Barramento global de notificações para disparo de toasts a partir de qualquer componente
+export type NotificationPayload = Omit<Notification, 'id'>;
+
+type NotificationListener = (n: NotificationPayload) => void;
+
+class NotificationBus {
+  private listeners: Set<NotificationListener> = new Set();
+
+  subscribe(listener: NotificationListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  emit(notification: NotificationPayload) {
+    this.listeners.forEach((listener) => listener(notification));
+  }
+}
+
+export const notificationBus = new NotificationBus();

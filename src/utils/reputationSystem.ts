@@ -1,4 +1,4 @@
-import { Hero, ReputationFaction } from '../types/hero';
+import { Hero } from '../types/hero';
 
 export interface ReputationLevel {
   name: string;

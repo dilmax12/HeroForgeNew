@@ -2,7 +2,7 @@
  * Sistema de Loja e Economia
  */
 
-import { Item, ItemType, ItemRarity, Hero } from '../types/hero';
+import { Item, Hero } from '../types/hero';
 
 // === CATÁLOGO DE ITENS DA LOJA ===
 
@@ -70,7 +70,91 @@ export const SHOP_ITEMS: Item[] = [
     effects: { duration: 60 }
   },
 
+  // Expansão de consumíveis
+  {
+    id: 'elixir-agilidade',
+    name: 'Elixir de Agilidade',
+    description: '+2 Destreza por 60 minutos',
+    type: 'consumable',
+    rarity: 'raro',
+    price: 100,
+    icon: '💨',
+    bonus: { destreza: 2 },
+    effects: { duration: 60 }
+  },
+  {
+    id: 'elixir-intelecto',
+    name: 'Elixir de Intelecto',
+    description: '+2 Inteligência por 60 minutos',
+    type: 'consumable',
+    rarity: 'raro',
+    price: 100,
+    icon: '🧠',
+    bonus: { inteligencia: 2 },
+    effects: { duration: 60 }
+  },
+  {
+    id: 'pocao-mana-grande',
+    name: 'Poção de Mana Grande',
+    description: 'Restaura 100 MP instantaneamente',
+    type: 'consumable',
+    rarity: 'epico',
+    price: 160,
+    icon: '🔮',
+    effects: { mp: 100 }
+  },
+  {
+    id: 'pergaminho-fortuna',
+    name: 'Pergaminho de Fortuna',
+    description: 'Aumenta ganho de ouro em 10% por 30 minutos',
+    type: 'consumable',
+    rarity: 'raro',
+    price: 120,
+    icon: '📜',
+    effects: { duration: 30 }
+  },
+
   // === ARMAS ===
+  {
+    id: 'espada-aprendiz',
+    name: 'Espada de Aprendiz',
+    description: 'Lâmina leve para iniciantes. +3 Força, +1 Destreza',
+    type: 'weapon',
+    rarity: 'comum',
+    price: 80,
+    icon: '🗡️',
+    bonus: { forca: 3, destreza: 1 }
+  },
+  {
+    id: 'machado-rustico',
+    name: 'Machado Rústico',
+    description: 'Pesado e bruto. +4 Força, -1 Destreza',
+    type: 'weapon',
+    rarity: 'comum',
+    price: 100,
+    icon: '🪓',
+    bonus: { forca: 4, destreza: -1 }
+  },
+  {
+    id: 'arco-simples',
+    name: 'Arco Simples',
+    description: 'Arco de treino. +3 Destreza (alcance duplo)',
+    type: 'weapon',
+    rarity: 'comum',
+    price: 90,
+    icon: '🏹',
+    bonus: { destreza: 3 }
+  },
+  {
+    id: 'lamina-viajante',
+    name: 'Lâmina do Viajante',
+    description: 'Edição limitada. +4 Força, +1 Destreza',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 180,
+    icon: '🗡️',
+    bonus: { forca: 4, destreza: 1 }
+  },
   {
     id: 'espada-ferro',
     name: 'Espada de Ferro',
@@ -153,6 +237,36 @@ export const SHOP_ITEMS: Item[] = [
   },
 
   // === ARMADURAS ===
+  {
+    id: 'peitoral-couro-leve',
+    name: 'Peitoral de Couro Leve',
+    description: 'Proteção ágil. +2 Constituição, +1 Destreza',
+    type: 'armor',
+    rarity: 'comum',
+    price: 75,
+    icon: '🛡️',
+    bonus: { constituicao: 2, destreza: 1 }
+  },
+  {
+    id: 'tunica-estudioso',
+    name: 'Túnica do Estudioso',
+    description: 'Favorece o estudo arcano. +1 Constituição, +2 Inteligência',
+    type: 'armor',
+    rarity: 'comum',
+    price: 70,
+    icon: '🪶',
+    bonus: { constituicao: 1, inteligencia: 2 }
+  },
+  {
+    id: 'armadura-novato',
+    name: 'Armadura do Novato',
+    description: 'Proteção básica para quem está começando. +3 Constituição',
+    type: 'armor',
+    rarity: 'comum',
+    price: 100,
+    icon: '🥋',
+    bonus: { constituicao: 3 }
+  },
   {
     id: 'armadura-couro',
     name: 'Armadura de Couro',
@@ -265,6 +379,44 @@ export const SHOP_ITEMS: Item[] = [
     icon: '💍',
     bonus: { destreza: 2, inteligencia: 1 }
   },
+  {
+    id: 'anel-aventureiro',
+    name: 'Anel do Aventureiro',
+    description: '+5% XP recebido (temático)',
+    type: 'accessory',
+    rarity: 'raro',
+    price: 120,
+    icon: '💍'
+  },
+  {
+    id: 'pingente-sorte',
+    name: 'Pingente da Sorte',
+    description: 'Chance de evitar armadilhas em masmorras',
+    type: 'accessory',
+    rarity: 'raro',
+    price: 150,
+    icon: '📿'
+  },
+  {
+    id: 'brincos-eco',
+    name: 'Brincos do Eco',
+    description: '+1 em todos os atributos por 10 minutos',
+    type: 'accessory',
+    rarity: 'epico',
+    price: 200,
+    icon: '🔔',
+    bonus: { forca: 1, destreza: 1, constituicao: 1, inteligencia: 1, sabedoria: 1, carisma: 1 },
+    effects: { duration: 10 }
+  },
+  {
+    id: 'amuleto-brisa',
+    name: 'Amuleto da Brisa',
+    description: '+2 Defesa Mágica / +10% velocidade em masmorras (temático)',
+    type: 'accessory',
+    rarity: 'raro',
+    price: 120,
+    icon: '🪶'
+  },
 
   // === COSMÉTICOS ===
   {
@@ -294,6 +446,77 @@ export const SHOP_ITEMS: Item[] = [
     price: 200,
     icon: '🎭'
   }
+  ,
+  // Molduras e fundos temáticos
+  {
+    id: 'moldura-dourada',
+    name: 'Moldura Dourada',
+    description: 'Visual desbloqueável por XP (temático)',
+    type: 'cosmetic',
+    rarity: 'raro',
+    price: 300,
+    icon: '🟨'
+  },
+  {
+    id: 'moldura-real',
+    name: 'Moldura Real',
+    description: 'Visual de prestígio por rank (temático)',
+    type: 'cosmetic',
+    rarity: 'epico',
+    price: 600,
+    icon: '👑'
+  },
+  {
+    id: 'fundo-aurora',
+    name: 'Fundo Aurora',
+    description: 'Visual por reputação (temático)',
+    type: 'cosmetic',
+    rarity: 'raro',
+    price: 350,
+    icon: '🌌'
+  },
+
+  // === MATERIAIS / NÚCLEOS DE MANA ===
+  {
+    id: 'nucleo-mana-menor',
+    name: 'Núcleo Menor de Mana',
+    description: 'Essência bruta para forjas e encantamentos. Não consumível.',
+    type: 'material',
+    rarity: 'comum',
+    price: 40,
+    icon: '🔷',
+    
+  },
+  {
+    id: 'nucleo-mana',
+    name: 'Núcleo de Mana',
+    description: 'Núcleo usado em encantamentos e forjas. Não consumível.',
+    type: 'material',
+    rarity: 'raro',
+    price: 90,
+    icon: '🔷',
+    
+  },
+  {
+    id: 'nucleo-mana-raro',
+    name: 'Núcleo Raro de Mana',
+    description: 'Núcleo refinado para obras complexas. Não consumível.',
+    type: 'material',
+    rarity: 'epico',
+    price: 220,
+    icon: '🔷',
+    
+  },
+  {
+    id: 'nucleo-ancestral',
+    name: 'Núcleo Ancestral',
+    description: 'Núcleo lendário usado em obras-primas. Não consumível.',
+    type: 'material',
+    rarity: 'lendario',
+    price: 500,
+    icon: '🔶',
+    
+  }
 ];
 
 // === CATEGORIAS DA LOJA ===
@@ -319,6 +542,7 @@ export const SHOP_CATEGORIES = {
     icon: '💍',
     items: SHOP_ITEMS.filter(item => item.type === 'accessory')
   },
+  // Categoria de materiais oculta na loja; núcleos devem ser vendidos à guilda
   cosmetics: {
     name: 'Cosméticos',
     icon: '👑',

@@ -4,6 +4,7 @@
  */
 
 import { WorldState, DecisionLogEntry, QuestChoiceEffect, Hero, Attribute } from '../types/hero';
+import { getGameSettings } from '../store/gameSettingsStore';
 
 export class WorldStateManager {
   private static instance: WorldStateManager;
@@ -270,24 +271,81 @@ export class WorldStateManager {
    * Atualiza stamina do herói
    */
   updateStamina(hero: Hero): void {
-    if (!hero.stamina) {
+    const now = new Date();
+    // Migração/defesa: alguns heróis antigos podem ter stamina como número simples
+    if (!hero.stamina || typeof (hero.stamina as any) === 'number') {
+      const currentValue = typeof (hero.stamina as any) === 'number' ? (hero.stamina as any as number) : 100;
       hero.stamina = {
-        current: 100,
+        current: Math.max(0, Math.min(100, currentValue)),
         max: 100,
-        lastRecovery: new Date().toISOString(),
-        recoveryRate: 10
+        lastRecovery: now.toISOString(),
+        // Recuperação padrão: pontos por minuto
+        recoveryRate: 5
       };
       return;
     }
 
-    const now = new Date();
+    // Recuperação por minuto: recoveryRate = pontos/minuto
     const lastRecovery = new Date(hero.stamina.lastRecovery);
-    const hoursElapsed = (now.getTime() - lastRecovery.getTime()) / (1000 * 60 * 60);
-    
-    if (hoursElapsed >= 1) {
-      const recoveryAmount = Math.floor(hoursElapsed) * hero.stamina.recoveryRate;
+    const minutesElapsed = (now.getTime() - lastRecovery.getTime()) / (1000 * 60);
+
+    if (minutesElapsed >= 1 && hero.stamina.current < hero.stamina.max) {
+      const settings = getGameSettings();
+      const ratePerMinute = (settings?.regenStaminaPerMin ?? hero.stamina.recoveryRate ?? 5);
+      const wholeMinutes = Math.floor(minutesElapsed);
+      const recoveryAmount = wholeMinutes * ratePerMinute;
       hero.stamina.current = Math.min(hero.stamina.max, hero.stamina.current + recoveryAmount);
+      // Atualiza lastRecovery para agora após aplicar a recuperação
       hero.stamina.lastRecovery = now.toISOString();
+    }
+  }
+
+  /**
+   * Regeneração automática de HP e Mana
+   * Usa stats.lastActiveAt como referência de tempo para evitar alterar tipos.
+   */
+  updateVitals(hero: Hero): void {
+    const now = new Date();
+    // Garantir campos atuais
+    if (!hero.derivedAttributes.currentHp) {
+      hero.derivedAttributes.currentHp = hero.derivedAttributes.hp;
+    }
+    if (!hero.derivedAttributes.currentMp) {
+      hero.derivedAttributes.currentMp = hero.derivedAttributes.mp;
+    }
+
+    // Basear no último timestamp de atividade
+    const lastTs = hero.stats?.lastActiveAt ? new Date(hero.stats.lastActiveAt) : now;
+    const minutesElapsed = (now.getTime() - lastTs.getTime()) / (1000 * 60);
+
+    if (minutesElapsed >= 1) {
+      const wholeMinutes = Math.floor(minutesElapsed);
+      const settings = getGameSettings();
+      const hpPerMin = settings?.regenHpPerMin ?? 5;
+      const mpPerMin = settings?.regenMpPerMin ?? 5;
+      const hpRegenAmount = wholeMinutes * hpPerMin;
+      const mpRegenAmount = wholeMinutes * mpPerMin;
+
+      // HP regen
+      if (hero.derivedAttributes.currentHp < hero.derivedAttributes.hp) {
+        hero.derivedAttributes.currentHp = Math.min(
+          hero.derivedAttributes.hp,
+          (hero.derivedAttributes.currentHp || 0) + hpRegenAmount
+        );
+      }
+
+      // Mana regen
+      if (hero.derivedAttributes.currentMp < hero.derivedAttributes.mp) {
+        hero.derivedAttributes.currentMp = Math.min(
+          hero.derivedAttributes.mp,
+          (hero.derivedAttributes.currentMp || 0) + mpRegenAmount
+        );
+      }
+
+      // Atualizar referência de tempo para próxima contagem
+      if (hero.stats) {
+        hero.stats.lastActiveAt = now.toISOString() as any;
+      }
     }
   }
 
