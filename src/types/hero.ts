@@ -360,6 +360,27 @@ export interface Guild {
   level?: number;
   // Papéis dos membros na guilda
   roles?: Record<string, 'lider' | 'oficial' | 'membro'>;
+  // Conselho da Guilda: membros com Rank S
+  councilMembers?: string[];
+  // Políticas ativas da guilda (buffs e eventos)
+  policies?: {
+    xpBuffPercent?: number;
+    trainingDiscountPercent?: number;
+    activeEventName?: string;
+    eventExpiresAt?: string; // ISO
+    lastEventActivatedAt?: string; // ISO, para cooldown
+  };
+  // Solicitações de alianças de parties aguardando aprovação do Conselho
+  pendingAlliances?: {
+    id: string;
+    partyId: string;
+    partyName: string;
+    requestedBy: string; // heroId
+    status: 'pending' | 'approved' | 'rejected';
+    requestedAt: string; // ISO
+    decidedAt?: string; // ISO
+    decidedBy?: string; // council member id
+  }[];
 }
 
 export interface CombatResult {
@@ -480,6 +501,9 @@ export interface Hero {
     trainingsToday?: number;
     lastTrainingDate?: string; // ISO string
     trainingDailyLimit?: number; // padrão: 5
+    // Status de treino ativo (para HUD)
+    trainingActiveUntil?: string; // ISO de término do treino atual
+    trainingActiveName?: string; // nome da opção de treino ativa
   };
   
   // Advanced Features

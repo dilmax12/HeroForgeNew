@@ -11,6 +11,13 @@ export interface ActivityData {
   titleEarned?: string;
   achievementUnlocked?: string;
   eventCompleted?: string;
+  // Eventos de guilda
+  guildName?: string;
+  eventName?: string;
+  xpBuffPercent?: number;
+  trainingDiscountPercent?: number;
+  eventExpiresAt?: string; // ISO
+  costGold?: number;
   dailyGoalCompleted?: string;
   combatResult?: 'victory' | 'defeat';
   enemiesDefeated?: string[];
@@ -32,7 +39,7 @@ export interface ActivityData {
 
 export interface Activity {
   id: string;
-  type: 'quest-completed' | 'level-up' | 'achievement-unlocked' | 'title-earned' | 'event-completed' | 'daily-goal-completed' | 'combat-victory' | 'epic-quest-completed' | 'rank-promotion' | 'tavern-rest' | 'item-used';
+  type: 'quest-completed' | 'level-up' | 'achievement-unlocked' | 'title-earned' | 'event-completed' | 'daily-goal-completed' | 'combat-victory' | 'epic-quest-completed' | 'rank-promotion' | 'tavern-rest' | 'item-used' | 'guild-event-activated';
   timestamp: Date;
   data: ActivityData;
   message: string;

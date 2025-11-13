@@ -12,6 +12,9 @@ export const StaminaDisplay: React.FC = () => {
   const { getSelectedHero, updateHero } = useHeroStore();
   const [currentTime, setCurrentTime] = useState(Date.now());
   const selectedHero = getSelectedHero();
+  const trainingUntilISO = selectedHero?.stats?.trainingActiveUntil;
+  const trainingName = selectedHero?.stats?.trainingActiveName;
+  const [trainingSeconds, setTrainingSeconds] = useState<number | null>(null);
 
   // Atualizar o tempo a cada segundo
   useEffect(() => {
@@ -34,6 +37,28 @@ export const StaminaDisplay: React.FC = () => {
       }
     }
   }, [currentTime, selectedHero, updateHero]);
+
+  // Atualizar contador de treino baseado no tempo atual
+  useEffect(() => {
+    if (trainingUntilISO) {
+      const until = new Date(trainingUntilISO).getTime();
+      const remainingMs = Math.max(0, until - currentTime);
+      if (remainingMs > 0) {
+        setTrainingSeconds(Math.ceil(remainingMs / 1000));
+      } else {
+        setTrainingSeconds(null);
+      }
+    } else {
+      setTrainingSeconds(null);
+    }
+  }, [currentTime, trainingUntilISO]);
+
+  const formatSecondsToMMSS = (seconds: number | null) => {
+    if (seconds === null) return '--:--';
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   if (!selectedHero || !selectedHero.stamina) {
     return null;
@@ -182,6 +207,11 @@ export const StaminaDisplay: React.FC = () => {
         {current >= 20 && current < max && (
           <div className="text-yellow-400 text-sm">
             🔄 Recuperando...
+          </div>
+        )}
+        {trainingSeconds !== null && (
+          <div className="mt-2 text-sm text-yellow-300">
+            🏃 Treino: {trainingName || 'Em andamento'} — {formatSecondsToMMSS(trainingSeconds)}
           </div>
         )}
       </div>

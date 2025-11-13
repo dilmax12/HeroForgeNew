@@ -4,6 +4,7 @@
 
 import { Hero, CombatResult, QuestEnemy, Item, Skill, Element } from '../types/hero';
 import { SHOP_ITEMS } from './shop';
+import { dungeonConfig } from './dungeonConfig';
 import { getElementMultiplier, generateRandomElement } from './elementSystem';
 
 // === TIPOS DE COMBATE ===
@@ -292,7 +293,13 @@ export function resolveSkillUse(user: Hero, target: Hero | CombatEntity, skill: 
   
   // Adicionar efeitos especiais baseados na habilidade
   if (skill.effects) {
-    effects.push(...skill.effects);
+    const e = skill.effects;
+    const effectTexts: string[] = [];
+    if (e.special) effectTexts.push(e.special);
+    if (typeof e.heal === 'number' && e.heal > 0) effectTexts.push(`cura ${e.heal}`);
+    if (e.buff?.attribute) effectTexts.push(`buff ${String(e.buff.attribute)}`);
+    if (e.debuff?.attribute) effectTexts.push(`debuff ${String(e.debuff.attribute)}`);
+    effects.push(...effectTexts);
   }
   
   // Determinar sucesso (pode falhar em casos específicos)
@@ -341,7 +348,7 @@ export function resolveSkillUse(user: Hero, target: Hero | CombatEntity, skill: 
 
 // === FUNÇÃO PRINCIPAL DE COMBATE ===
 
-export function resolveCombat(hero: Hero, enemies: QuestEnemy[]): CombatResult {
+export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?: number; partyBonusPercent?: number } = {}): CombatResult {
   const combatLog: string[] = [];
   let totalXp = 0;
   let totalGold = 0;
@@ -469,6 +476,26 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[]): CombatResult {
             if (coreItem) loot.push(coreItem);
           }
         });
+
+        // Bônus adaptativo de loot por andar/party/acessório
+        const floor = opts.floor || 1;
+        const floorBias = (dungeonConfig.rarityIncreasePerFloor || 0) * floor; // % acumulado
+        const partyBonus = opts.partyBonusPercent || 0; // % adicional
+        const accId = hero.inventory?.equippedAccessory;
+        const ringBonus = accId && /anel|ring/i.test(accId) ? 2 : 0; // +2% se acessório aparenta ser anel
+        const bonusChance = Math.min(0.05 + (floorBias + partyBonus + ringBonus) / 100, 0.35);
+
+        if (Math.random() < bonusChance) {
+          const eligibleTypes = new Set(['weapon', 'armor', 'accessory']);
+          const rarityOrder: Array<'comum' | 'incomum' | 'raro' | 'epico' | 'lendario'> = ['comum', 'incomum', 'raro', 'epico', 'lendario'];
+          // Converter viés em um índice mínimo aproximado
+          const minIndex = floorBias >= 35 ? 3 : floorBias >= 20 ? 2 : floorBias >= 10 ? 1 : 0;
+          const pool = SHOP_ITEMS.filter(i => eligibleTypes.has(i.type) && rarityOrder.indexOf(i.rarity as any) >= minIndex);
+          if (pool.length > 0) {
+            const bonusItem = pool[Math.floor(Math.random() * pool.length)];
+            loot.push(bonusItem);
+          }
+        }
         
         totalXp += xp;
         totalGold += gold;
@@ -602,6 +629,20 @@ export function autoResolveCombat(hero: Hero, enemies: QuestEnemy[], isGuildQues
             if (coreItem) loot.push(coreItem);
           }
         });
+        // Aplicar também bônus adaptativo em auto-resolve com viés reduzido
+        const eligibleTypes = new Set(['weapon', 'armor', 'accessory']);
+        const rarityOrder: Array<'comum' | 'incomum' | 'raro' | 'epico' | 'lendario'> = ['comum', 'incomum', 'raro', 'epico', 'lendario'];
+        const accId = hero.inventory?.equippedAccessory;
+        const ringBonus = accId && /anel|ring/i.test(accId) ? 2 : 0;
+        const baseBias = (dungeonConfig.rarityIncreasePerFloor || 0);
+        const minIndex = baseBias >= 20 ? 2 : baseBias >= 10 ? 1 : 0;
+        const bonusChance = Math.min(0.03 + (baseBias + ringBonus) / 100, 0.25);
+        if (Math.random() < bonusChance) {
+          const pool = SHOP_ITEMS.filter(i => eligibleTypes.has(i.type) && rarityOrder.indexOf(i.rarity as any) >= minIndex);
+          if (pool.length > 0) {
+            loot.push(pool[Math.floor(Math.random() * pool.length)]);
+          }
+        }
         allLoot.push(...loot);
       }
     });

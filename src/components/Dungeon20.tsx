@@ -7,6 +7,7 @@ import { logActivity } from '../utils/activitySystem';
 import { generateChestLoot } from '../utils/chestLoot';
 import { SHOP_ITEMS } from '../utils/shop';
 import BattleModal from './BattleModal';
+import { RankLevel } from '../types/ranks';
 
 type FloorResult = {
   floor: number;
@@ -26,6 +27,7 @@ export default function Dungeon20() {
   const gainXP = useHeroStore(s => s.gainXP);
   const gainGold = useHeroStore(s => s.gainGold);
   const updateHero = useHeroStore(s => s.updateHero);
+  const getHeroParty = useHeroStore(s => s.getHeroParty);
   const addItemToInventory = useHeroStore(s => s.addItemToInventory);
   const equipItem = useHeroStore(s => s.equipItem);
   const unequipItem = useHeroStore(s => s.unequipItem);
@@ -58,7 +60,38 @@ export default function Dungeon20() {
 
   // Limite diário removido
 
+  // Limite de andares por rank (similar ao AIDungeonRun)
+  const getMaxFloorsByRank = (rank?: RankLevel) => {
+    switch (rank) {
+      case 'F':
+      case 'E':
+        return 3;
+      case 'D':
+      case 'C':
+        return 4;
+      case 'B':
+        return 5;
+      case 'A':
+        return 6;
+      case 'S':
+        return 7;
+      default:
+        return 3;
+    }
+  };
+  const heroRank: RankLevel | undefined = hero?.rankData?.currentRank as RankLevel | undefined;
+  const maxFloorsAllowed = getMaxFloorsByRank(heroRank);
+
   const startRun = () => {
+    // Gate: exigir rank E ou superior para entrar
+    if (!hero) {
+      setError('Selecione um herói para jogar a Dungeon.');
+      return;
+    }
+    if (!heroRank || heroRank === 'F') {
+      setError('Rank insuficiente. Alcance pelo menos rank E para entrar.');
+      return;
+    }
     setRunning(true);
     setFinished(false);
     setFloorIndex(0);
@@ -121,6 +154,31 @@ export default function Dungeon20() {
 
       // Floor atual e boss
       const currentFloor = floorIndex + 1;
+      // Impedir escolhas além do limite por rank
+      if (currentFloor > maxFloorsAllowed) {
+        setLoading(false);
+        setFinished(true);
+        setAwaitingDecision(false);
+        const result: FloorResult = {
+          floor: currentFloor,
+          success: true,
+          event: 'none',
+          xpGained: 0,
+          goldGained: 0,
+          narrative: `Um portal selado bloqueia seu caminho. Rank atual (${heroRank || '—'}) permite até ${maxFloorsAllowed} andares.`
+        };
+        const newLog = [...log, result];
+        setLog(newLog);
+        if (activeRunId) {
+          updateDungeonRun(activeRunId, {
+            max_floor_reached: newLog.length,
+            total_xp: newLog.reduce((acc, r) => acc + r.xpGained, 0),
+            total_gold: newLog.reduce((acc, r) => acc + r.goldGained, 0),
+            logs: newLog
+          });
+        }
+        return;
+      }
       const boss = isBossFloor(currentFloor);
 
       // Combate real quando o evento for 'combat'
@@ -195,6 +253,30 @@ export default function Dungeon20() {
 
   const ascend = () => {
     if (finished) return;
+    // Respeitar limite de andares por rank: finalizar ao atingir limite
+    if ((floorIndex + 1) >= maxFloorsAllowed) {
+      setAwaitingDecision(false);
+      setFinished(true);
+      const result: FloorResult = {
+        floor: floorIndex + 1,
+        success: true,
+        event: 'none',
+        xpGained: 0,
+        goldGained: 0,
+        narrative: `Você atingiu o limite de andares permitido pelo seu rank (${heroRank || '—'}). Avance de rank para desbloquear mais andares.`
+      };
+      const newLog = [...log, result];
+      setLog(newLog);
+      if (activeRunId) {
+        updateDungeonRun(activeRunId, {
+          max_floor_reached: newLog.length,
+          total_xp: newLog.reduce((acc, r) => acc + r.xpGained, 0),
+          total_gold: newLog.reduce((acc, r) => acc + r.goldGained, 0),
+          logs: newLog
+        });
+      }
+      return;
+    }
     setAwaitingDecision(false);
     setStreak(s => s + 1);
     setFloorIndex(i => i + 1);
@@ -265,12 +347,17 @@ export default function Dungeon20() {
     switch (pendingEvent) {
       case 'ancient_chest': {
         if (action === 'open') {
-          // Probabilidades: comum 70, raro 20, épico 8, lendário 2
-          const roll = Math.random() * 100;
-          let tier: 'raro' | 'epico' | 'lendario' | 'comum' = 'comum';
+          // Probabilidades base: comum 70, raro 20, épico 8, lendário 2
+          // Aplicar viés por andar e bônus de party completa (+5%)
+          const party = getHeroParty(hero.id);
+          const partyComplete = !!party && party.members.length >= 4;
+          const floorBias = (dungeonConfig.rarityIncreasePerFloor || 0) * currentFloor; // em % acumulado
+          const partyBonus = partyComplete ? 5 : 0; // +5%
+          const roll = Math.min(100, Math.random() * 100 + floorBias + partyBonus);
+          let tier: 'comum' | 'raro' | 'epico' | 'lendario' = 'comum';
           if (roll >= 98) tier = 'lendario'; else if (roll >= 90) tier = 'epico'; else if (roll >= 70) tier = 'raro';
-          // Gerar loot: usar tier mínimo para chestLoot utilitário
-          const items = tier === 'comum' ? [] : generateChestLoot(tier as any);
+          // Gerar loot de baú com suporte a 'comum'
+          const items = generateChestLoot(tier as any);
           const gold = Math.round((tier === 'comum' ? 10 : tier === 'raro' ? 25 : tier === 'epico' ? 60 : 150) * mult * bossRewardMult);
           gainGold(hero.id, gold);
           // Conceder itens ao inventário
@@ -470,6 +557,7 @@ export default function Dungeon20() {
     <div className="max-w-3xl mx-auto p-6">
       <h2 className="text-2xl font-bold text-white">Dungeon Infinita</h2>
       <p className="text-gray-300">Andar atual: {floorIndex + 1} {isBossFloor(floorIndex + 1) ? '— Boss' : ''}</p>
+      <p className="text-indigo-300">Limite por rank: até {maxFloorsAllowed} andares ({heroRank || '—'})</p>
       <p className="text-indigo-300">Streak: {streak} • Multiplicador: x{computeRewardMultiplier(streak).toFixed(2)}</p>
 
       {/* Limite diário removido */}
@@ -681,6 +769,8 @@ export default function Dungeon20() {
         <BattleModal
           hero={hero as any}
           enemies={battleEnemies as any}
+          floor={floorIndex + 1}
+          partyRarityBonusPercent={(getHeroParty(hero.id)?.members.length || 0) >= 4 ? 5 : 0}
           onClose={() => setShowBattle(false)}
           onResult={(res) => {
             const currentFloor = floorIndex + 1;

@@ -107,7 +107,15 @@ export class ActivityManager {
         const itemLabel = data.itemName ? ` ${data.itemName}` : '';
         return `🧪 ${heroName} (${heroClass}) usou${itemLabel}${effectText}.`;
       }
-      
+
+      case 'guild-event-activated': {
+        const xp = typeof data.xpBuffPercent === 'number' ? `+${data.xpBuffPercent}% XP` : '';
+        const tr = typeof data.trainingDiscountPercent === 'number' ? `-${data.trainingDiscountPercent}% treino` : '';
+        const sep = xp && tr ? ' • ' : '';
+        const guildLabel = data.guildName ? ` na guilda ${data.guildName}` : '';
+        return `🏛️ ${heroName} (${heroClass}) ativou "${data.eventName || 'Evento da Guilda'}"${guildLabel}: ${xp}${sep}${tr}.`;
+      }
+
       default:
         return `${heroName} (${heroClass}) realizou uma ação heroica!`;
     }
@@ -126,7 +134,8 @@ export class ActivityManager {
       'combat-victory': '⚔️',
       'rank-promotion': '🏆',
       'tavern-rest': '🛏️',
-      'item-used': '🧪'
+      'item-used': '🧪',
+      'guild-event-activated': '🏛️'
     };
     return icons[type] || '🎮';
   }
@@ -144,7 +153,8 @@ export class ActivityManager {
       'combat-victory': 'from-red-400 to-red-600',
       'rank-promotion': 'from-amber-400 to-yellow-600',
       'tavern-rest': 'from-amber-400 to-amber-600',
-      'item-used': 'from-indigo-400 to-indigo-600'
+      'item-used': 'from-indigo-400 to-indigo-600',
+      'guild-event-activated': 'from-indigo-500 to-indigo-700'
     };
     return colors[type] || 'from-gray-400 to-gray-600';
   }
@@ -380,5 +390,8 @@ export const logActivity = {
     activityManager.createActivity('tavern-rest', data),
 
   itemUsed: (data: ActivityData) =>
-    activityManager.createActivity('item-used', data)
+    activityManager.createActivity('item-used', data),
+
+  guildEventActivated: (data: ActivityData) =>
+    activityManager.createActivity('guild-event-activated', data)
 };

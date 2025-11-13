@@ -281,7 +281,22 @@ function generatePlaceholderImage(prompt) {
 app.post('/api/groq-openai/chat/completions', async (req, res) => {
   try {
     if (!GROQ_API_KEY) {
-      return res.status(500).json({ error: { message: 'GROQ_API_KEY ausente no servidor' } });
+      // Stub de desenvolvimento: retorna resposta compatível com OpenAI
+      const { messages = [], model = (process.env.VITE_AI_MODEL || 'llama-3.1-8b-instant') } = req.body || {};
+      const lastUser = Array.isArray(messages)
+        ? messages.filter(m => m?.role === 'user').slice(-1)[0]?.content || ''
+        : '';
+      const content = (lastUser && typeof lastUser === 'string' && lastUser.length > 0)
+        ? `Resposta local (stub): ${lastUser.slice(0, 220)}`
+        : 'Resposta local (stub): serviço Groq não configurado. Continue sua aventura!';
+      return res.json({
+        id: `stub-${Date.now()}`,
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model,
+        choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 0, completion_tokens: content.length, total_tokens: content.length }
+      });
     }
 
     const {

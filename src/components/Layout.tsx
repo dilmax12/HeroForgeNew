@@ -86,7 +86,9 @@ const Layout = () => {
             const localActiveIds = localActiveQuests.map((q) => q.id);
 
             // Remoto vence em conflitos: manter IDs remotos e adicionar locais inexistentes
-            const mergedActiveIds = Array.from(new Set([...remoteActiveIds, ...localActiveIds]));
+            const safeRemote = Array.isArray(remoteActiveIds) ? remoteActiveIds : [];
+            const safeLocal = Array.isArray(localActiveIds) ? localActiveIds : [];
+            const mergedActiveIds = Array.from(new Set([...safeRemote, ...safeLocal]));
             if (mergedActiveIds.join(',') !== (hero.activeQuests || []).join(',')) {
               updateHero(hero.id, { activeQuests: mergedActiveIds });
             }

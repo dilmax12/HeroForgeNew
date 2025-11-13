@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useGameSettingsStore } from '../store/gameSettingsStore';
 import { useHeroStore } from '../store/heroStore';
 import { ATTRIBUTE_CONSTRAINTS } from '../utils/attributeSystem';
 
@@ -10,6 +12,7 @@ interface TrainingOption {
   cost: number;
   currency?: 'gold' | 'glory' | 'arcaneEssence';
   duration: number; // em minutos
+  fatiguePenalty?: number; // penalidade de fadiga aplicada ao concluir
   rewards: {
     xp?: number;
     gold?: number;
@@ -30,6 +33,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     cost: 20,
     currency: 'gold',
     duration: 3,
+    fatiguePenalty: 15,
     rewards: {
       xp: 25,
       attributes: { forca: 1 }
@@ -43,6 +47,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     cost: 25,
     currency: 'gold',
     duration: 3,
+    fatiguePenalty: 15,
     rewards: {
       xp: 30,
       attributes: { destreza: 1 }
@@ -56,6 +61,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     cost: 35,
     currency: 'arcaneEssence',
     duration: 3,
+    fatiguePenalty: 15,
     rewards: {
       xp: 40,
       attributes: { inteligencia: 1 }
@@ -72,6 +78,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     cost: 30,
     currency: 'glory',
     duration: 3,
+    fatiguePenalty: 10,
     rewards: {
       xp: 35,
       attributes: { sabedoria: 1 }
@@ -85,6 +92,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     cost: 40,
     currency: 'gold',
     duration: 3,
+    fatiguePenalty: 25,
     rewards: {
       xp: 45,
       attributes: { constituicao: 1 }
@@ -101,6 +109,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     cost: 50,
     currency: 'glory',
     duration: 3,
+    fatiguePenalty: 10,
     rewards: {
       xp: 50,
       attributes: { carisma: 1 }
@@ -117,6 +126,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     cost: 100,
     currency: 'glory',
     duration: 3,
+    fatiguePenalty: 30,
     rewards: {
       xp: 100,
       attributes: { forca: 2, destreza: 1 }
@@ -133,6 +143,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     cost: 75,
     currency: 'gold',
     duration: 3,
+    fatiguePenalty: 20,
     rewards: {
       xp: 60,
       gold: 150
@@ -172,13 +183,21 @@ const Training: React.FC = () => {
     );
   }
 
+  // Custo com desconto global (buff da Guilda)
+  const getDiscountedCost = (option: TrainingOption) => {
+    const discountPercent = useGameSettingsStore.getState().trainingCostReductionPercent || 0;
+    const capped = Math.max(0, Math.min(100, discountPercent));
+    const discounted = Math.ceil(option.cost * (1 - capped / 100));
+    return Math.max(0, discounted);
+  };
+
   const canAffordTraining = (option: TrainingOption) => {
     const currency = option.currency || 'gold';
     const prog = selectedHero.progression;
     const balance = currency === 'gold' ? (prog.gold || 0)
                     : currency === 'glory' ? (prog.glory || 0)
                     : (prog.arcaneEssence || 0);
-    return balance >= option.cost;
+    return balance >= getDiscountedCost(option);
   };
 
   const meetsRequirements = (option: TrainingOption) => {
@@ -223,15 +242,27 @@ const Training: React.FC = () => {
     const currency = option.currency || 'gold';
     const prog = selectedHero.progression;
     const newProgression = { ...prog } as any;
-    if (currency === 'gold') newProgression.gold = (prog.gold || 0) - option.cost;
-    else if (currency === 'glory') newProgression.glory = (prog.glory || 0) - option.cost;
-    else newProgression.arcaneEssence = (prog.arcaneEssence || 0) - option.cost;
+    const effectiveCost = getDiscountedCost(option);
+    if (currency === 'gold') newProgression.gold = (prog.gold || 0) - effectiveCost;
+    else if (currency === 'glory') newProgression.glory = (prog.glory || 0) - effectiveCost;
+    else newProgression.arcaneEssence = (prog.arcaneEssence || 0) - effectiveCost;
     updateHero(selectedHero.id, { progression: newProgression });
 
     // Definir treinamento ativo
     setActiveTraining(option.id);
     const endTime = Date.now() + (option.duration * 60 * 1000);
     setTrainingEndTime(endTime);
+
+    // Persistir status de treino ativo para HUD
+    updateHero(selectedHero.id, {
+      stats: {
+        ...selectedHero.stats,
+        trainingActiveUntil: new Date(endTime).toISOString(),
+        trainingActiveName: option.name,
+        // também marcar último treino iniciado hoje
+        lastTrainingDate: nowISO
+      }
+    });
 
     // Simular conclusão do treinamento (em produção, isso seria gerenciado pelo backend)
     setTimeout(() => {
@@ -281,11 +312,15 @@ const Training: React.FC = () => {
       ...selectedHero.stats,
       trainingsToday,
       lastTrainingDate: nowISO,
-      trainingDailyLimit: dailyLimit
+      trainingDailyLimit: dailyLimit,
+      // limpar status de treino ativo
+      trainingActiveUntil: undefined,
+      trainingActiveName: undefined
     };
 
     // Aplicar Fadiga ao concluir
-    const nextFatigue = Math.min(100, (selectedHero.progression.fatigue || 0) + 20);
+    const penalty = option.fatiguePenalty ?? 20;
+    const nextFatigue = Math.min(100, (selectedHero.progression.fatigue || 0) + penalty);
     updates.progression.fatigue = nextFatigue;
 
     updateHero(selectedHero.id, updates);
@@ -386,16 +421,16 @@ const Training: React.FC = () => {
               </div>
 
               {/* Informações */}
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Custo:</span>
-                  <span className={`font-medium ${
-                    (option.currency || 'gold') === 'gold' ? 'text-yellow-600' :
-                    (option.currency || 'gold') === 'glory' ? 'text-purple-700' : 'text-indigo-700'
-                  }`}>
-                    {option.cost} {(option.currency || 'gold') === 'gold' ? 'ouro' : (option.currency || 'gold') === 'glory' ? 'glória' : 'essência'}
-                  </span>
-                </div>
+        <div className="space-y-2 mb-4">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Custo:</span>
+            <span className={`font-medium ${
+              (option.currency || 'gold') === 'gold' ? 'text-yellow-600' :
+              (option.currency || 'gold') === 'glory' ? 'text-purple-700' : 'text-indigo-700'
+            }`}>
+              {getDiscountedCost(option)} {(option.currency || 'gold') === 'gold' ? 'ouro' : (option.currency || 'gold') === 'glory' ? 'glória' : 'essência'}
+            </span>
+          </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Duração:</span>
                   <span className="font-medium">{option.duration} min</span>

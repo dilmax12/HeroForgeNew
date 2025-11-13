@@ -18,6 +18,7 @@ import { logActivity } from '../utils/activitySystem';
 import { trackMetric } from '../utils/metricsSystem';
 import { rankSystem } from '../utils/rankSystem';
 import { worldStateManager } from '../utils/worldState';
+import { getGameSettings, useGameSettingsStore } from './gameSettingsStore';
 import { ATTRIBUTE_CONSTRAINTS } from '../utils/attributeSystem';
 import { ATTRIBUTE_POINTS_PER_LEVEL, checkLevelUp } from '../utils/progression';
 
@@ -824,8 +825,12 @@ export const useHeroStore = create<HeroState>()(
       gainXP: (heroId: string, xp: number) => {
         const hero = get().heroes.find(h => h.id === heroId);
         if (!hero) return;
-        
-        const newXP = Math.max(0, hero.progression.xp + xp);
+        // Aplicar buff global de XP da Guilda, se ativo
+        const gs = getGameSettings();
+        const buffPercent = Math.max(0, Math.min(100, gs.guildXpBuffPercent || 0));
+        const effectiveXP = Math.floor(xp * (1 + buffPercent / 100));
+
+        const newXP = Math.max(0, hero.progression.xp + effectiveXP);
         const newLevel = checkLevelUp(newXP, hero.progression.level);
         const prevLevel = hero.progression.level;
         const levelsGained = Math.max(0, newLevel - prevLevel);
@@ -939,13 +944,13 @@ export const useHeroStore = create<HeroState>()(
         }
         
         // Update daily goals progress
-        get().updateDailyGoalProgress(heroId, 'xp-gained', xp);
+        get().updateDailyGoalProgress(heroId, 'xp-gained', effectiveXP);
         if (newLevel > hero.progression.level) {
           get().updateDailyGoalProgress(heroId, 'level-up', 1);
         }
         
         // Update event progress
-        eventManager.updateEventProgress(heroId, 'xp-gained', xp);
+        eventManager.updateEventProgress(heroId, 'xp-gained', effectiveXP);
         if (newLevel > hero.progression.level) {
           eventManager.updateEventProgress(heroId, 'levels-gained', newLevel - hero.progression.level);
           
@@ -967,7 +972,7 @@ export const useHeroStore = create<HeroState>()(
         }
         
         // Track XP gained metrics
-        trackMetric.xpGained(heroId, xp);
+        trackMetric.xpGained(heroId, effectiveXP);
       },
       
       gainGold: (heroId: string, gold: number) => {
@@ -1524,7 +1529,10 @@ export const useHeroStore = create<HeroState>()(
           createdAt: new Date().toISOString(),
           quests: [],
           level: 1,
-          roles: { [heroId]: 'lider' }
+          roles: { [heroId]: 'lider' },
+          councilMembers: [],
+          policies: {},
+          pendingAlliances: []
         };
         
         set(state => ({
@@ -1549,15 +1557,20 @@ export const useHeroStore = create<HeroState>()(
         if (!hero || !guild || hero.progression.guildId) return false;
         
         set(state => ({
-          guilds: state.guilds.map(g => 
-            g.id === guildId 
-              ? { 
-                  ...g, 
-                  members: [...g.members, heroId],
-                  roles: { ...(g.roles || {}), [heroId]: 'membro' }
-                }
-              : g
-          )
+          guilds: state.guilds.map(g => {
+            if (g.id !== guildId) return g;
+            const isRankS = (hero.rankData?.currentRank === 'S');
+            const councilMembers = g.councilMembers || [];
+            const nextCouncil = isRankS && !councilMembers.includes(heroId)
+              ? [...councilMembers, heroId]
+              : councilMembers;
+            return {
+              ...g,
+              members: [...g.members, heroId],
+              roles: { ...(g.roles || {}), [heroId]: 'membro' },
+              councilMembers: nextCouncil
+            };
+          })
         }));
         
         get().updateHero(heroId, {
@@ -1707,9 +1720,155 @@ export const useHeroStore = create<HeroState>()(
           createdAt: new Date().toISOString(),
           quests: [],
           level: 1,
-          roles: {}
+          roles: {},
+          councilMembers: [],
+          policies: {},
+          pendingAlliances: []
         };
         set(state => ({ guilds: [...state.guilds, defaultGuild] }));
+      },
+
+      // === Conselho da Guilda e Políticas ===
+      activateGuildEvent: (guildId: string, actorId: string, params: { xpBuffPercent?: number; trainingDiscountPercent?: number; eventName?: string; durationHours?: number; costGold?: number }) => {
+        const state = get();
+        const guild = state.guilds.find(g => g.id === guildId);
+        const actor = state.heroes.find(h => h.id === actorId);
+        if (!guild || !actor) return false;
+        const isCouncil = (guild.councilMembers || []).includes(actorId) || (guild.roles?.[actorId] === 'lider');
+        const isRankS = actor.rankData?.currentRank === 'S';
+        if (!isCouncil || !isRankS) return false;
+
+        const durationMs = (params.durationHours ?? 24) * 60 * 60 * 1000;
+        const expiresAt = new Date(Date.now() + durationMs).toISOString();
+        const eventName = params.eventName || 'Evento da Guilda';
+        // Limites de balanceamento: XP até 30%, Treino até 25%
+        const xpBuffPercent = Math.max(0, Math.min(30, params.xpBuffPercent ?? 0));
+        const trainingDiscountPercent = Math.max(0, Math.min(25, params.trainingDiscountPercent ?? 0));
+        const baseCost = params.costGold ?? 100;
+        const totalCost = baseCost + xpBuffPercent * 10 + trainingDiscountPercent * 5; // custo simples
+        if (guild.bankGold < totalCost) return false;
+
+        // Cooldown: impedir ativação se evento recente em menos de 12h
+        const lastActivatedIso = guild.policies?.lastEventActivatedAt;
+        const nowMs = Date.now();
+        const cooldownMs = 12 * 60 * 60 * 1000; // 12 horas
+        if (lastActivatedIso) {
+          const lastMs = new Date(lastActivatedIso).getTime();
+          if (nowMs - lastMs < cooldownMs) return false;
+        }
+
+        // Deduzir do cofre
+        set(state => ({
+          guilds: state.guilds.map(g => g.id === guildId ? {
+            ...g,
+            bankGold: g.bankGold - totalCost,
+            policies: {
+              ...(g.policies || {}),
+              xpBuffPercent,
+              trainingDiscountPercent,
+              activeEventName: eventName,
+              eventExpiresAt: expiresAt,
+              lastEventActivatedAt: new Date().toISOString()
+            }
+          } : g)
+        }));
+
+        // Aplicar buffs globais
+        getGameSettings();
+        useGameSettingsStore.getState().applyGuildBuffs({
+          xpBuffPercent,
+          trainingDiscountPercent,
+          eventName,
+          expiresAt,
+          sourceGuildId: guildId,
+        });
+
+        // Auditoria: registrar evento de guilda
+        logActivity.guildEventActivated({
+          heroId: actor.id,
+          heroName: actor.name,
+          heroClass: actor.class,
+          heroLevel: actor.level,
+          guildName: guild.name,
+          eventName,
+          xpBuffPercent,
+          trainingDiscountPercent,
+          eventExpiresAt: expiresAt,
+          costGold: totalCost
+        });
+
+        return true;
+      },
+
+      clearGuildEvent: (guildId: string, actorId: string) => {
+        const state = get();
+        const guild = state.guilds.find(g => g.id === guildId);
+        const actor = state.heroes.find(h => h.id === actorId);
+        if (!guild || !actor) return false;
+        const isCouncil = (guild.councilMembers || []).includes(actorId) || (guild.roles?.[actorId] === 'lider');
+        if (!isCouncil) return false;
+        set(state => ({
+          guilds: state.guilds.map(g => g.id === guildId ? {
+            ...g,
+            policies: { ...(g.policies || {}), xpBuffPercent: 0, trainingDiscountPercent: 0, activeEventName: undefined, eventExpiresAt: undefined }
+          } : g)
+        }));
+        useGameSettingsStore.getState().clearGuildBuffs();
+        return true;
+      },
+
+      // === Alianças de Party ===
+      requestPartyAlliance: (partyId: string, guildId: string, requesterHeroId: string) => {
+        const state = get();
+        const guild = state.guilds.find(g => g.id === guildId);
+        const party = state.parties.find(p => p.id === partyId);
+        if (!guild || !party) return false;
+        const request = {
+          id: uuidv4(),
+          partyId,
+          partyName: party.name,
+          requestedBy: requesterHeroId,
+          status: 'pending' as const,
+          requestedAt: new Date().toISOString()
+        };
+        set(state => ({
+          guilds: state.guilds.map(g => g.id === guildId ? { ...g, pendingAlliances: [...(g.pendingAlliances || []), request] } : g)
+        }));
+        return true;
+      },
+
+      approvePartyAlliance: (guildId: string, actorId: string, requestId: string) => {
+        const state = get();
+        const guild = state.guilds.find(g => g.id === guildId);
+        const actor = state.heroes.find(h => h.id === actorId);
+        if (!guild || !actor) return false;
+        const isCouncil = (guild.councilMembers || []).includes(actorId) || (guild.roles?.[actorId] === 'lider');
+        if (!isCouncil) return false;
+        set(state => ({
+          guilds: state.guilds.map(g => {
+            if (g.id !== guildId) return g;
+            const nextPending = (g.pendingAlliances || []).map(r => r.id === requestId ? { ...r, status: 'approved', decidedAt: new Date().toISOString(), decidedBy: actorId } : r);
+            return { ...g, pendingAlliances: nextPending };
+          })
+        }));
+        return true;
+      },
+
+      rejectPartyAlliance: (guildId: string, actorId: string, requestId: string) => {
+        const state = get();
+        const guild = state.guilds.find(g => g.id === guildId);
+        const actor = state.heroes.find(h => h.id === actorId);
+        if (!guild || !actor) return false;
+        const isCouncil = (guild.councilMembers || []).includes(actorId) || (guild.roles?.[actorId] === 'lider');
+        if (!isCouncil) return false;
+        set(state => ({
+          guilds: state.guilds.map(g => {
+            if (g.id !== guildId) return g;
+            const nextPending = (g.pendingAlliances || []).map(r => r.id === requestId ? { ...r, status: 'rejected', decidedAt: new Date().toISOString(), decidedBy: actorId } : r);
+            return { ...g, pendingAlliances: nextPending };
+          })
+        }));
+        return true;
       },
 
       // === SISTEMA DE PARTY ===

@@ -17,7 +17,7 @@ async function generate(params: GenerateTextParams): Promise<string> {
     promptLen: params.prompt?.length || 0
   });
   try {
-    const resp = await aiService.generateText({
+    const resp = await aiService.generateTextSafe({
       systemMessage: params.systemMessage,
       prompt: params.prompt,
       maxTokens,
@@ -28,7 +28,10 @@ async function generate(params: GenerateTextParams): Promise<string> {
       model: resp.model,
       textLen: resp.text?.length || 0
     });
-    return (resp.text || '').trim();
+    const text = (resp.text || '').trim();
+    if (text.length > 0) return text;
+    // Fallback mínimo
+    return 'O narrador observa em silêncio: o caminho segue adiante, carregado de escolhas e perigos. Coragem.';
   } catch (error: any) {
     console.error('[AI][Narrator] Failed', {
       code: error?.code,
@@ -36,7 +39,8 @@ async function generate(params: GenerateTextParams): Promise<string> {
       provider: error?.provider,
       retryable: error?.retryable
     });
-    throw error;
+    // Fallback em caso de exceção
+    return 'O destino vacila por instantes, mas a jornada continua. Siga em frente.';
   }
 }
 

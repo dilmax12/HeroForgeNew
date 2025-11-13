@@ -7,16 +7,18 @@ interface BattleModalProps {
   enemies: QuestEnemy[];
   onClose: () => void;
   onResult: (result: CombatResult) => void;
+  floor?: number;
+  partyRarityBonusPercent?: number;
 }
 
-export default function BattleModal({ hero, enemies, onClose, onResult }: BattleModalProps) {
+export default function BattleModal({ hero, enemies, onClose, onResult, floor, partyRarityBonusPercent }: BattleModalProps) {
   const [result, setResult] = useState<CombatResult | null>(null);
 
   useEffect(() => {
     // Executa combate completo por turnos e apresenta o log
-    const res = resolveCombat(hero, enemies);
+    const res = resolveCombat(hero, enemies, { floor, partyBonusPercent: partyRarityBonusPercent });
     setResult(res);
-  }, [hero, enemies]);
+  }, [hero, enemies, floor, partyRarityBonusPercent]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -63,4 +65,3 @@ export default function BattleModal({ hero, enemies, onClose, onResult }: Battle
     </div>
   );
 }
-

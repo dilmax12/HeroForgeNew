@@ -51,14 +51,28 @@ function buildParams(tipo: TextoTipo, contexto = ''): {
 
 export async function gerarTexto(tipo: TextoTipo, contexto = ''): Promise<string> {
   const { systemMessage, prompt, maxTokens, temperature } = buildParams(tipo, contexto);
-
-  const resp = await aiService.generateText({
-    systemMessage,
-    prompt,
-    maxTokens,
-    temperature
-  });
-
-  return (resp.text || '').trim();
+  try {
+    const resp = await aiService.generateTextSafe({
+      systemMessage,
+      prompt,
+      maxTokens,
+      temperature
+    });
+    const texto = (resp.text || '').trim();
+    if (texto.length > 0) return texto;
+  } catch (e) {
+    // ignorado, usamos fallback abaixo
+  }
+  // Fallback por tipo
+  switch (tipo) {
+    case 'nome':
+      return 'Valen';
+    case 'frase':
+      return 'Por honra e aço, avanço sem medo!';
+    case 'historia':
+      return 'Sob o céu cinzento, um herói ergueu-se contra a maré de sombras, encontrando coragem nas cicatrizes do passado e esperança no brilho da lâmina. A jornada recomeça, e o destino chama.';
+    case 'missao':
+    default:
+      return 'Missão: Patrulhar os arredores e investigar pegadas suspeitas. Recompensa: 50 ouro e experiência. Dificuldade: normal.';
+  }
 }
-

@@ -481,6 +481,46 @@ class AIService {
     }
   }
 
+  // Versão segura com fallback local quando houver falha do provider
+  async generateTextSafe(request: AITextRequest): Promise<AITextResponse> {
+    try {
+      return await this.generateText(request);
+    } catch (error: any) {
+      console.warn('[AI][TextSafe] Fallback engaged', {
+        code: error?.code,
+        message: error?.message?.slice?.(0, 200) || String(error?.message || error),
+        provider: error?.provider || this.config.provider
+      });
+      const text = this.buildFallbackText(request);
+      return {
+        text,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        model: this.config.model,
+        provider: this.config.provider
+      } as AITextResponse;
+    }
+  }
+
+  private buildFallbackText(request: AITextRequest): string {
+    const sys = (request.systemMessage || '').toLowerCase();
+    const prompt = request.prompt || '';
+    // Heurísticas simples para diferentes consumidores de texto
+    if (sys.includes('narrador') || sys.includes('narrative') || prompt.toLowerCase().includes('narre')) {
+      return 'O vento sussurra entre ruínas antigas enquanto o herói avança com determinação. Obstáculos surgem, mas cada passo revela novas oportunidades e perigos. Continue explorando: o destino se escreve com suas escolhas.';
+    }
+    if (sys.includes('missão') || prompt.toLowerCase().includes('missão')) {
+      return 'Missão: Investigar atividades estranhas em um vilarejo próximo. Objetivo: conversar com moradores e coletar pistas. Recompensa: experiência e ouro modestos. Dificuldade: normal.';
+    }
+    if (sys.includes('diálogo') || prompt.toLowerCase().includes('diálogo')) {
+      return 'NPC: "Vi você pela estrada. Cuidado, viajante—os bosques escondem mais do que sombras. Precisa de ajuda?"';
+    }
+    // Fallback genérico
+    const trimmed = prompt.trim();
+    return trimmed.length > 0
+      ? `Resumo: ${trimmed.slice(0, 200)} ...`
+      : 'Texto não disponível no momento. Continue a aventura; conteúdo será carregado quando o serviço retornar.';
+  }
+
   async generateImage(request: AIImageRequest): Promise<AIImageResponse> {
     // Verificar se o serviço está configurado
     if (!this.isConfigured()) {

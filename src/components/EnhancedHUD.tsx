@@ -37,6 +37,7 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
   // UI: contadores e pulsos de recuperação
   const [nextHpMpSeconds, setNextHpMpSeconds] = useState<number | null>(null);
   const [nextStaminaSeconds, setNextStaminaSeconds] = useState<number | null>(null);
+  const [trainingSeconds, setTrainingSeconds] = useState<number | null>(null);
   const [hpPulse, setHpPulse] = useState<number>(0);
   const [mpPulse, setMpPulse] = useState<number>(0);
 
@@ -124,9 +125,28 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
       } else {
         setNextStaminaSeconds(null);
       }
+      // Treino: baseado em stats.trainingActiveUntil
+      if (latest.stats?.trainingActiveUntil) {
+        const until = new Date(latest.stats.trainingActiveUntil).getTime();
+        const remainingMs = Math.max(0, until - now);
+        if (remainingMs > 0) {
+          setTrainingSeconds(Math.ceil(remainingMs / 1000));
+        } else {
+          setTrainingSeconds(null);
+        }
+      } else {
+        setTrainingSeconds(null);
+      }
     }, 1000);
     return () => clearInterval(interval);
   }, [hero.id, getSelectedHero]);
+
+  const formatSecondsToMMSS = (seconds: number | null) => {
+    if (seconds === null) return '--:--';
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   const submitDaily = async () => {
     if (!hero || submitting) return;
@@ -285,6 +305,22 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
           </div>
         )}
       </div>
+
+      {/* Treino Ativo */}
+      {trainingSeconds !== null && (
+        <div className="mb-3">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-yellow-300 text-xs font-medium">Treino</span>
+            <span className="text-gray-300 text-[11px]">
+              {hero.stats?.trainingActiveName || 'Em andamento'}
+            </span>
+          </div>
+          <div className="w-full bg-gray-700 rounded h-7 flex items-center justify-between px-2">
+            <span className="text-[11px] text-gray-300">Tempo restante</span>
+            <span className="text-[11px] text-yellow-300 font-medium">{formatSecondsToMMSS(trainingSeconds)}</span>
+          </div>
+        </div>
+      )}
 
       {/* Fadiga */}
       {typeof hero.progression.fatigue === 'number' && (

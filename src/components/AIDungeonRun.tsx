@@ -43,6 +43,7 @@ const getStageCountByRank = (rank?: 'F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S') => 
 
 export default function AIDungeonRun() {
   const hero = useHeroStore(s => s.getSelectedHero());
+  const getHeroParty = useHeroStore(s => s.getHeroParty);
   const updateHero = useHeroStore(s => s.updateHero);
   const gainXP = useHeroStore(s => s.gainXP);
   const gainGold = useHeroStore(s => s.gainGold);
@@ -62,19 +63,19 @@ export default function AIDungeonRun() {
   const [runCounted, setRunCounted] = useState(false);
 
   const stagesTotal = useMemo(() => {
-    const currentRank = hero.rankData?.currentRank as ('F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S') | undefined;
+    const currentRank = hero?.rankData?.currentRank as ('F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S') | undefined;
     return getStageCountByRank(currentRank);
-  }, [hero.rankData?.currentRank]);
+  }, [hero?.rankData?.currentRank]);
 
   const difficulty: 'easy' | 'medium' | 'hard' = useMemo(() => {
-    const lvl = hero.progression.level || 1;
+    const lvl = hero?.progression.level || 1;
     if (lvl < 4) return 'easy';
     if (lvl < 8) return 'medium';
     return 'hard';
-  }, [hero.progression.level]);
+  }, [hero?.progression.level]);
 
-  const maxHp = hero.derivedAttributes.hp || 1;
-  const currentHp = hero.derivedAttributes.currentHp ?? maxHp;
+  const maxHp = hero?.derivedAttributes.hp || 1;
+  const currentHp = hero?.derivedAttributes.currentHp ?? maxHp;
   const isRecovering = currentHp <= 0;
 
   const inflightRef = useRef(false);
@@ -87,6 +88,7 @@ export default function AIDungeonRun() {
       setLoading(true);
       setOutcome(null);
       try {
+        if (!hero) return;
         const ctx = `Masmorra IA — Etapa ${stageIndex + 1}/${stagesTotal}. Herói: ${hero.name} nível ${hero.progression.level}.`; 
         const aiMission = await dynamicMissionsAI.generateMission({ hero, missionType: 'mystery', difficulty, context: ctx });
         setDescription(aiMission.description);
@@ -105,7 +107,16 @@ export default function AIDungeonRun() {
       }
     };
     run();
-  }, [stageIndex, hero.id, difficulty, stagesTotal]);
+  }, [stageIndex, hero?.id, difficulty, stagesTotal]);
+
+  if (!hero) {
+    return (
+      <div className="max-w-3xl mx-auto p-6 text-center">
+        <h2 className="text-2xl font-bold mb-2">Masmorra IA</h2>
+        <p className="text-gray-600">Nenhum herói selecionado. Selecione um herói para iniciar a aventura.</p>
+      </div>
+    );
+  }
 
   const STAMINA_COST_PER_STAGE = 2;
   const applyStaminaCost = (amount: number) => {
@@ -305,6 +316,8 @@ export default function AIDungeonRun() {
         <BattleModal
           hero={hero}
           enemies={battleEnemies as any}
+          floor={stageIndex + 1}
+          partyRarityBonusPercent={(getHeroParty(hero.id)?.members.length || 0) >= 4 ? 5 : 0}
           onClose={() => setShowBattle(false)}
           onResult={(res) => {
             // aplicar recompensas e narrativa pós-batalha
