@@ -152,13 +152,28 @@ Formato da resposta em JSON:
         if (!aiService.isConfigured()) {
           return this.generateFallbackMission(request);
         }
-
+        console.debug('[AI][Missions] GenerateMission dispatch', {
+          provider: aiService.getProvider(),
+          hero: {
+            id: request.hero.id,
+            name: request.hero.name,
+            class: request.hero.class,
+            level: request.hero.progression.level
+          },
+          missionType: request.missionType,
+          difficulty: request.difficulty
+        });
         const response = await aiService.generateText({
           prompt: this.buildMissionPrompt(request),
           systemMessage: this.getSystemPrompt(),
           // Reduzimos tokens para aliviar TPM em provedores com limite
           maxTokens: 600,
           temperature: 0.8
+        });
+        console.debug('[AI][Missions] GenerateMission response', {
+          textLen: response.text?.length || 0,
+          provider: response.provider,
+          model: response.model
         });
 
         // Parse robusto do JSON da resposta
@@ -200,7 +215,13 @@ Formato da resposta em JSON:
           npcDialogue: missionData.npcDialogue
         };
       } catch (error) {
-        console.error('Error generating dynamic mission:', error);
+        const e: any = error;
+        console.error('[AI][Missions] GenerateMission failed', {
+          code: e?.code,
+          message: e?.message,
+          provider: e?.provider,
+          retryable: e?.retryable
+        });
         return this.generateFallbackMission(request);
       }
     })();
@@ -248,6 +269,12 @@ Formato da resposta em JSON:
           responses: ['Preciso de uma missão', 'Conte-me sobre este lugar', 'Até logo']
         };
       }
+      console.debug('[AI][Missions] GenerateNPCDialogue dispatch', {
+        provider: aiService.getProvider(),
+        hero: { name: hero.name, class: hero.class, level: hero.progression.level },
+        npcName,
+        contextLen: context?.length || 0
+      });
       const prompt = `Crie um diálogo para o NPC "${npcName}" falando com ${hero.name} (${hero.class}, nível ${hero.progression.level}).
 
 Contexto: ${context}
@@ -271,6 +298,11 @@ Formato JSON:
         maxTokens: 200,
         temperature: 0.7
       });
+      console.debug('[AI][Missions] GenerateNPCDialogue response', {
+        textLen: response.text?.length || 0,
+        provider: response.provider,
+        model: response.model
+      });
 
       // Parse robusto
       try {
@@ -287,7 +319,13 @@ Formato JSON:
         };
       }
     } catch (error) {
-      console.error('Error generating NPC dialogue:', error);
+      const e: any = error;
+      console.error('[AI][Missions] GenerateNPCDialogue failed', {
+        code: e?.code,
+        message: e?.message,
+        provider: e?.provider,
+        retryable: e?.retryable
+      });
       return {
         npcName,
         dialogue: `Saudações, ${hero.name}! Como posso ajudá-lo hoje?`,

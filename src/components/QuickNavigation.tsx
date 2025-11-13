@@ -27,6 +27,13 @@ const QuickNavigation: React.FC = () => {
       color: 'bg-yellow-600 hover:bg-yellow-700'
     },
     {
+      id: 'dungeon-infinita',
+      label: 'Dungeon Infinita',
+      icon: '🗝️',
+      path: '/dungeon-infinita',
+      color: 'bg-purple-600 hover:bg-purple-700'
+    },
+    {
       id: 'party',
       label: 'Party',
       icon: '👥',

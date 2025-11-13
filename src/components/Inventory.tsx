@@ -3,10 +3,10 @@ import { useHeroStore } from '../store/heroStore';
 import { SHOP_ITEMS } from '../utils/shop';
 
 type ItemType = 'todos' | 'consumable' | 'weapon' | 'armor' | 'accessory' | 'material';
-type ItemRarity = 'todas' | 'comum' | 'raro' | 'epico' | 'lendario';
+type ItemRarity = 'todas' | 'comum' | 'incomum' | 'raro' | 'epico' | 'lendario';
 
 const Inventory: React.FC = () => {
-  const { getSelectedHero, equipItem, sellItem, useItem } = useHeroStore();
+  const { getSelectedHero, equipItem, sellItem, useItem, unequipItem, upgradeItem } = useHeroStore();
   const hero = getSelectedHero();
 
   const [selectedType, setSelectedType] = useState<ItemType>('todos');
@@ -108,6 +108,7 @@ const Inventory: React.FC = () => {
             >
               <option value="todas">Todas</option>
               <option value="comum">Comum</option>
+              <option value="incomum">Incomum</option>
               <option value="raro">Raro</option>
               <option value="epico">Épico</option>
               <option value="lendario">Lendário</option>
@@ -151,7 +152,13 @@ const Inventory: React.FC = () => {
                       <div className="font-semibold text-gray-800">{item.name}</div>
                       <div className="text-sm text-gray-600">Qtd: {qty} • Preço venda: {unitSell} ouro/un</div>
                       {isEquipped && (
-                        <div className="text-xs text-green-700">Equipado</div>
+                        <div className="text-xs text-green-700">
+                          Equipado{` `}
+                          {(() => {
+                            const lvl = hero.inventory.upgrades?.[itemId] ?? 0;
+                            return lvl > 0 ? `• Aprimorado +${lvl}` : '';
+                          })()}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -174,20 +181,56 @@ const Inventory: React.FC = () => {
                         Usar
                       </button>
                     ) : (
-                      <button
-                        onClick={() => {
-                          const ok = equipItem(hero.id, itemId);
-                          if (ok) {
-                            setFeedback({ message: `Equipado: ${item.name}. Atributos atualizados.`, type: 'success' });
-                          } else {
-                            setFeedback({ message: `Não foi possível equipar ${item.name}.`, type: 'error' });
-                          }
-                          setTimeout(() => setFeedback(null), 1800);
-                        }}
-                        className="px-3 py-2 rounded text-white bg-indigo-600 hover:bg-indigo-700"
-                      >
-                        Equipar
-                      </button>
+                      isEquipped ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              const ok = unequipItem(hero.id, itemId);
+                              if (ok) {
+                                setFeedback({ message: `Desequipado: ${item.name}. Atributos atualizados.`, type: 'success' });
+                              } else {
+                                setFeedback({ message: `Não foi possível desequipar ${item.name}.`, type: 'error' });
+                              }
+                              setTimeout(() => setFeedback(null), 1800);
+                            }}
+                            className="px-3 py-2 rounded text-white bg-gray-700 hover:bg-gray-800"
+                          >
+                            Desequipar
+                          </button>
+                          {(item.type === 'weapon' || item.type === 'armor' || item.type === 'accessory') && (
+                            <button
+                              onClick={() => {
+                                const ok = upgradeItem(hero.id, itemId);
+                                const newLvl = (hero.inventory.upgrades?.[itemId] ?? 0) + (ok ? 1 : 0);
+                                if (ok) {
+                                  setFeedback({ message: `Aprimorado: ${item.name} para +${newLvl}.`, type: 'success' });
+                                } else {
+                                  setFeedback({ message: `Não foi possível aprimorar ${item.name}. Ouro insuficiente?`, type: 'error' });
+                                }
+                                setTimeout(() => setFeedback(null), 2000);
+                              }}
+                              className="px-3 py-2 rounded text-white bg-amber-600 hover:bg-amber-700"
+                            >
+                              Aprimorar
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            const ok = equipItem(hero.id, itemId);
+                            if (ok) {
+                              setFeedback({ message: `Equipado: ${item.name}. Atributos atualizados.`, type: 'success' });
+                            } else {
+                              setFeedback({ message: `Não foi possível equipar ${item.name}.`, type: 'error' });
+                            }
+                            setTimeout(() => setFeedback(null), 1800);
+                          }}
+                          className="px-3 py-2 rounded text-white bg-indigo-600 hover:bg-indigo-700"
+                        >
+                          Equipar
+                        </button>
+                      )
                     )}
 
                     {/* Quantidade e Venda */}

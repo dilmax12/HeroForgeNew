@@ -82,6 +82,32 @@ export class ActivityManager {
       case 'rank-promotion':
         return `🏆 ${heroName} (${heroClass}) foi promovido para Rank ${data.newRank}! Uma conquista épica!`;
       
+      case 'tavern-rest': {
+        const restLabel = data.restType ? ` (${data.restType})` : '';
+        const recovered = typeof data.fatigueRecovered === 'number' ? data.fatigueRecovered : 0;
+        const spent = typeof data.goldSpent === 'number' ? data.goldSpent : 0;
+        return `🛏️ ${heroName} (${heroClass}) descansou na taverna${restLabel}, recuperou ${recovered} de Fadiga por ${spent} ouro.`;
+      }
+      
+      case 'item-used': {
+        const parts: string[] = [];
+        if (typeof data.hpRecovered === 'number' && data.hpRecovered > 0) {
+          parts.push(`+${data.hpRecovered} HP`);
+        }
+        if (typeof data.mpRecovered === 'number' && data.mpRecovered > 0) {
+          parts.push(`+${data.mpRecovered} MP`);
+        }
+        if (typeof data.xpGained === 'number' && data.xpGained > 0) {
+          parts.push(`+${data.xpGained} XP`);
+        }
+        if (typeof data.fatigueRecovered === 'number' && data.fatigueRecovered > 0) {
+          parts.push(`-${data.fatigueRecovered} Fadiga`);
+        }
+        const effectText = parts.length ? ` (${parts.join(', ')})` : '';
+        const itemLabel = data.itemName ? ` ${data.itemName}` : '';
+        return `🧪 ${heroName} (${heroClass}) usou${itemLabel}${effectText}.`;
+      }
+      
       default:
         return `${heroName} (${heroClass}) realizou uma ação heroica!`;
     }
@@ -98,7 +124,9 @@ export class ActivityManager {
       'event-completed': '🎪',
       'daily-goal-completed': '✅',
       'combat-victory': '⚔️',
-      'rank-promotion': '🏆'
+      'rank-promotion': '🏆',
+      'tavern-rest': '🛏️',
+      'item-used': '🧪'
     };
     return icons[type] || '🎮';
   }
@@ -114,7 +142,9 @@ export class ActivityManager {
       'event-completed': 'from-pink-400 to-pink-600',
       'daily-goal-completed': 'from-teal-400 to-teal-600',
       'combat-victory': 'from-red-400 to-red-600',
-      'rank-promotion': 'from-amber-400 to-yellow-600'
+      'rank-promotion': 'from-amber-400 to-yellow-600',
+      'tavern-rest': 'from-amber-400 to-amber-600',
+      'item-used': 'from-indigo-400 to-indigo-600'
     };
     return colors[type] || 'from-gray-400 to-gray-600';
   }
@@ -344,5 +374,11 @@ export const logActivity = {
     activityManager.createActivity('combat-victory', data),
   
   rankPromotion: (data: ActivityData) => 
-    activityManager.createActivity('rank-promotion', data)
+    activityManager.createActivity('rank-promotion', data),
+
+  tavernRest: (data: ActivityData) =>
+    activityManager.createActivity('tavern-rest', data),
+
+  itemUsed: (data: ActivityData) =>
+    activityManager.createActivity('item-used', data)
 };

@@ -119,6 +119,16 @@ class AIService {
 
     while (attempt <= maxRetries) {
       const maxTokensForAttempt = Math.max(200, (request.maxTokens || this.config.maxTokens || 2000) - (attempt * 200));
+      console.debug('[AI][OpenAIText] Request', {
+        endpoint,
+        provider: this.config.provider,
+        model: this.config.model,
+        maxTokens: maxTokensForAttempt,
+        temperature: request.temperature || this.config.temperature,
+        promptLen: request.prompt?.length || 0,
+        hasContext: !!request.context,
+        attempt
+      });
 
       const response = await this.fetchWithTimeout(endpoint, {
         method: 'POST',
@@ -137,6 +147,11 @@ class AIService {
 
       if (response.ok) {
         const data = await response.json();
+        console.debug('[AI][OpenAIText] Success', {
+          status: response.status,
+          model: data.model,
+          textLen: data?.choices?.[0]?.message?.content?.length || 0
+        });
         return {
           text: data.choices[0].message.content,
           usage: data.usage,
@@ -149,6 +164,14 @@ class AIService {
       let error: any = {};
       try { error = JSON.parse(raw); } catch { error = { error: { message: raw } }; }
       lastErrorMsg = error.error?.message || raw || 'Unknown error occurred';
+      console.error('[AI][OpenAIText] Error', {
+        status: response.status,
+        statusText: response.statusText,
+        endpoint,
+        message: lastErrorMsg,
+        rawSnippet: typeof raw === 'string' ? raw.slice(0, 300) : '',
+        retryAfter: response.headers.get('retry-after') || undefined
+      });
 
       if (response.status === 429) {
         // Rate limit: aplicar backoff exponencial com jitter e respeitar Retry-After se presente
@@ -182,7 +205,16 @@ class AIService {
   }
 
   private async makeHuggingFaceTextRequest(request: AITextRequest): Promise<AITextResponse> {
-    const response = await fetch(this.config.baseURL || '/api/hf-text', {
+    const endpoint = this.config.baseURL || '/api/hf-text';
+    console.debug('[AI][HFText] Request', {
+      endpoint,
+      model: this.config.model,
+      maxTokens: request.maxTokens || this.config.maxTokens,
+      temperature: request.temperature || this.config.temperature,
+      promptLen: request.prompt?.length || 0,
+      hasContext: !!request.systemMessage
+    });
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -199,6 +231,13 @@ class AIService {
     if (!response.ok) {
       const errObj = data?.error ?? data;
       const errMsg = typeof errObj === 'string' ? errObj : (errObj?.message || 'Erro ao gerar com Hugging Face');
+      console.error('[AI][HFText] Error', {
+        status: response.status,
+        statusText: response.statusText,
+        endpoint,
+        message: errMsg,
+        rawSnippet: typeof textRaw === 'string' ? textRaw.slice(0, 300) : ''
+      });
       throw new AIError({
         code: 'hf_error',
         message: errMsg,
@@ -207,6 +246,10 @@ class AIService {
       });
     }
 
+    console.debug('[AI][HFText] Success', {
+      status: response.status,
+      textLen: (data.text || '').length
+    });
     return {
       text: data.text || '',
       usage: undefined,
@@ -385,6 +428,15 @@ class AIService {
     }
 
     try {
+      console.debug('[AI][Text] Dispatch', {
+        provider: this.config.provider,
+        baseURL: this.config.baseURL,
+        model: this.config.model,
+        maxTokens: request.maxTokens || this.config.maxTokens,
+        temperature: request.temperature || this.config.temperature,
+        promptLen: request.prompt?.length || 0,
+        hasContext: !!request.context
+      });
       let response: AITextResponse;
 
       if (this.config.provider === 'openai') {
@@ -410,10 +462,21 @@ class AIService {
           expiresAt: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
         });
       }
-
+      console.debug('[AI][Text] Completed', {
+        provider: response.provider,
+        model: response.model,
+        textLen: response.text?.length || 0,
+        totalTokens: response.usage?.totalTokens
+      });
       return response;
     } catch (error) {
       this.usageStats.errorRate++;
+      console.error('[AI][Text] Failed', {
+        code: (error as any)?.code,
+        message: (error as any)?.message,
+        provider: (error as any)?.provider || this.config.provider,
+        retryable: (error as any)?.retryable
+      });
       throw error;
     }
   }

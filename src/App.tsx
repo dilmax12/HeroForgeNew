@@ -25,15 +25,20 @@ import AIRecommendationsPanel from './components/AIRecommendationsPanel'
 import Shop from './components/Shop'
 import Training from './components/Training'
 import { WorldStateDemo } from './components/WorldStateDemo'
+import MissionsHub from './components/MissionsHub'
+import Dungeon20 from './components/Dungeon20'
 import Inventory from './components/Inventory'
 import { useEffect } from 'react'
 import { useHeroStore } from './store/heroStore'
 import { HeroJournal } from './components/HeroJournal'
 import QuickMission from './components/QuickMission'
 import JourneyFlow from './components/JourneyFlow'
-import MissionsHub from './components/MissionsHub'
+// (removido import duplicado de MissionsHub)
 import AdminDashboard from './components/AdminDashboard'
 import IntroCinematic from './components/IntroCinematic'
+import PlayerRegistration from './components/PlayerRegistration'
+import Tavern from './components/Tavern'
+import Messenger from './components/Messenger'
 
 // Componente wrapper para HeroProgression que precisa do herói selecionado
 function HeroProgressionWrapper() {
@@ -358,16 +363,24 @@ function App() {
           <Route path="hero/:id" element={<HeroDetail />} />
           <Route path="progression" element={<HeroProgressionWrapper />} />
           <Route path="evolution" element={<EvolutionPanelWrapper />} />
-          {/* Antiga guild agora é party */}
-          <Route path="party" element={<GuildSystemWrapper />} />
+          {/* Party agora aponta para PartySystem (inclui Lobby Online) */}
+        <Route path="party" element={<PartySystemWrapper />} />
+          {/* GuildSystem disponível em rota separada caso necessário */}
+        <Route path="guild" element={<GuildSystemWrapper />} />
+          {/* Rota dedicada para Lobby/PartySystem (UI com aba "Lobby Online") */}
+        <Route path="party-lobby" element={<PartySystemWrapper />} />
           {/* Hub da Guilda dos Aventureiros */}
           <Route path="guild-hub" element={<AdventurersGuildHub />} />
+          <Route path="missions" element={<MissionsHub />} />
+          <Route path="dungeon-20" element={<Dungeon20 />} />
+          <Route path="dungeon-infinita" element={<Dungeon20 />} />
           {/* Centralização de modos de missão em um único hub */}
           <Route path="quests" element={<MissionsHub />} />
-          <Route path="missions" element={<MissionsHub />} />
           <Route path="daily-goals" element={<DailyGoalsWrapper />} />
           <Route path="events" element={<EventsPanel />} />
           <Route path="activities" element={<ActivityFeed />} />
+          {/* Cadastro básico de jogador (herói, itens e missão opcional) */}
+          <Route path="cadastro" element={<PlayerRegistration />} />
           {/* Rota de tutorial removida temporariamente */}
           <Route path="titles" element={<TitlesManager />} />
           <Route path="leaderboards" element={<Leaderboards />} />
@@ -375,6 +388,10 @@ function App() {
           <Route path="ai-avatar" element={<AIAvatarGeneratorWrapper />} />
           <Route path="ai-missions" element={<DynamicMissionsPanelWrapper />} />
           <Route path="ai-recommendations" element={<AIRecommendationsPanelWrapper />} />
+          {/* Taverna comunitária e murais */}
+          <Route path="tavern" element={<Tavern />} />
+          {/* Cartas e Mensageiros */}
+          <Route path="messenger" element={<Messenger />} />
           {/* Rotas de missões narrativas removidas */}
           <Route path="hero-journal" element={<HeroJournalWrapper />} />
           <Route path="quick-mission" element={<QuickMissionWrapper />} />

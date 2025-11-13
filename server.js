@@ -11,6 +11,191 @@ app.use(express.json());
 // Memória simples para leaderboard diário (apenas em dev server)
 const dailyLeaderboardByDay = {};
 
+// === Lobby Online (Party) em memória ===
+// Estrutura para multiplayer assíncrono simples
+const activeParties = new Map(); // partyId -> party
+
+function partyToPublic(p) {
+  if (!p) return null;
+  return {
+    id: p.id,
+    name: p.name,
+    leaderId: p.leaderId,
+    createdAt: p.createdAt,
+    members: Array.from(p.members),
+    readyMembers: Array.from(p.readyMembers || new Set()),
+    maxMembers: Number(p.maxMembers || 5)
+  };
+}
+
+app.get('/api/party/list', (_req, res) => {
+  const list = Array.from(activeParties.values()).map(partyToPublic);
+  res.json({ parties: list });
+});
+
+app.post('/api/party/create', (req, res) => {
+  try {
+    const { name, playerId } = req.body || {};
+    if (!name || !playerId) return res.status(400).json({ error: 'name e playerId são obrigatórios' });
+    const id = `p-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+    const party = {
+      id,
+      name: String(name).slice(0, 40),
+      leaderId: playerId,
+      createdAt: new Date().toISOString(),
+      members: new Set([playerId]),
+      readyMembers: new Set(),
+      maxMembers: 5,
+      messages: [] // { id, playerId, text, ts }
+    };
+    activeParties.set(id, party);
+    return res.json({ party: partyToPublic(party) });
+  } catch (err) {
+    console.error('party create error:', err);
+    return res.status(500).json({ error: 'Erro ao criar party' });
+  }
+});
+
+app.post('/api/party/join', (req, res) => {
+  try {
+    const { partyId, playerId } = req.body || {};
+    const party = activeParties.get(partyId);
+    if (!party || !playerId) return res.status(404).json({ error: 'Party não encontrada ou playerId ausente' });
+    if (party.members.size >= (party.maxMembers || 5)) return res.status(409).json({ error: 'Party cheia' });
+    party.members.add(playerId);
+    // Ao entrar, não marca como pronto automaticamente
+    party.readyMembers.delete(playerId);
+    return res.json({ party: partyToPublic(party) });
+  } catch (err) {
+    console.error('party join error:', err);
+    return res.status(500).json({ error: 'Erro ao entrar na party' });
+  }
+});
+
+app.post('/api/party/leave', (req, res) => {
+  try {
+    const { partyId, playerId } = req.body || {};
+    const party = activeParties.get(partyId);
+    if (!party || !playerId) return res.status(404).json({ error: 'Party não encontrada ou playerId ausente' });
+    party.members.delete(playerId);
+    party.readyMembers.delete(playerId);
+    // Se o líder saiu, transfere para o próximo membro
+    if (party.leaderId === playerId) {
+      const next = Array.from(party.members)[0];
+      party.leaderId = next || null;
+    }
+    // Se ficou vazia, remove
+    if (party.members.size === 0) activeParties.delete(partyId);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('party leave error:', err);
+    return res.status(500).json({ error: 'Erro ao sair da party' });
+  }
+});
+
+// Marca pronto/não-pronto
+app.post('/api/party/ready', (req, res) => {
+  try {
+    const { partyId, playerId, ready } = req.body || {};
+    const party = activeParties.get(partyId);
+    if (!party || !playerId || !party.members.has(playerId)) return res.status(404).json({ error: 'Party/membro inválido' });
+    if (!party.readyMembers) party.readyMembers = new Set();
+    if (ready) party.readyMembers.add(playerId); else party.readyMembers.delete(playerId);
+    return res.json({ party: partyToPublic(party) });
+  } catch (err) {
+    console.error('party ready error:', err);
+    return res.status(500).json({ error: 'Erro ao atualizar pronto' });
+  }
+});
+
+// Chat do lobby
+app.get('/api/party/chat', (req, res) => {
+  try {
+    const partyId = String(req.query.partyId || '');
+    const party = activeParties.get(partyId);
+    if (!party) return res.status(404).json({ error: 'Party não encontrada' });
+    const messages = Array.isArray(party.messages) ? party.messages.slice(-50) : [];
+    return res.json({ messages });
+  } catch (err) {
+    console.error('party chat list error:', err);
+    return res.status(500).json({ error: 'Erro ao listar chat' });
+  }
+});
+
+app.post('/api/party/chat', (req, res) => {
+  try {
+    const { partyId, playerId, text } = req.body || {};
+    const party = activeParties.get(partyId);
+    if (!party || !playerId || !party.members.has(playerId)) return res.status(404).json({ error: 'Party/membro inválido' });
+    const msg = {
+      id: `m-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+      playerId,
+      text: String(text || '').slice(0, 500),
+      ts: Date.now()
+    };
+    party.messages = party.messages || [];
+    party.messages.push(msg);
+    return res.json({ ok: true, message: msg });
+  } catch (err) {
+    console.error('party chat send error:', err);
+    return res.status(500).json({ error: 'Erro ao enviar mensagem' });
+  }
+});
+
+// Iniciar missão quando todos prontos (apenas validação)
+app.post('/api/party/start', (req, res) => {
+  try {
+    const { partyId, actorId } = req.body || {};
+    const party = activeParties.get(partyId);
+    if (!party) return res.status(404).json({ error: 'Party não encontrada' });
+    if (party.leaderId !== actorId) return res.status(403).json({ error: 'Apenas o líder pode iniciar' });
+    const members = Array.from(party.members);
+    const ready = Array.from(party.readyMembers || new Set());
+    const allReady = members.length > 0 && ready.length === members.length;
+    if (!allReady) return res.status(409).json({ error: 'Nem todos estão prontos' });
+    // Aqui poderíamos disparar missão compartilhada; por enquanto só confirma
+    return res.json({ started: true, party: partyToPublic(party) });
+  } catch (err) {
+    console.error('party start error:', err);
+    return res.status(500).json({ error: 'Erro ao iniciar missão' });
+  }
+});
+
+// Ações do líder: chutar membro e transferir liderança
+app.post('/api/party/kick', (req, res) => {
+  try {
+    const { partyId, actorId, targetId } = req.body || {};
+    const party = activeParties.get(partyId);
+    if (!party) return res.status(404).json({ error: 'Party não encontrada' });
+    if (party.leaderId !== actorId) return res.status(403).json({ error: 'Apenas o líder pode remover' });
+    if (actorId === targetId) return res.status(400).json({ error: 'Líder não pode se remover aqui' });
+    if (!party.members.has(targetId)) return res.status(404).json({ error: 'Membro não está na party' });
+    party.members.delete(targetId);
+    party.readyMembers && party.readyMembers.delete(targetId);
+    // Se ficou vazia, remove; se líder removido por erro, mantém
+    if (party.members.size === 0) activeParties.delete(partyId);
+    return res.json({ party: partyToPublic(party) });
+  } catch (err) {
+    console.error('party kick error:', err);
+    return res.status(500).json({ error: 'Erro ao remover membro' });
+  }
+});
+
+app.post('/api/party/transfer', (req, res) => {
+  try {
+    const { partyId, actorId, newLeaderId } = req.body || {};
+    const party = activeParties.get(partyId);
+    if (!party) return res.status(404).json({ error: 'Party não encontrada' });
+    if (party.leaderId !== actorId) return res.status(403).json({ error: 'Apenas o líder pode transferir' });
+    if (!party.members.has(newLeaderId)) return res.status(404).json({ error: 'Novo líder deve ser membro' });
+    party.leaderId = newLeaderId;
+    return res.json({ party: partyToPublic(party) });
+  } catch (err) {
+    console.error('party transfer error:', err);
+    return res.status(500).json({ error: 'Erro ao transferir liderança' });
+  }
+});
+
 const HF_TOKEN = process.env.HF_TOKEN;
 const MODEL_ID = process.env.HF_TEXT_MODEL || 'mistralai/Mistral-7B-Instruct-v0.3';
 const HF_API_INFERENCE_BASE = `https://router.huggingface.co/hf-inference/models/`;

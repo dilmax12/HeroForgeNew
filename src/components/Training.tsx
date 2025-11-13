@@ -8,6 +8,7 @@ interface TrainingOption {
   description: string;
   icon: string;
   cost: number;
+  currency?: 'gold' | 'glory' | 'arcaneEssence';
   duration: number; // em minutos
   rewards: {
     xp?: number;
@@ -27,6 +28,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Aprenda os fundamentos do combate corpo a corpo',
     icon: '⚔️',
     cost: 20,
+    currency: 'gold',
     duration: 3,
     rewards: {
       xp: 25,
@@ -39,6 +41,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Melhore sua velocidade e reflexos',
     icon: '🏃',
     cost: 25,
+    currency: 'gold',
     duration: 3,
     rewards: {
       xp: 30,
@@ -51,6 +54,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Aprofunde seus conhecimentos arcanos',
     icon: '📚',
     cost: 35,
+    currency: 'arcaneEssence',
     duration: 3,
     rewards: {
       xp: 40,
@@ -66,6 +70,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Fortaleça sua mente e espírito',
     icon: '🧘',
     cost: 30,
+    currency: 'glory',
     duration: 3,
     rewards: {
       xp: 35,
@@ -78,6 +83,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Aumente sua resistência física',
     icon: '💪',
     cost: 40,
+    currency: 'gold',
     duration: 3,
     rewards: {
       xp: 45,
@@ -93,6 +99,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Desenvolva suas habilidades sociais',
     icon: '🎭',
     cost: 50,
+    currency: 'glory',
     duration: 3,
     rewards: {
       xp: 50,
@@ -108,6 +115,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Técnicas avançadas de combate',
     icon: '🗡️',
     cost: 100,
+    currency: 'glory',
     duration: 3,
     rewards: {
       xp: 100,
@@ -123,6 +131,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     description: 'Aprenda a encontrar tesouros escondidos',
     icon: '💰',
     cost: 75,
+    currency: 'gold',
     duration: 3,
     rewards: {
       xp: 60,
@@ -164,7 +173,12 @@ const Training: React.FC = () => {
   }
 
   const canAffordTraining = (option: TrainingOption) => {
-    return selectedHero.progression.gold >= option.cost;
+    const currency = option.currency || 'gold';
+    const prog = selectedHero.progression;
+    const balance = currency === 'gold' ? (prog.gold || 0)
+                    : currency === 'glory' ? (prog.glory || 0)
+                    : (prog.arcaneEssence || 0);
+    return balance >= option.cost;
   };
 
   const meetsRequirements = (option: TrainingOption) => {
@@ -205,13 +219,14 @@ const Training: React.FC = () => {
       return;
     }
 
-    // Deduzir custo
-    updateHero(selectedHero.id, {
-      progression: {
-        ...selectedHero.progression,
-        gold: selectedHero.progression.gold - option.cost
-      }
-    });
+    // Deduzir custo conforme a moeda
+    const currency = option.currency || 'gold';
+    const prog = selectedHero.progression;
+    const newProgression = { ...prog } as any;
+    if (currency === 'gold') newProgression.gold = (prog.gold || 0) - option.cost;
+    else if (currency === 'glory') newProgression.glory = (prog.glory || 0) - option.cost;
+    else newProgression.arcaneEssence = (prog.arcaneEssence || 0) - option.cost;
+    updateHero(selectedHero.id, { progression: newProgression });
 
     // Definir treinamento ativo
     setActiveTraining(option.id);
@@ -231,20 +246,28 @@ const Training: React.FC = () => {
       }
     };
 
+    // Escalonar recompensas conforme Fadiga
+    const fatigue = selectedHero.progression.fatigue || 0;
+    let effectiveness = 1;
+    if (fatigue >= 70) effectiveness = 0.5;
+    else if (fatigue >= 40) effectiveness = 0.75;
+
     // Aplicar recompensas
     if (option.rewards.xp) {
-      updates.progression.xp = selectedHero.progression.xp + option.rewards.xp;
+      const gained = Math.floor(option.rewards.xp * effectiveness);
+      updates.progression.xp = (selectedHero.progression.xp || 0) + gained;
     }
 
     if (option.rewards.gold) {
-      updates.progression.gold = selectedHero.progression.gold + option.rewards.gold;
+      const gained = Math.floor(option.rewards.gold * effectiveness);
+      updates.progression.gold = (selectedHero.progression.gold || 0) + gained;
     }
 
     if (option.rewards.attributes) {
       updates.attributes = { ...selectedHero.attributes };
       Object.entries(option.rewards.attributes).forEach(([attr, value]) => {
         const current = (selectedHero.attributes as any)[attr] || 0;
-        const next = current + value;
+        const next = current + Math.max(1, Math.floor(value * effectiveness));
         (updates.attributes as any)[attr] = Math.min(ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE, next);
       });
     }
@@ -261,6 +284,10 @@ const Training: React.FC = () => {
       trainingDailyLimit: dailyLimit
     };
 
+    // Aplicar Fadiga ao concluir
+    const nextFatigue = Math.min(100, (selectedHero.progression.fatigue || 0) + 20);
+    updates.progression.fatigue = nextFatigue;
+
     updateHero(selectedHero.id, updates);
     // Atualizar metas diárias relacionadas
     updateDailyGoalProgress(selectedHero.id, 'attribute-trained', 1);
@@ -273,7 +300,7 @@ const Training: React.FC = () => {
     setActiveTraining(null);
     setTrainingEndTime(null);
 
-    alert(`Treinamento concluído! Você ganhou as recompensas de ${option.name}.`);
+    alert(`Treinamento concluído! Efetividade ${Math.round(effectiveness*100)}%. Recompensas de ${option.name} aplicadas.`);
   };
 
   const getRemainingTime = () => {
@@ -297,10 +324,19 @@ const Training: React.FC = () => {
         <p className="text-gray-600">
           Aprimore suas habilidades e atributos através de treinamentos especializados
         </p>
-        <div className="mt-4 bg-blue-100 border border-blue-400 rounded-lg p-3 inline-block">
-          <span className="text-blue-800 font-medium">
-            💰 Ouro Disponível: {selectedHero.progression.gold}g
-          </span>
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <div className="bg-blue-100 border border-blue-400 rounded-lg px-3 py-2 inline-flex items-center">
+            <span className="text-blue-800 font-medium">💰 Ouro: {selectedHero.progression.gold || 0}g</span>
+          </div>
+          <div className="bg-purple-100 border border-purple-400 rounded-lg px-3 py-2 inline-flex items-center">
+            <span className="text-purple-800 font-medium">🏆 Glória: {selectedHero.progression.glory || 0}</span>
+          </div>
+          <div className="bg-indigo-100 border border-indigo-400 rounded-lg px-3 py-2 inline-flex items-center">
+            <span className="text-indigo-800 font-medium">✨ Essência Arcana: {selectedHero.progression.arcaneEssence || 0}</span>
+          </div>
+          <div className="bg-red-100 border border-red-400 rounded-lg px-3 py-2 inline-flex items-center">
+            <span className="text-red-800 font-medium">😴 Fadiga: {selectedHero.progression.fatigue || 0}/100</span>
+          </div>
         </div>
         <div className="mt-2 bg-green-100 border border-green-400 rounded-lg p-2 inline-block ml-2">
           <span className="text-green-800 font-medium">
@@ -353,7 +389,12 @@ const Training: React.FC = () => {
               <div className="space-y-2 mb-4">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Custo:</span>
-                  <span className="font-medium text-yellow-600">{option.cost}g</span>
+                  <span className={`font-medium ${
+                    (option.currency || 'gold') === 'gold' ? 'text-yellow-600' :
+                    (option.currency || 'gold') === 'glory' ? 'text-purple-700' : 'text-indigo-700'
+                  }`}>
+                    {option.cost} {(option.currency || 'gold') === 'gold' ? 'ouro' : (option.currency || 'gold') === 'glory' ? 'glória' : 'essência'}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Duração:</span>
@@ -401,7 +442,7 @@ const Training: React.FC = () => {
                     : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                {!canAfford ? 'Ouro Insuficiente' :
+                {!canAfford ? ((option.currency || 'gold') === 'gold' ? 'Ouro Insuficiente' : (option.currency || 'gold') === 'glory' ? 'Glória Insuficiente' : 'Essência Insuficiente') :
                  !meetsReqs ? 'Requisitos não atendidos' :
                  activeTraining ? 'Treinamento em andamento' :
                  remaining <= 0 ? 'Limite diário atingido' :

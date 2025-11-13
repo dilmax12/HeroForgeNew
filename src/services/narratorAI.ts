@@ -8,13 +8,36 @@ type GenerateTextParams = {
 };
 
 async function generate(params: GenerateTextParams): Promise<string> {
-  const resp = await aiService.generateText({
-    systemMessage: params.systemMessage,
-    prompt: params.prompt,
-    maxTokens: params.maxTokens ?? 220,
-    temperature: params.temperature ?? 0.8,
+  const maxTokens = params.maxTokens ?? 220;
+  const temperature = params.temperature ?? 0.8;
+  console.debug('[AI][Narrator] Dispatch', {
+    provider: aiService.getProvider(),
+    maxTokens,
+    temperature,
+    promptLen: params.prompt?.length || 0
   });
-  return (resp.text || '').trim();
+  try {
+    const resp = await aiService.generateText({
+      systemMessage: params.systemMessage,
+      prompt: params.prompt,
+      maxTokens,
+      temperature,
+    });
+    console.debug('[AI][Narrator] Completed', {
+      provider: resp.provider,
+      model: resp.model,
+      textLen: resp.text?.length || 0
+    });
+    return (resp.text || '').trim();
+  } catch (error: any) {
+    console.error('[AI][Narrator] Failed', {
+      code: error?.code,
+      message: error?.message,
+      provider: error?.provider,
+      retryable: error?.retryable
+    });
+    throw error;
+  }
 }
 
 function narratorSystem(): string {
@@ -74,4 +97,3 @@ export async function generateChapterOutline(opts: {
     .map(l => l.trim())
     .filter(l => l.length);
 }
-

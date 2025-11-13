@@ -286,6 +286,23 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
         )}
       </div>
 
+      {/* Fadiga */}
+      {typeof hero.progression.fatigue === 'number' && (
+        <div className="mb-3">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-amber-300 text-xs font-medium">Fadiga</span>
+            <span className="text-gray-300 text-xs">{hero.progression.fatigue}/100</span>
+          </div>
+          {hero.progression.fatigue >= 50 ? (
+            <div className="text-xs text-amber-300 mt-1 flex items-center">
+              😴 Fadiga alta — descanse na taverna ou use um tônico
+            </div>
+          ) : hero.progression.fatigue > 0 ? (
+            <div className="text-[10px] text-gray-400">Em recuperação passiva durante o tempo</div>
+          ) : null}
+        </div>
+      )}
+
       {/* Active Quest */}
       <div className="border-t border-gray-700 pt-3">
         <div className="flex items-center justify-between mb-2">

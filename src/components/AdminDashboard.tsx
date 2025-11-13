@@ -3,6 +3,10 @@ import { useHeroStore } from '../store/heroStore';
 import { useGameSettingsStore } from '../store/gameSettingsStore';
 import { metricsManager } from '../utils/metricsSystem';
 import { aiService } from '../services/aiService';
+import { supabase } from '../lib/supabaseClient';
+import SupabaseAuthPanel from './SupabaseAuthPanel';
+import SupabaseHeroesSyncPanel from './SupabaseHeroesSyncPanel';
+import SupabaseQuestsPanel from './SupabaseQuestsPanel';
 
 export default function AdminDashboard() {
   const heroes = useHeroStore(s => s.heroes);
@@ -55,6 +59,29 @@ export default function AdminDashboard() {
     const interval = setInterval(refresh, 30000);
     return () => clearInterval(interval);
   }, [autoRefresh]);
+
+  // === Supabase: teste de conexão rápida ===
+  const [sbLoading, setSbLoading] = useState<boolean>(false);
+  const [sbStatus, setSbStatus] = useState<string>('—');
+  const [sbError, setSbError] = useState<string | null>(null);
+  const [sbPlayers, setSbPlayers] = useState<any[]>([]);
+
+  async function testSupabase() {
+    setSbLoading(true);
+    setSbError(null);
+    setSbStatus('Conectando...');
+    try {
+      const { data, error } = await supabase.from('players').select('*').limit(5);
+      if (error) throw error;
+      setSbPlayers(Array.isArray(data) ? data : []);
+      setSbStatus(`OK (${(Array.isArray(data) ? data.length : 0)} players)`);
+    } catch (err: any) {
+      setSbError(err?.message || String(err));
+      setSbStatus('Erro');
+    } finally {
+      setSbLoading(false);
+    }
+  }
 
   function exportSelected() {
     if (!selectedHero) return;
@@ -400,6 +427,51 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
         <div className="text-sm text-gray-700">Vite: ativo</div>
         <div className="text-sm text-gray-700">Chaves conhecidas: {Object.keys(import.meta.env).filter(k => k.startsWith('VITE_')).join(', ') || '—'}</div>
       </div>
+
+      {/* Supabase Test Panel */}
+      <div className="bg-white p-6 rounded-lg border border-gray-200 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">🗄️ Supabase</h2>
+        <div className="flex flex-wrap gap-2 mb-3">
+          <button
+            onClick={testSupabase}
+            className="px-3 py-2 bg-white text-green-700 border border-green-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            {sbLoading ? 'Conectando...' : 'Testar conexão (tabela players)'}
+          </button>
+          <div className="text-sm text-gray-700">Status: {sbStatus}</div>
+        </div>
+        {sbError && (
+          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2 mb-3">
+            Erro: {sbError}
+          </div>
+        )}
+        <div className="text-sm text-gray-700">Resultado (até 5 registros):</div>
+        <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+          {sbPlayers.length === 0 && (
+            <div className="text-xs text-gray-500">Nenhum registro retornado. Crie dados na tabela `players` ou revise RLS.</div>
+          )}
+          {sbPlayers.map((p, idx) => (
+            <div key={idx} className="bg-white p-3 rounded border border-gray-200">
+              <div className="text-xs text-gray-500">id: {String(p.id ?? '—')}</div>
+              <div className="text-sm text-gray-900">username: {String(p.username ?? '—')}</div>
+              <div className="text-xs text-gray-500">created_at: {String(p.created_at ?? '—')}</div>
+            </div>
+          ))}
+        </div>
+        <div className="text-xs text-gray-500 mt-2">
+          Dica: configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` em `.env.local`.
+          Se RLS bloquear, ajuste políticas para leitura pública de `players` em desenvolvimento.
+        </div>
+      </div>
+
+      {/* Supabase Auth Panel */}
+      <SupabaseAuthPanel />
+
+      {/* Supabase Heroes Sync Panel */}
+      <SupabaseHeroesSyncPanel />
+
+      {/* Supabase Quests Panel */}
+      <SupabaseQuestsPanel />
 
       {/* Configurações de Jogo (estilo Playtest) */}
       <div className="bg-white p-6 rounded-lg border border-gray-200 mb-6">

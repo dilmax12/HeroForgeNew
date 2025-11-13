@@ -9,6 +9,9 @@ const Shop: React.FC = () => {
   const selectedHero = getSelectedHero();
   const [activeCategory, setActiveCategory] = useState('consumables');
   const [showDailyOffers, setShowDailyOffers] = useState(false);
+  const [showForgeServices, setShowForgeServices] = useState(false);
+  const [fusionA, setFusionA] = useState<string>('');
+  const [fusionB, setFusionB] = useState<string>('');
 
   if (!selectedHero) {
     return (
@@ -26,13 +29,20 @@ const Shop: React.FC = () => {
   const handlePurchase = (itemId: string) => {
     const result = purchaseItem(selectedHero, itemId);
     
-    if (result.success && result.newGold !== undefined && result.item) {
-      // Atualizar ouro do herói
+    if (result.success && result.item) {
+      // Atualizar saldo da moeda correta e inventário
+      const currency = result.currency || 'gold';
+      const newProgression = { ...selectedHero.progression } as any;
+      if (result.newBalance !== undefined) {
+        if (currency === 'gold') newProgression.gold = result.newBalance;
+        else if (currency === 'glory') newProgression.glory = result.newBalance;
+        else if (currency === 'arcaneEssence') newProgression.arcaneEssence = result.newBalance;
+      } else if (result.newGold !== undefined) {
+        newProgression.gold = result.newGold;
+      }
+
       updateHero(selectedHero.id, {
-        progression: {
-          ...selectedHero.progression,
-          gold: result.newGold
-        },
+        progression: newProgression,
         inventory: {
           ...selectedHero.inventory,
           items: {
@@ -42,10 +52,8 @@ const Shop: React.FC = () => {
         }
       });
       
-      // Mostrar notificação de sucesso
       alert(result.message);
     } else {
-      // Mostrar erro
       alert(result.message);
     }
   };
@@ -92,14 +100,19 @@ const Shop: React.FC = () => {
 
         {/* Preço */}
         <div className="text-center mb-3">
-          {hasDiscount ? (
-            <div>
-              <span className="text-sm text-gray-500 line-through">{item.price}g</span>
-              <span className="text-lg font-bold text-green-600 ml-2">{discountedPrice}g</span>
-            </div>
-          ) : (
-            <span className="text-lg font-bold text-yellow-600">{item.price}g</span>
-          )}
+          {(() => {
+            const currency = item.currency || 'gold';
+            const label = currency === 'gold' ? 'ouro' : currency === 'glory' ? 'glória' : 'essência arcana';
+            if (hasDiscount) {
+              return (
+                <div>
+                  <span className="text-sm text-gray-500 line-through">{item.price} {label}</span>
+                  <span className="text-lg font-bold text-green-600 ml-2">{discountedPrice} {label}</span>
+                </div>
+              );
+            }
+            return <span className="text-lg font-bold text-yellow-600">{item.price} {label}</span>;
+          })()}
         </div>
 
         {/* Botão de compra */}
@@ -112,13 +125,37 @@ const Shop: React.FC = () => {
               : 'bg-gray-300 text-gray-500 cursor-not-allowed'
           } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
         >
-          {canBuy ? 'Comprar' : 'Ouro Insuficiente'}
+          {(() => {
+            if (canBuy) return 'Comprar';
+            const currency = item.currency || 'gold';
+            const label = currency === 'gold' ? 'Ouro' : currency === 'glory' ? 'Glória' : 'Essência Arcana';
+            return `${label} Insuficiente`;
+          })()}
         </button>
       </div>
     );
   };
 
   const dailyOffers = getDailyOffers();
+
+  const handleRefine = (slot: 'weapon' | 'armor' | 'accessory') => {
+    const ok = useHeroStore.getState().refineEquippedItem(selectedHero.id, slot);
+    alert(ok ? 'Refino realizado! (chance aplicada)' : 'Falha: requisitos não atendidos ou item indisponível.');
+  };
+
+  const handleFuse = () => {
+    if (!fusionA || !fusionB) {
+      alert('Selecione dois itens para fundir.');
+      return;
+    }
+    const ok = useHeroStore.getState().fuseItems(selectedHero.id, fusionA, fusionB);
+    alert(ok ? 'Fusão concluída! Novo item adicionado ao inventário.' : 'Falha na fusão (verifique tipos e quantidades).');
+  };
+
+  const handleEnchant = (slot: 'weapon' | 'armor' | 'accessory') => {
+    const ok = useHeroStore.getState().enchantEquippedItem(selectedHero.id, slot, 'lifesteal');
+    alert(ok ? 'Encantamento aplicado: Lifesteal!' : 'Essência insuficiente ou item não equipado.');
+  };
 
   return (
     <div className="max-w-full lg:max-w-7xl mx-auto p-4 sm:p-6">
@@ -130,10 +167,22 @@ const Shop: React.FC = () => {
         <p className="text-gray-600 text-sm sm:text-base">
           Equipamentos, consumíveis e itens especiais para sua jornada
         </p>
-        <div className="mt-3 sm:mt-4 bg-yellow-100 border border-yellow-400 rounded-lg p-2 sm:p-3 inline-block">
-          <span className="text-yellow-800 font-medium text-sm sm:text-base">
-            💰 Ouro Disponível: {selectedHero.progression.gold}g
-          </span>
+        <div className="mt-3 sm:mt-4 flex flex-wrap justify-center gap-2">
+          <div className="bg-yellow-100 border border-yellow-400 rounded-lg p-2 sm:p-3 inline-block">
+            <span className="text-yellow-800 font-medium text-sm sm:text-base">
+              💰 Ouro: {selectedHero.progression.gold || 0}
+            </span>
+          </div>
+          <div className="bg-blue-100 border border-blue-400 rounded-lg p-2 sm:p-3 inline-block">
+            <span className="text-blue-800 font-medium text-sm sm:text-base">
+              🏆 Glória: {selectedHero.progression.glory || 0}
+            </span>
+          </div>
+          <div className="bg-purple-100 border border-purple-400 rounded-lg p-2 sm:p-3 inline-block">
+            <span className="text-purple-800 font-medium text-sm sm:text-base">
+              ✨ Essência Arcana: {selectedHero.progression.arcaneEssence || 0}
+            </span>
+          </div>
         </div>
         <div className="mt-3 sm:mt-4">
           <a
@@ -148,20 +197,28 @@ const Shop: React.FC = () => {
       {/* Navegação */}
       <div className="flex flex-wrap justify-center gap-2 mb-4 sm:mb-6">
         <button
-          onClick={() => setShowDailyOffers(false)}
+          onClick={() => { setShowDailyOffers(false); setShowForgeServices(false); }}
           className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
-            !showDailyOffers ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            !showDailyOffers && !showForgeServices ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
           } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
         >
           Catálogo Geral
         </button>
         <button
-          onClick={() => setShowDailyOffers(true)}
+          onClick={() => { setShowDailyOffers(true); setShowForgeServices(false); }}
           className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
             showDailyOffers ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
           } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
         >
           ⭐ Ofertas Diárias
+        </button>
+        <button
+          onClick={() => { setShowDailyOffers(false); setShowForgeServices(true); }}
+          className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
+            showForgeServices ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+        >
+          ⚒️ Forja e Encantamentos
         </button>
       </div>
 
@@ -173,6 +230,105 @@ const Shop: React.FC = () => {
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {dailyOffers.map(renderItem)}
+          </div>
+        </div>
+      ) : showForgeServices ? (
+        /* Forja e Encantamentos */
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold text-center mb-4 sm:mb-6 text-gray-800">⚒️ Forja e Encantamentos</h2>
+
+          {/* Refinar */}
+          <div className="mb-6">
+            <h3 className="text-lg sm:text-xl font-semibold mb-3">Refinar Raridade</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {(['weapon','armor','accessory'] as const).map(slot => {
+                const equippedId = slot === 'weapon' ? selectedHero.inventory.equippedWeapon : slot === 'armor' ? selectedHero.inventory.equippedArmor : selectedHero.inventory.equippedAccessory;
+                const baseItem = equippedId ? (SHOP_CATEGORIES.weapons.items.concat(SHOP_CATEGORIES.armor.items, SHOP_CATEGORIES.accessories.items).find(i => i.id === equippedId) || selectedHero.inventory.customItems?.[equippedId]) : undefined;
+                const currentRarity = equippedId ? (selectedHero.inventory.refined?.[equippedId] || baseItem?.rarity) : undefined;
+                const label = slot === 'weapon' ? 'Arma' : slot === 'armor' ? 'Armadura' : 'Acessório';
+                const cfgMap: Record<string, { gold: number; essence: number; nextLabel: string }> = {
+                  'comum': { gold: 100, essence: 10, nextLabel: 'Incomum' },
+                  'incomum': { gold: 200, essence: 20, nextLabel: 'Raro' },
+                  'raro': { gold: 400, essence: 40, nextLabel: 'Épico' },
+                  'epico': { gold: 1000, essence: 100, nextLabel: 'Lendário' }
+                };
+                const cfg = currentRarity ? cfgMap[currentRarity] : undefined;
+                return (
+                  <div key={slot} className="p-4 rounded-lg border bg-white">
+                    <div className="font-semibold">{label}</div>
+                    <div className="text-sm text-gray-600">{equippedId ? (baseItem?.name || 'Item Personalizado') : 'Nenhum equipado'}</div>
+                    <div className="text-sm mt-1">Raridade: {currentRarity ? currentRarity : '-'}</div>
+                    <button
+                      onClick={() => handleRefine(slot)}
+                      disabled={!equippedId || !cfg}
+                      className={`mt-3 w-full py-2 px-4 rounded ${equippedId && cfg ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                    >
+                      {cfg ? `Refinar → ${cfg.nextLabel} (💰 ${cfg.gold}, ✨ ${cfg.essence})` : 'Não disponível'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Fundir */}
+          <div className="mb-6">
+            <h3 className="text-lg sm:text-xl font-semibold mb-3">Fundir Itens</h3>
+            <p className="text-sm text-gray-600 mb-2">Consome 2 itens do mesmo tipo para criar um novo item único.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Item A</label>
+                <select value={fusionA} onChange={e => setFusionA(e.target.value)} className="w-full border rounded p-2">
+                  <option value="">Selecione</option>
+                  {Object.entries(selectedHero.inventory.items)
+                    .map(([id, qty]) => ({ id, qty, item: SHOP_CATEGORIES.weapons.items.concat(SHOP_CATEGORIES.armor.items, SHOP_CATEGORIES.accessories.items).find(i => i.id === id) }))
+                    .filter(e => e.item && e.qty > 0)
+                    .map(e => (
+                      <option key={e.id} value={e.id}>{e.item!.name} (x{e.qty})</option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Item B</label>
+                <select value={fusionB} onChange={e => setFusionB(e.target.value)} className="w-full border rounded p-2">
+                  <option value="">Selecione</option>
+                  {Object.entries(selectedHero.inventory.items)
+                    .map(([id, qty]) => ({ id, qty, item: SHOP_CATEGORIES.weapons.items.concat(SHOP_CATEGORIES.armor.items, SHOP_CATEGORIES.accessories.items).find(i => i.id === id) }))
+                    .filter(e => e.item && e.qty > 0)
+                    .map(e => (
+                      <option key={e.id} value={e.id}>{e.item!.name} (x{e.qty})</option>
+                    ))}
+                </select>
+              </div>
+            </div>
+            <button onClick={handleFuse} className="mt-3 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">Fundir</button>
+          </div>
+
+          {/* Encantar */}
+          <div>
+            <h3 className="text-lg sm:text-xl font-semibold mb-3">Encantar Item</h3>
+            <p className="text-sm text-gray-600 mb-2">Aplica efeito especial (lifesteal) ao item equipado. Custo: ✨ 50 Essência.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {(['weapon','armor','accessory'] as const).map(slot => {
+                const equippedId = slot === 'weapon' ? selectedHero.inventory.equippedWeapon : slot === 'armor' ? selectedHero.inventory.equippedArmor : selectedHero.inventory.equippedAccessory;
+                const label = slot === 'weapon' ? 'Arma' : slot === 'armor' ? 'Armadura' : 'Acessório';
+                const enchanted = equippedId ? selectedHero.inventory.enchantments?.[equippedId]?.special : undefined;
+                return (
+                  <div key={slot} className="p-4 rounded-lg border bg-white">
+                    <div className="font-semibold">{label}</div>
+                    <div className="text-sm text-gray-600">{equippedId ? (SHOP_CATEGORIES.weapons.items.concat(SHOP_CATEGORIES.armor.items, SHOP_CATEGORIES.accessories.items).find(i => i.id === equippedId)?.name || 'Item Personalizado') : 'Nenhum equipado'}</div>
+                    <div className="text-sm mt-1">Encanto: {enchanted ? enchanted : '-'}</div>
+                    <button
+                      onClick={() => handleEnchant(slot)}
+                      disabled={!equippedId}
+                      className={`mt-3 w-full py-2 px-4 rounded ${equippedId ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                    >
+                      Encantar (Lifesteal)
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       ) : (

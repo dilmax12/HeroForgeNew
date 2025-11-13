@@ -3,6 +3,8 @@ import { useHeroStore } from '../store/heroStore';
 import { generateAllLeaderboards } from '../utils/leaderboardSystem';
 import { SHOP_ITEMS } from '../utils/shop';
 import { notificationBus } from './NotificationSystem';
+import { getDungeonLeaderboard, getWeeklyDungeonHighlights } from '../services/dungeonService';
+import { activityManager } from '../utils/activitySystem';
 
 const AdventurersGuildHub: React.FC = () => {
   const { guilds, ensureDefaultGuildExists, refreshQuests, availableQuests, heroes, getSelectedHero, sellItem } = useHeroStore();
@@ -21,6 +23,46 @@ const AdventurersGuildHub: React.FC = () => {
   const leaderboards = useMemo(() => generateAllLeaderboards(heroes), [heroes]);
   const levelBoard = leaderboards.find(lb => lb.id === 'level');
   const top5 = levelBoard ? levelBoard.entries.slice(0, 5) : [];
+
+  const [dungeonTop, setDungeonTop] = useState<Array<{ hero_name: string; max_floor_reached: number; total_xp: number; total_gold: number; finished_at: string }>>([]);
+  const [dungeonError, setDungeonError] = useState<string | null>(null);
+  const [dungeonOffline, setDungeonOffline] = useState(false);
+  const [hof, setHof] = useState<{ bestQuest?: { heroName: string; questName: string }; biggestLoot?: { heroName: string; totalGold: number }; promotions?: Array<{ heroName: string; newRank: string }> }>({});
+
+  useEffect(() => {
+    (async () => {
+      const res = await getDungeonLeaderboard(10);
+      if (res.offline) setDungeonOffline(true);
+      if (res.error) setDungeonError(res.error);
+      if (res.data) setDungeonTop(res.data);
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const now = new Date();
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const feed = activityManager.getActivityFeed({
+        dateRange: { start: weekAgo, end: now },
+        showOnlyPublic: true
+      });
+      const epicOrBest = feed.activities
+        .filter(a => a.type === 'epic-quest-completed' || a.type === 'quest-completed')
+        .sort((a, b) => (Number(b.data?.questReward?.xp || 0) + Number(b.data?.questReward?.gold || 0)) - (Number(a.data?.questReward?.xp || 0) + Number(a.data?.questReward?.gold || 0)))[0];
+      const promotions = feed.activities
+        .filter(a => a.type === 'rank-promotion')
+        .slice(0, 5)
+        .map(a => ({ heroName: a.data.heroName, newRank: String(a.data.newRank || '') }));
+
+      const { data: weekly, offline } = await getWeeklyDungeonHighlights();
+
+      setHof({
+        bestQuest: epicOrBest ? { heroName: epicOrBest.data.heroName, questName: String(epicOrBest.data.questName || 'Missão extraordinária') } : undefined,
+        biggestLoot: weekly?.biggestLoot ? { heroName: weekly.biggestLoot.hero_name, totalGold: weekly.biggestLoot.total_gold } : undefined,
+        promotions
+      });
+    })();
+  }, []);
 
   const handleRefreshMissions = () => {
     refreshQuests();
@@ -267,6 +309,73 @@ const AdventurersGuildHub: React.FC = () => {
             <p>Nenhum herói no ranking ainda.</p>
           </div>
         )}
+      </div>
+
+      {/* Dungeon Infinita */}
+      <div className="bg-white p-6 rounded-lg border border-gray-200 mt-6 text-gray-800">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold text-gray-800">🗝️ Dungeon Infinita</h2>
+          <div className="flex gap-2">
+            <a href="/dungeon-infinita" className="px-4 py-2 rounded bg-purple-600 text-white hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">Jogar</a>
+            <a href="/messenger" className="px-4 py-2 rounded bg-amber-600 text-black hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">Cartas</a>
+          </div>
+        </div>
+        {dungeonOffline && (
+          <div className="text-sm text-gray-500 mb-2">Modo offline: conecte o Supabase para ver o ranking.</div>
+        )}
+        {dungeonError && (
+          <div className="text-sm text-red-600 mb-2">{dungeonError}</div>
+        )}
+        {dungeonTop.length > 0 ? (
+          <ul className="space-y-2">
+            {dungeonTop.map((e, idx) => (
+              <li key={`${e.hero_name}-${e.finished_at}-${idx}`} className="flex items-center justify-between bg-gray-50 p-3 rounded">
+                <div className="flex items-center space-x-3">
+                  <span className="text-xl">{idx + 1}.</span>
+                  <span className="font-semibold text-gray-800">{e.hero_name}</span>
+                </div>
+                <div className="text-sm text-gray-600">
+                  Andar {e.max_floor_reached} • {e.total_xp} XP • {e.total_gold} ouro
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            <div className="text-5xl mb-2">🗝️</div>
+            <p>Nenhuma tentativa registrada ainda.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Salão da Fama */}
+      <div className="bg-white p-6 rounded-lg border border-gray-200 mt-6 text-gray-800">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold text-gray-800">🏰 Salão da Fama (Semana)</h2>
+          <a href="/leaderboards" className="px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">Ver Rankings</a>
+        </div>
+        <ul className="space-y-2">
+          <li className="bg-gray-50 p-3 rounded flex items-center justify-between">
+            <div className="font-semibold text-gray-800">Melhor missão cumprida</div>
+            <div className="text-sm text-gray-600">{hof.bestQuest ? `${hof.bestQuest.heroName} — “${hof.bestQuest.questName}”` : 'Ainda sem destaques'}</div>
+          </li>
+          <li className="bg-gray-50 p-3 rounded flex items-center justify-between">
+            <div className="font-semibold text-gray-800">Maior loot em uma run</div>
+            <div className="text-sm text-gray-600">{hof.biggestLoot ? `${hof.biggestLoot.heroName} — ${hof.biggestLoot.totalGold} ouro` : 'Nenhum saque registrado'}</div>
+          </li>
+          <li className="bg-gray-50 p-3 rounded">
+            <div className="font-semibold text-gray-800 mb-1">Heróis promovidos de patente</div>
+            {hof.promotions && hof.promotions.length > 0 ? (
+              <ul className="space-y-1">
+                {hof.promotions.map((p, idx) => (
+                  <li key={`${p.heroName}-${idx}`} className="text-sm text-gray-700">{p.heroName} — novo Rank {p.newRank}</li>
+                ))}
+              </ul>
+            ) : (
+              <div className="text-sm text-gray-600">Sem promoções registradas na semana.</div>
+            )}
+          </li>
+        </ul>
       </div>
 
       {/* Mercado de Espólios */}

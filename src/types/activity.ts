@@ -16,11 +16,23 @@ export interface ActivityData {
   enemiesDefeated?: string[];
   newRank?: string;
   previousRank?: string;
+  // Descanso na taverna
+  restType?: string; // ex.: 'soneca', 'noite', 'luxo'
+  goldSpent?: number;
+  fatigueBefore?: number;
+  fatigueRecovered?: number;
+  fatigueAfter?: number;
+  // Uso de item
+  itemId?: string;
+  itemName?: string;
+  itemType?: string;
+  hpRecovered?: number;
+  mpRecovered?: number;
 }
 
 export interface Activity {
   id: string;
-  type: 'quest-completed' | 'level-up' | 'achievement-unlocked' | 'title-earned' | 'event-completed' | 'daily-goal-completed' | 'combat-victory' | 'epic-quest-completed' | 'rank-promotion';
+  type: 'quest-completed' | 'level-up' | 'achievement-unlocked' | 'title-earned' | 'event-completed' | 'daily-goal-completed' | 'combat-victory' | 'epic-quest-completed' | 'rank-promotion' | 'tavern-rest' | 'item-used';
   timestamp: Date;
   data: ActivityData;
   message: string;

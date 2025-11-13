@@ -7,7 +7,7 @@ import type { ReferralInvite } from '../types/hero';
 import type { EnhancedQuestChoice } from '../types/hero';
 import { generateQuestBoard, QUEST_ACHIEVEMENTS } from '../utils/quests';
 import { resolveCombat, autoResolveCombat } from '../utils/combat';
-import { purchaseItem, sellItem, equipItem, useConsumable, SHOP_ITEMS } from '../utils/shop';
+import { purchaseItem, sellItem, equipItem, useConsumable, SHOP_ITEMS, ITEM_SETS, generateProceduralItem } from '../utils/shop';
 import { updateHeroReputation, generateReputationEvents } from '../utils/reputationSystem';
 import { generateAllLeaderboards, getHeroRanking, calculateTotalScore } from '../utils/leaderboardSystem';
 import { generateDailyGoals, updateDailyGoalProgress, checkPerfectDayGoal, removeExpiredGoals, getDailyGoalRewards } from '../utils/dailyGoalsSystem';
@@ -35,6 +35,7 @@ interface HeroState {
   deleteHero: (id: string) => void;
   selectHero: (id: string | null) => void;
   exportHeroJson: (id: string) => string;
+  importHero: (hero: Hero, selectAfter?: boolean) => boolean;
   
   // === SISTEMA DE MISSÕES ===
   refreshQuests: (heroLevel?: number) => void;
@@ -54,6 +55,14 @@ interface HeroState {
   sellItem: (heroId: string, itemId: string, quantity?: number) => boolean;
   equipItem: (heroId: string, itemId: string) => boolean;
   useItem: (heroId: string, itemId: string) => boolean;
+  upgradeItem: (heroId: string, itemId: string) => boolean;
+  // Serviços de Forja
+  refineEquippedItem: (heroId: string, slot: 'weapon' | 'armor' | 'accessory') => boolean;
+  fuseItems: (heroId: string, itemAId: string, itemBId: string) => boolean;
+  enchantEquippedItem: (heroId: string, slot: 'weapon' | 'armor' | 'accessory', enchant: 'lifesteal') => boolean;
+  
+  // Taverna / Descanso
+      restAtTavern: (heroId: string, costGold: number, fatigueRecovery: number, restType?: string) => boolean;
   
   // === SISTEMA DE GUILDAS ===
   createGuild: (heroId: string, guildName: string, description: string) => Guild | null;
@@ -157,15 +166,46 @@ const calculateTotalAttributes = (
   ].filter(Boolean);
   
   equippedItems.forEach(itemId => {
-    const item = SHOP_ITEMS.find(i => i.id === itemId);
+    const item = SHOP_ITEMS.find(i => i.id === itemId) || (inventory.customItems ? inventory.customItems[itemId!] : undefined);
+    const upgradeLevel = inventory.upgrades?.[itemId!] ?? 0;
     if (item?.bonus) {
       Object.entries(item.bonus).forEach(([attr, bonus]) => {
         if (bonus && attr in totalAttributes) {
-          totalAttributes[attr as keyof HeroAttributes] += bonus;
+          const multiplier = 1 + Math.max(0, upgradeLevel) * 0.1; // +10% por nível
+          const adjusted = Math.round((bonus as number) * multiplier);
+          totalAttributes[attr as keyof HeroAttributes] += adjusted;
         }
       });
     }
   });
+
+  // Aplicar bônus de conjunto (arma + armadura + acessório do mesmo conjunto)
+  const equippedSetIds = [
+    inventory.equippedWeapon,
+    inventory.equippedArmor,
+    inventory.equippedAccessory
+  ]
+    .map(id => {
+      const base = id ? SHOP_ITEMS.find(i => i.id === id) : undefined;
+      const custom = id && inventory.customItems ? inventory.customItems[id] : undefined;
+      return (base || custom)?.setId;
+    })
+    .filter((sid): sid is string => !!sid);
+
+  if (equippedSetIds.length === 3) {
+    const unique = new Set(equippedSetIds);
+    if (unique.size === 1) {
+      const activeSetId = equippedSetIds[0];
+      const activeSet = ITEM_SETS[activeSetId];
+      if (activeSet?.bonus) {
+        Object.entries(activeSet.bonus).forEach(([attr, bonus]) => {
+          if (bonus && (attr as keyof HeroAttributes) in totalAttributes) {
+            totalAttributes[attr as keyof HeroAttributes] += bonus as number;
+          }
+        });
+      }
+    }
+  }
   
   return totalAttributes;
 };
@@ -267,7 +307,8 @@ export const useHeroStore = create<HeroState>()(
           },
           equippedWeapon: undefined,
           equippedArmor: undefined,
-          equippedAccessory: undefined
+          equippedAccessory: undefined,
+          upgrades: {}
         };
         
         const newHero: Hero = {
@@ -284,6 +325,9 @@ export const useHeroStore = create<HeroState>()(
             xp: 0,
             level: 1,
             gold: 100, // Ouro inicial
+            glory: 0,
+            arcaneEssence: 0,
+            fatigue: 0,
             reputation: 0,
             titles: [],
             achievements: [],
@@ -458,6 +502,38 @@ export const useHeroStore = create<HeroState>()(
         } catch {
           return '';
         }
+      },
+
+      importHero: (incomingHero: Hero, selectAfter = true) => {
+        if (!incomingHero?.id) return false;
+        const nowIso = new Date().toISOString();
+        const ensuredDerived = calculateDerivedAttributes(
+          incomingHero.attributes,
+          incomingHero.class,
+          incomingHero.progression?.level || incomingHero.level || 1,
+          incomingHero.inventory,
+          incomingHero.activeTitle
+        );
+        const normalized: Hero = {
+          ...incomingHero,
+          derivedAttributes: ensuredDerived,
+          updatedAt: nowIso,
+          createdAt: incomingHero.createdAt || nowIso,
+        } as Hero;
+        set((state) => {
+          const idx = state.heroes.findIndex(h => h.id === normalized.id);
+          const updatedHeroes = [...state.heroes];
+          if (idx >= 0) {
+            updatedHeroes[idx] = { ...updatedHeroes[idx], ...normalized };
+          } else {
+            updatedHeroes.push(normalized);
+          }
+          return {
+            heroes: updatedHeroes,
+            selectedHeroId: selectAfter ? normalized.id : state.selectedHeroId,
+          } as any;
+        });
+        return true;
       },
       
       deleteHero: (id) => {
@@ -1012,12 +1088,21 @@ export const useHeroStore = create<HeroState>()(
         
         const result = purchaseItem(hero, itemId);
         if (result.success && result.item) {
-          get().updateHero(heroId, {
-            progression: {
-              ...hero.progression,
-              gold: result.newGold!
-            }
-          });
+          // Atualizar saldo conforme moeda
+          if (result.currency && result.newBalance !== undefined) {
+            const updatedProgression = { ...hero.progression };
+            if (result.currency === 'gold') updatedProgression.gold = result.newBalance;
+            if (result.currency === 'glory') updatedProgression.glory = result.newBalance;
+            if (result.currency === 'arcaneEssence') updatedProgression.arcaneEssence = result.newBalance;
+            get().updateHero(heroId, { progression: updatedProgression });
+          } else if (result.newGold !== undefined) {
+            get().updateHero(heroId, {
+              progression: {
+                ...hero.progression,
+                gold: result.newGold!
+              }
+            });
+          }
           get().addItemToInventory(heroId, itemId, 1);
         }
         
@@ -1088,11 +1173,230 @@ export const useHeroStore = create<HeroState>()(
         
         return result.success;
       },
+
+      upgradeItem: (heroId: string, itemId: string) => {
+        const hero = get().heroes.find(h => h.id === heroId);
+        if (!hero) return false;
+        const item = SHOP_ITEMS.find(i => i.id === itemId);
+        if (!item) return false;
+        // Apenas equipamentos podem ser aprimorados
+        if (!(item.type === 'weapon' || item.type === 'armor' || item.type === 'accessory')) return false;
+
+        const currentLevel = hero.inventory.upgrades?.[itemId] ?? 0;
+        const rarityFactor: Record<'comum' | 'raro' | 'epico' | 'lendario', number> = {
+          comum: 0.25,
+          raro: 0.4,
+          epico: 0.6,
+          lendario: 0.8
+        };
+        const baseCost = Math.ceil(item.price * rarityFactor[item.rarity] * (currentLevel + 1));
+        const rank = hero.rankData?.currentRank ?? 'F';
+        const rankDiscount: Record<'F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S', number> = {
+          F: 0,
+          E: 0.03,
+          D: 0.05,
+          C: 0.07,
+          B: 0.1,
+          A: 0.12,
+          S: 0.15
+        };
+        const finalCost = Math.max(1, Math.ceil(baseCost * (1 - rankDiscount[rank])));
+
+        // Verificar ouro
+        if ((hero.progression.gold || 0) < finalCost) return false;
+
+        // Atualizar ouro e nível de upgrade
+        const updatedInventory = { ...hero.inventory, upgrades: { ...(hero.inventory.upgrades || {}) } };
+        updatedInventory.upgrades![itemId] = currentLevel + 1;
+
+        const derived = calculateDerivedAttributes(
+          hero.attributes,
+          hero.class,
+          hero.progression.level,
+          updatedInventory,
+          hero.activeTitle
+        );
+
+        get().updateHero(heroId, {
+          progression: { ...hero.progression, gold: Math.max(0, (hero.progression.gold || 0) - finalCost) },
+          inventory: updatedInventory,
+          derivedAttributes: derived
+        });
+
+        return true;
+      },
+
+      // === FORJA: Refino de raridade do item equipado ===
+      refineEquippedItem: (heroId: string, slot: 'weapon' | 'armor' | 'accessory') => {
+        const state = get();
+        const hero = state.heroes.find(h => h.id === heroId);
+        if (!hero) return false;
+        const inv = hero.inventory;
+        const equippedId = slot === 'weapon' ? inv.equippedWeapon : slot === 'armor' ? inv.equippedArmor : inv.equippedAccessory;
+        if (!equippedId) return false;
+
+        const baseItem = SHOP_ITEMS.find(i => i.id === equippedId) || (inv.customItems ? inv.customItems[equippedId] : undefined);
+        if (!baseItem) return false;
+
+        const currentRarity = inv.refined?.[equippedId] || baseItem.rarity;
+        const order: ('comum'|'incomum'|'raro'|'epico'|'lendario')[] = ['comum','incomum','raro','epico','lendario'];
+        const idx = order.indexOf(currentRarity);
+        if (idx < 0 || idx === order.length - 1) return false; // já lendário
+        const next = order[idx + 1];
+
+        const costTable: Record<string, { gold: number; essence: number; chance: number }> = {
+          'comum->incomum': { gold: 100, essence: 10, chance: 0.7 },
+          'incomum->raro': { gold: 200, essence: 20, chance: 0.5 },
+          'raro->epico': { gold: 400, essence: 40, chance: 0.3 },
+          'epico->lendario': { gold: 1000, essence: 100, chance: 0.1 }
+        };
+        const key = `${currentRarity}->${next}`;
+        const cfg = costTable[key];
+        if (!cfg) return false;
+
+        const gold = hero.progression.gold || 0;
+        const essence = hero.progression.arcaneEssence || 0;
+        if (gold < cfg.gold || essence < cfg.essence) return false;
+
+        // Consumir custo
+        hero.progression.gold = gold - cfg.gold;
+        hero.progression.arcaneEssence = essence - cfg.essence;
+
+        // Chance de sucesso; falha não remove/baixa raridade
+        const success = Math.random() <= cfg.chance;
+        if (success) {
+          const refined = { ...(inv.refined || {}) };
+          refined[equippedId] = next;
+          hero.inventory.refined = refined;
+        }
+
+        // Atualizar store
+        set({ heroes: state.heroes.map(h => h.id === heroId ? { ...hero, updatedAt: new Date().toISOString() } : h) });
+        return success;
+      },
+
+      // === FORJA: Fusão de dois itens em um novo procedural ===
+      fuseItems: (heroId: string, itemAId: string, itemBId: string) => {
+        const state = get();
+        const hero = state.heroes.find(h => h.id === heroId);
+        if (!hero) return false;
+        const inv = hero.inventory;
+        const qtyA = inv.items[itemAId] || 0;
+        const qtyB = inv.items[itemBId] || 0;
+        if (qtyA < 1 || qtyB < 1) return false;
+
+        const itemA = SHOP_ITEMS.find(i => i.id === itemAId);
+        const itemB = SHOP_ITEMS.find(i => i.id === itemBId);
+        if (!itemA || !itemB) return false;
+        if (itemA.type !== itemB.type) return false;
+
+        // Consumir itens
+        inv.items[itemAId] = qtyA - 1;
+        inv.items[itemBId] = qtyB - 1;
+        if (inv.items[itemAId] <= 0) delete inv.items[itemAId];
+        if (inv.items[itemBId] <= 0) delete inv.items[itemBId];
+
+        const seed = (itemAId + itemBId).split('').reduce((s, ch) => s + ch.charCodeAt(0), 0);
+        const luck = hero.derivedAttributes.luck || 0;
+        const p = generateProceduralItem(seed, luck);
+
+        const iconMap: Record<string, string> = { espada: '🗡️', arco: '🏹', cajado: '🪄', machado: '🪓' };
+        const newItemId = p.id;
+        const mapped: import('../types/hero').Item = {
+          id: newItemId,
+          name: p.name,
+          description: 'Item forjado por fusão, único ao herói.',
+          type: itemA.type,
+          rarity: p.rarity,
+          level: hero.progression.level,
+          price: 100,
+          icon: iconMap[p.baseType] || '⚒️',
+          bonus: p.bonus
+        };
+
+        const customItems = { ...(inv.customItems || {}) };
+        customItems[newItemId] = mapped;
+        hero.inventory.customItems = customItems;
+        hero.inventory.items[newItemId] = (hero.inventory.items[newItemId] || 0) + 1;
+
+        set({ heroes: state.heroes.map(h => h.id === heroId ? { ...hero, updatedAt: new Date().toISOString() } : h) });
+        return true;
+      },
+
+      // === FORJA: Encantamento aplicado ao item equipado ===
+      enchantEquippedItem: (heroId: string, slot: 'weapon' | 'armor' | 'accessory', enchant: 'lifesteal') => {
+        const state = get();
+        const hero = state.heroes.find(h => h.id === heroId);
+        if (!hero) return false;
+        const inv = hero.inventory;
+        const equippedId = slot === 'weapon' ? inv.equippedWeapon : slot === 'armor' ? inv.equippedArmor : inv.equippedAccessory;
+        if (!equippedId) return false;
+
+        const costEssence = 50;
+        const essence = hero.progression.arcaneEssence || 0;
+        if (essence < costEssence) return false;
+        hero.progression.arcaneEssence = essence - costEssence;
+
+        const ench = { ...(inv.enchantments || {}) };
+        ench[equippedId] = { special: enchant };
+        hero.inventory.enchantments = ench;
+
+        set({ heroes: state.heroes.map(h => h.id === heroId ? { ...hero, updatedAt: new Date().toISOString() } : h) });
+        return true;
+      },
+
+      unequipItem: (heroId: string, itemId: string) => {
+        const hero = get().heroes.find(h => h.id === heroId);
+        if (!hero) return false;
+        const item = SHOP_ITEMS.find(i => i.id === itemId);
+        if (!item) return false;
+
+        const updatedInventory = { ...hero.inventory };
+        let changed = false;
+        switch (item.type) {
+          case 'weapon':
+            if (updatedInventory.equippedWeapon === itemId) {
+              updatedInventory.equippedWeapon = undefined;
+              changed = true;
+            }
+            break;
+          case 'armor':
+            if (updatedInventory.equippedArmor === itemId) {
+              updatedInventory.equippedArmor = undefined;
+              changed = true;
+            }
+            break;
+          case 'accessory':
+            if (updatedInventory.equippedAccessory === itemId) {
+              updatedInventory.equippedAccessory = undefined;
+              changed = true;
+            }
+            break;
+          default:
+            return false;
+        }
+
+        if (!changed) return false;
+        const derived = calculateDerivedAttributes(
+          hero.attributes,
+          hero.class,
+          hero.progression.level,
+          updatedInventory,
+          hero.activeTitle
+        );
+        get().updateHero(heroId, { inventory: updatedInventory, derivedAttributes: derived });
+        return true;
+      },
       
       useItem: (heroId: string, itemId: string) => {
         const hero = get().heroes.find(h => h.id === heroId);
         if (!hero) return false;
         
+        // Capturar estados antes para deltas
+        const beforeHp = hero.derivedAttributes.currentHp ?? hero.derivedAttributes.hp;
+        const beforeMp = hero.derivedAttributes.currentMp ?? hero.derivedAttributes.mp;
+        const beforeFatigue = hero.progression.fatigue ?? 0;
+
         const result = useConsumable(hero, itemId);
         if (result.success) {
           // Remover item do inventário
@@ -1125,6 +1429,13 @@ export const useHeroStore = create<HeroState>()(
               };
             }
             
+            if (result.effects.fatigue !== undefined) {
+              updates.progression = {
+                ...hero.progression,
+                fatigue: result.effects.fatigue
+              };
+            }
+            
             if (result.effects.xp !== undefined) {
               get().gainXP(heroId, result.effects.xp);
             }
@@ -1132,10 +1443,69 @@ export const useHeroStore = create<HeroState>()(
             if (Object.keys(updates).length > 0) {
               get().updateHero(heroId, updates);
             }
+            
+            // Log de atividade de uso de item
+            try {
+              const itemInfo = SHOP_ITEMS.find(i => i.id === itemId);
+              const afterHero = get().heroes.find(h => h.id === heroId)!;
+              const afterHp = afterHero.derivedAttributes.currentHp ?? afterHero.derivedAttributes.hp;
+              const afterMp = afterHero.derivedAttributes.currentMp ?? afterHero.derivedAttributes.mp;
+              const afterFatigue = afterHero.progression.fatigue ?? 0;
+
+              const hpRecovered = Math.max(0, (afterHp ?? 0) - (beforeHp ?? 0));
+              const mpRecovered = Math.max(0, (afterMp ?? 0) - (beforeMp ?? 0));
+              const fatigueRecovered = Math.max(0, (beforeFatigue ?? 0) - (afterFatigue ?? 0));
+
+              logActivity.itemUsed({
+                heroId: hero.id,
+                heroName: hero.name,
+                heroClass: hero.class,
+                heroLevel: hero.progression.level,
+                itemId: itemId,
+                itemName: itemInfo?.name,
+                itemType: itemInfo?.type,
+                hpRecovered,
+                mpRecovered,
+                fatigueRecovered,
+                xpGained: result.effects.xp ?? 0
+              });
+            } catch {}
           }
         }
         
         return result.success;
+      },
+
+      // === TAVERNA: DESCANSO PAGO ===
+      restAtTavern: (heroId: string, costGold: number, fatigueRecovery: number, restType?: string) => {
+        const hero = get().heroes.find(h => h.id === heroId);
+        if (!hero) return false;
+        const currentGold = hero.progression.gold ?? 0;
+        const currentFatigue = hero.progression.fatigue ?? 0;
+        if (currentGold < costGold) return false;
+        if (currentFatigue <= 0) return false;
+        const recovered = Math.min(fatigueRecovery, currentFatigue);
+        const updatedProgression = {
+          ...hero.progression,
+          gold: currentGold - costGold,
+          fatigue: currentFatigue - recovered
+        };
+        get().updateHero(heroId, { progression: updatedProgression });
+
+        try {
+          logActivity.tavernRest({
+            heroId: hero.id,
+            heroName: hero.name,
+            heroClass: hero.class,
+            heroLevel: hero.progression.level,
+            restType: restType,
+            goldSpent: costGold,
+            fatigueBefore: currentFatigue,
+            fatigueRecovered: recovered,
+            fatigueAfter: updatedProgression.fatigue
+          });
+        } catch {}
+        return true;
       },
       
       // === SISTEMA DE GUILDAS ===
@@ -2030,6 +2400,14 @@ export const useHeroStore = create<HeroState>()(
             if (!hero.rankData) {
               migratedHero.rankData = rankSystem.initializeRankData(migratedHero);
             }
+
+            // Garantir novos campos de progressão
+            migratedHero.progression = {
+              ...migratedHero.progression,
+              glory: migratedHero.progression?.glory ?? 0,
+              arcaneEssence: migratedHero.progression?.arcaneEssence ?? 0,
+              fatigue: migratedHero.progression?.fatigue ?? 0
+            };
             
             return migratedHero;
           });

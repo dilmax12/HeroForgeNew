@@ -24,7 +24,7 @@ export type Alignment = 'leal-bom' | 'neutro-bom' | 'caotico-bom' |
 
 export type QuestType = 'contrato' | 'caca' | 'exploracao' | 'historia' | 'narrative';
 export type QuestDifficulty = 'rapida' | 'padrao' | 'epica' | 'facil' | 'medio' | 'dificil';
-export type ItemRarity = 'comum' | 'raro' | 'epico' | 'lendario';
+export type ItemRarity = 'comum' | 'incomum' | 'raro' | 'epico' | 'lendario';
 export type ItemType = 'weapon' | 'armor' | 'accessory' | 'consumable' | 'cosmetic' | 'material';
 
 // === NOVOS TIPOS PARA SISTEMA DE DECISÕES E MUNDO ===
@@ -238,13 +238,18 @@ export interface Item {
   description: string;
   type: ItemType;
   rarity: ItemRarity;
+  level?: number; // nível do item para precificação dinâmica
   price: number;
+  currency?: 'gold' | 'glory' | 'arcaneEssence';
   icon?: string; // Emoji or icon representation
+  // Identificador opcional de conjunto. Itens com o mesmo setId podem ativar bônus de set.
+  setId?: string;
   bonus?: Partial<HeroAttributes>;
   effects?: {
     hp?: number;
     mp?: number;
     duration?: number; // em minutos para efeitos temporários
+    special?: string; // efeitos especiais de encantamento (ex.: lifesteal)
   };
 }
 
@@ -391,12 +396,15 @@ export interface HeroProgression {
   xp: number;
   level: number;
   gold: number;
+  glory?: number; // Moeda avançada (rankings/eventos)
+  arcaneEssence?: number; // Drop raro de chefes
   reputation: number;
   titles: string[]; // IDs dos títulos conquistados
   achievements: Achievement[];
   stars?: number; // Estrelas acumuladas por level up
   guildId?: string;
   partyId?: string;
+  fatigue?: number; // Fadiga acumulada por treinos
 }
 
 export interface HeroInventory {
@@ -404,6 +412,10 @@ export interface HeroInventory {
   equippedWeapon?: string;
   equippedArmor?: string;
   equippedAccessory?: string;
+  upgrades?: { [itemId: string]: number }; // níveis de aprimoramento por item
+  refined?: { [itemId: string]: ItemRarity }; // raridade refinada por item equipado
+  enchantments?: { [itemId: string]: { special?: string } }; // encantos aplicados por item
+  customItems?: { [itemId: string]: Item }; // itens gerados por forja/fusão
 }
 
 export interface Skill {

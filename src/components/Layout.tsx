@@ -11,14 +11,139 @@ import { FlowControls } from './FlowControls';
 import DMNarrator from './DMNarrator';
 import { FLOW_STEPS, getStepIndex } from '../utils/flow';
 import { worldStateManager } from '../utils/worldState';
+import { supabase, supabaseConfigured } from '../lib/supabaseClient';
+import { ensurePlayerProfile } from '../services/playersService';
+import { listHeroesByUser, saveHero, sanitizeStoredHeroData } from '../services/heroesService';
+import { listQuestsByHero, saveQuest } from '../services/questsService';
 
 const Layout = () => {
   const location = useLocation();
   const [hudVisible, setHudVisible] = useState(true);
-  const { getSelectedHero, heroes, updateHero } = useHeroStore();
+  const { getSelectedHero, heroes, updateHero, importHero, getHeroQuests, availableQuests } = useHeroStore();
   const selectedHero = getSelectedHero();
   const { notifications, removeNotification, addNotification } = useNotifications();
   const currentIdx = getStepIndex(location.pathname);
+  const [sbEmail, setSbEmail] = useState<string | null>(null);
+  const [sbUserId, setSbUserId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncedFor, setLastSyncedFor] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadUser() {
+      const { data } = await supabase.auth.getUser();
+      if (!mounted) return;
+      setSbEmail(data?.user?.email || null);
+      setSbUserId(data?.user?.id || null);
+    }
+    loadUser();
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSbEmail(session?.user?.email || null);
+      setSbUserId(session?.user?.id || null);
+    });
+    return () => { mounted = false; sub?.subscription.unsubscribe(); };
+  }, []);
+
+  // Auto-sync de heróis: visitante joga offline, ao logar sincroniza tudo com o Supabase
+  useEffect(() => {
+    async function runSync(userId: string) {
+      try {
+        setSyncing(true);
+        // Garante perfil
+        await ensurePlayerProfile(userId, sbEmail || null);
+        // Carrega remotos
+        const remote = await listHeroesByUser(userId);
+        // Importa remotos no jogo (merge)
+        remote.forEach(h => {
+          try {
+            const sanitized = sanitizeStoredHeroData(h.data);
+            importHero(sanitized, false);
+          } catch {}
+        });
+        // Envia locais para Supabase
+        for (const localHero of heroes) {
+          await saveHero(userId, localHero);
+        }
+
+        // --- Sincronização automática de missões (remoto vence em conflitos) ---
+        const injectedRemoteQuestObjs: any[] = [];
+        for (const hero of heroes) {
+          try {
+            const remoteQuests = await listQuestsByHero(userId, hero.id);
+            const remoteActiveIds = remoteQuests
+              .filter((q) => (q.status || '').toLowerCase() === 'active' && q?.data?.id)
+              .map((q) => String(q.data.id));
+
+            // Coletar objetos de missões remotas ativas para injeção no availableQuests
+            remoteQuests
+              .filter((q) => (q.status || '').toLowerCase() === 'active' && q?.data?.id)
+              .forEach((q) => {
+                const obj = { ...q.data, sticky: true };
+                injectedRemoteQuestObjs.push(obj);
+              });
+
+            const localActiveQuests = getHeroQuests(hero.id);
+            const localActiveIds = localActiveQuests.map((q) => q.id);
+
+            // Remoto vence em conflitos: manter IDs remotos e adicionar locais inexistentes
+            const mergedActiveIds = Array.from(new Set([...remoteActiveIds, ...localActiveIds]));
+            if (mergedActiveIds.join(',') !== (hero.activeQuests || []).join(',')) {
+              updateHero(hero.id, { activeQuests: mergedActiveIds });
+            }
+
+            // Subir missões locais que não existem remotamente
+            const localOnlyIds = localActiveIds.filter((id) => !remoteActiveIds.includes(id));
+            if (localOnlyIds.length > 0) {
+              const byId = new Map(localActiveQuests.map((q) => [q.id, q]));
+              for (const id of localOnlyIds) {
+                const questObj = byId.get(id);
+                if (questObj) {
+                  await saveQuest(userId, hero.id, questObj, 'active');
+                }
+              }
+            }
+          } catch {}
+        }
+
+        // Injetar missões remotas ativas no availableQuests (para renderização do board)
+        try {
+          const currentAvail = useHeroStore.getState().availableQuests || [];
+          const byId = new Map<string, any>();
+          // manter atuais
+          for (const q of currentAvail) byId.set(String(q.id), q);
+          // injetar remotas (sticky para persistir)
+          for (const rq of injectedRemoteQuestObjs) {
+            const id = String(rq.id);
+            if (!byId.has(id)) byId.set(id, rq);
+          }
+          const mergedAvail = Array.from(byId.values());
+          useHeroStore.setState({ availableQuests: mergedAvail });
+        } catch {}
+
+        setLastSyncedFor(userId);
+        addNotification({
+          id: `sync-${Date.now()}`,
+          type: 'info',
+          title: 'Sincronização concluída',
+          message: 'Heróis e missões ativos foram sincronizados com sua conta Supabase.',
+          timeoutMs: 4000
+        });
+      } catch (err: any) {
+        addNotification({
+          id: `sync-error-${Date.now()}`,
+          type: 'error',
+          title: 'Falha ao sincronizar',
+          message: err?.message || 'Verifique sua conexão e tente novamente.',
+          timeoutMs: 5000
+        });
+      } finally {
+        setSyncing(false);
+      }
+    }
+    if (sbUserId && !syncing && lastSyncedFor !== sbUserId) {
+      runSync(sbUserId);
+    }
+  }, [sbUserId]);
 
   // Assinar barramento global de notificações para exibir toasts
   useEffect(() => {
@@ -67,6 +192,14 @@ const Layout = () => {
             </Link>
             <div className="flex items-center space-x-2 md:space-x-4">
               <GoogleLoginButton />
+              {sbEmail ? (
+                <span className="ml-1 text-xs md:text-sm text-gray-200">Supabase: {sbEmail}</span>
+              ) : (
+                <span className="ml-1 text-xs md:text-sm text-gray-400">Supabase: não logado</span>
+              )}
+              {syncing && (
+                <span className="ml-2 text-xs text-amber-300">Sincronizando...</span>
+              )}
             </div>
             
             {/* Herói Selecionado */}
@@ -89,8 +222,15 @@ const Layout = () => {
                 </div>
               </div>
             )}
-          </div>
+            </div>
           
+          {/* Banner de status do Supabase */}
+          {!supabaseConfigured && (
+            <div className="mt-3 bg-amber-900/30 border border-amber-500/40 text-amber-200 text-xs md:text-sm px-3 py-2 rounded">
+              Modo offline: configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` para sincronizar.
+            </div>
+          )}
+
           <nav className="mt-3 md:mt-4">
             <div className="flex w-full justify-between items-center">
               {/* Fluxo principal da jornada */}
@@ -116,6 +256,16 @@ const Layout = () => {
                   </Link>
                 </li>
                 <li>
+                  <Link to="/dungeon-infinita" className={`${navLinkClass('/dungeon-infinita')} text-sm md:text-base`}>
+                    🗝️ Dungeon Infinita
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/cadastro" className={`${navLinkClass('/cadastro')} text-sm md:text-base`}>
+                    📝 Cadastro
+                  </Link>
+                </li>
+                <li>
                   <Link to="/evolution" className={`${navLinkClass('/evolution')} text-sm md:text-base`}>
                     🧬 Evolução
                   </Link>
@@ -128,6 +278,11 @@ const Layout = () => {
                 <li>
                   <Link to="/guild-hub" className={`${navLinkClass('/guild-hub')} text-sm md:text-base`}>
                     🏰 Guilda dos Aventureiros
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/tavern" className={`${navLinkClass('/tavern')} text-sm md:text-base`}>
+                    🍺 Taverna
                   </Link>
                 </li>
                 <li>

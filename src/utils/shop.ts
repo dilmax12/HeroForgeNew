@@ -2,7 +2,8 @@
  * Sistema de Loja e Economia
  */
 
-import { Item, Hero } from '../types/hero';
+import { Item, Hero, HeroAttributes } from '../types/hero';
+import { RankLevel } from '../types/ranks';
 
 // === CATÁLOGO DE ITENS DA LOJA ===
 
@@ -15,7 +16,8 @@ export const SHOP_ITEMS: Item[] = [
     type: 'material',
     rarity: 'epico',
     price: 500,
-    icon: '🕳️'
+    icon: '🕳️',
+    currency: 'arcaneEssence'
   },
   {
     id: 'orbe-purificado',
@@ -24,7 +26,8 @@ export const SHOP_ITEMS: Item[] = [
     type: 'material',
     rarity: 'raro',
     price: 480,
-    icon: '🔮'
+    icon: '🔮',
+    currency: 'glory'
   },
   // === CONSUMÍVEIS ===
   {
@@ -76,6 +79,26 @@ export const SHOP_ITEMS: Item[] = [
     price: 80,
     icon: '📜',
     effects: { duration: 0 } // Efeito instantâneo
+  },
+  {
+    id: 'tonico-descanso',
+    name: 'Tônico de Descanso',
+    description: 'Reduz 20 pontos de Fadiga imediatamente',
+    type: 'consumable',
+    rarity: 'comum',
+    price: 35,
+    icon: '☕',
+    effects: { fatigue: 20 }
+  },
+  {
+    id: 'elixir-vigor',
+    name: 'Elixir de Vigor',
+    description: 'Reduz 40 pontos de Fadiga imediatamente',
+    type: 'consumable',
+    rarity: 'raro',
+    price: 95,
+    icon: '⚗️',
+    effects: { fatigue: 40 }
   },
   {
     id: 'elixir-forca',
@@ -212,7 +235,9 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'epico',
     price: 450,
     icon: '🪄',
-    bonus: { inteligencia: 4, sabedoria: 2 }
+    bonus: { inteligencia: 4, sabedoria: 2 },
+    currency: 'arcaneEssence',
+    setId: 'arcanista'
   },
   {
     id: 'arco-madeira',
@@ -242,7 +267,9 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'epico',
     price: 480,
     icon: '🏹',
-    bonus: { destreza: 5, sabedoria: 2 }
+    bonus: { destreza: 5, sabedoria: 2 },
+    currency: 'glory',
+    setId: 'elfico'
   },
   {
     id: 'besta-pesada',
@@ -253,6 +280,401 @@ export const SHOP_ITEMS: Item[] = [
     price: 320,
     icon: '🏹',
     bonus: { forca: 3, destreza: 3 }
+  },
+
+  // === ARREMESSO DO FORJADOR: NOVAS ARMAS ===
+  {
+    id: 'lanca-guarda',
+    name: 'Lança da Guarda',
+    description: 'Leve e resistente, usada pelos sentinelas da cidade. +3 Força, +1 Constituição',
+    type: 'weapon',
+    rarity: 'comum',
+    price: 110,
+    icon: '🗡️',
+    bonus: { forca: 3, constituicao: 1 }
+  },
+  {
+    id: 'machado-ferro',
+    name: 'Machado de Ferro',
+    description: 'Perfeito para quem confia mais na força que na técnica. +4 Força',
+    type: 'weapon',
+    rarity: 'comum',
+    price: 120,
+    icon: '🪓',
+    bonus: { forca: 4 }
+  },
+  {
+    id: 'espada-flamejante',
+    name: 'Espada Flamejante',
+    description: 'Brilha como um sol em batalha. Chance temática de causar dano de fogo.',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 280,
+    icon: '🔥',
+    bonus: { forca: 5 }
+  },
+  {
+    id: 'martelo-guerra',
+    name: 'Martelo de Guerra',
+    description: 'Seu impacto ecoa como trovão. +6 Força, +3 Constituição',
+    type: 'weapon',
+    rarity: 'epico',
+    price: 520,
+    icon: '🔨',
+    bonus: { forca: 6, constituicao: 3 },
+    currency: 'glory'
+  },
+  {
+    id: 'katana-vento',
+    name: 'Katana do Vento',
+    description: 'A lâmina canta ao cortar o ar. +4 Força, +5 Destreza',
+    type: 'weapon',
+    rarity: 'epico',
+    price: 540,
+    icon: '🗡️',
+    bonus: { forca: 4, destreza: 5 },
+    currency: 'glory'
+  },
+  {
+    id: 'lanca-aurora',
+    name: 'Lança da Aurora',
+    description: 'Símbolo dos cavaleiros celestiais. +6 Força, +2 Sabedoria (sagrado)',
+    type: 'weapon',
+    rarity: 'epico',
+    price: 560,
+    icon: '🗡️',
+    bonus: { forca: 6, sabedoria: 2 },
+    currency: 'glory',
+    setId: 'aurora'
+  },
+  {
+    id: 'espada-ultimo-heroi',
+    name: 'Espada do Último Herói',
+    description: 'Forjada nas chamas do destino. Bônus temático de crítico/XP.',
+    type: 'weapon',
+    rarity: 'lendario',
+    price: 1200,
+    icon: '⚔️',
+    bonus: { forca: 8, carisma: 2 },
+    currency: 'arcaneEssence',
+    setId: 'eterno'
+  },
+
+  // === ARMAS — LISTA CURADA ===
+  // Guerreiro / Gladiador
+  {
+    id: 'espada-longa-ferro',
+    name: 'Espada Longa de Ferro',
+    description: 'Básica e confiável. +3 Força',
+    type: 'weapon',
+    rarity: 'comum',
+    price: 100,
+    icon: '⚔️',
+    bonus: { forca: 3 }
+  },
+  {
+    id: 'montante-aco',
+    name: 'Montante de Aço',
+    description: 'Duas mãos; alto dano, mais lenta. +6 Força, -1 Destreza',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 280,
+    icon: '⚔️',
+    bonus: { forca: 6, destreza: -1 }
+  },
+  {
+    id: 'machado-guerra',
+    name: 'Machado de Guerra',
+    description: 'Feito para quebrar defesas. +5 Força, -1 Destreza',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 260,
+    icon: '🪓',
+    bonus: { forca: 5, destreza: -1 }
+  },
+  {
+    id: 'lanca-gladiador',
+    name: 'Lança do Gladiador',
+    description: 'Alcance longo e preciso. +4 Força, +1 Destreza',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 240,
+    icon: '🗡️',
+    bonus: { forca: 4, destreza: 1 }
+  },
+  {
+    id: 'montante-flamejante',
+    name: 'Montante Flamejante',
+    description: 'Lendária; emite chamas ao atacar. +8 Força',
+    type: 'weapon',
+    rarity: 'lendario',
+    price: 1300,
+    icon: '🔥',
+    bonus: { forca: 8 },
+    currency: 'arcaneEssence'
+  },
+  // Assassino / Ladino
+  {
+    id: 'adagas-gemeas',
+    name: 'Adagas Gêmeas',
+    description: 'Rápidas; ideais para críticos. +4 Destreza, +1 Força',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 230,
+    icon: '🗡️',
+    bonus: { destreza: 4, forca: 1 }
+  },
+  {
+    id: 'katar-sombrio',
+    name: 'Katar Sombrio',
+    description: 'Perfura armaduras leves. +5 Destreza, -1 Constituição',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 260,
+    icon: '🗡️',
+    bonus: { destreza: 5, constituicao: -1 }
+  },
+  {
+    id: 'lamina-nevoa',
+    name: 'Lâmina de Névoa',
+    description: 'A névoa envolve o portador. +4 Destreza, +2 Sabedoria',
+    type: 'weapon',
+    rarity: 'epico',
+    price: 420,
+    icon: '🌫️',
+    bonus: { destreza: 4, sabedoria: 2 }
+  },
+  {
+    id: 'laminas-ocultas',
+    name: 'Lâminas Ocultas',
+    description: 'Lendárias; chance de ataque duplo. +6 Destreza, +2 Força',
+    type: 'weapon',
+    rarity: 'lendario',
+    price: 1150,
+    icon: '🗡️',
+    bonus: { destreza: 6, forca: 2 },
+    currency: 'arcaneEssence'
+  },
+  {
+    id: 'espadas-curtas-duplas',
+    name: 'Espadas Curtas Duplas',
+    description: 'Equilíbrio entre velocidade e dano. +4 Destreza, +2 Força',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 240,
+    icon: '🗡️',
+    bonus: { destreza: 4, forca: 2 }
+  },
+  // Mago / Feiticeiro
+  {
+    id: 'cajado-carvalho',
+    name: 'Cajado de Carvalho',
+    description: 'Básico; canaliza magia elemental. +2 Inteligência',
+    type: 'weapon',
+    rarity: 'comum',
+    price: 90,
+    icon: '🪄',
+    bonus: { inteligencia: 2 }
+  },
+  {
+    id: 'cajado-cristal',
+    name: 'Cajado de Cristal',
+    description: 'Amplifica feitiços de gelo. +3 Inteligência, +1 Sabedoria',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 260,
+    icon: '🔮',
+    bonus: { inteligencia: 3, sabedoria: 1 }
+  },
+  {
+    id: 'cajado-arcano',
+    name: 'Cajado Arcano',
+    description: 'Runas aceleram conjuração. +4 Inteligência',
+    type: 'weapon',
+    rarity: 'epico',
+    price: 420,
+    icon: '🪄',
+    bonus: { inteligencia: 4 }
+  },
+  {
+    id: 'cajado-vortice',
+    name: 'Cajado do Vórtice',
+    description: 'Dano mágico em área. +5 Inteligência, +2 Sabedoria',
+    type: 'weapon',
+    rarity: 'epico',
+    price: 560,
+    icon: '🌀',
+    bonus: { inteligencia: 5, sabedoria: 2 },
+    currency: 'glory'
+  },
+  {
+    id: 'cetro-almas',
+    name: 'Cetro das Almas',
+    description: 'Lendário; regenera mana ao causar dano. +3 Sabedoria, +4 Inteligência',
+    type: 'weapon',
+    rarity: 'lendario',
+    price: 1200,
+    icon: '🪄',
+    bonus: { sabedoria: 3, inteligencia: 4 },
+    currency: 'arcaneEssence'
+  },
+  // Clérigo / Sacerdote
+  {
+    id: 'cajado-luz',
+    name: 'Cajado da Luz',
+    description: 'Básico; concede magias de cura. +2 Sabedoria, +1 Constituição',
+    type: 'weapon',
+    rarity: 'comum',
+    price: 90,
+    icon: '✨',
+    bonus: { sabedoria: 2, constituicao: 1 }
+  },
+  {
+    id: 'cajado-fe-duas-maos',
+    name: 'Cajado de Duas Mãos da Fé',
+    description: 'Amplia bênçãos. +3 Sabedoria, +1 Constituição',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 240,
+    icon: '🪄',
+    bonus: { sabedoria: 3, constituicao: 1 }
+  },
+  {
+    id: 'maca-devoto',
+    name: 'Maça do Devoto',
+    description: 'Aumenta cura e resistência. +2 Força, +2 Sabedoria',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 250,
+    icon: '🔨',
+    bonus: { forca: 2, sabedoria: 2 }
+  },
+  {
+    id: 'cajado-divino',
+    name: 'Cajado Divino',
+    description: 'Chance de curar aliados ao atacar. +4 Sabedoria, +2 Constituição',
+    type: 'weapon',
+    rarity: 'epico',
+    price: 520,
+    icon: '✨',
+    bonus: { sabedoria: 4, constituicao: 2 },
+    currency: 'glory'
+  },
+  {
+    id: 'reliquia-sagrada',
+    name: 'Relíquia Sagrada',
+    description: 'Aura protetora. +3 Sabedoria, +3 Constituição',
+    type: 'weapon',
+    rarity: 'lendario',
+    price: 1100,
+    icon: '⛪',
+    bonus: { sabedoria: 3, constituicao: 3 },
+    currency: 'arcaneEssence'
+  },
+  // Bardo
+  {
+    id: 'alaude-carvalho',
+    name: 'Alaúde de Carvalho',
+    description: 'Básico; melhora a moral do grupo. +1 Carisma, +1 Sabedoria',
+    type: 'weapon',
+    rarity: 'comum',
+    price: 80,
+    icon: '🎸',
+    bonus: { carisma: 1, sabedoria: 1 }
+  },
+  {
+    id: 'alaude-cristal',
+    name: 'Alaúde de Cristal',
+    description: 'Amplifica habilidades musicais. +2 Carisma, +2 Sabedoria',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 220,
+    icon: '🎸',
+    bonus: { carisma: 2, sabedoria: 2 }
+  },
+  {
+    id: 'harpa-prata',
+    name: 'Harpa de Prata',
+    description: 'Magia sonora de cura e buffs. +2 Sabedoria, +2 Carisma',
+    type: 'weapon',
+    rarity: 'epico',
+    price: 420,
+    icon: '🎵',
+    bonus: { sabedoria: 2, carisma: 2 }
+  },
+  {
+    id: 'tambor-guerra',
+    name: 'Tambor de Guerra',
+    description: 'Bônus de ataque e defesa em grupo. +3 Carisma, +2 Constituição',
+    type: 'weapon',
+    rarity: 'epico',
+    price: 520,
+    icon: '🥁',
+    bonus: { carisma: 3, constituicao: 2 },
+    currency: 'glory'
+  },
+  {
+    id: 'alaude-lendas',
+    name: 'Alaúde das Lendas',
+    description: 'Lendário; multiplica inspiração. +4 Carisma, +3 Sabedoria',
+    type: 'weapon',
+    rarity: 'lendario',
+    price: 1100,
+    icon: '🎸',
+    bonus: { carisma: 4, sabedoria: 3 },
+    currency: 'arcaneEssence'
+  },
+  // Monge / Lanceiro
+  {
+    id: 'bastao-madeira',
+    name: 'Bastão de Madeira',
+    description: 'Básico; equilíbrio ataque/defesa. +2 Destreza, +1 Constituição',
+    type: 'weapon',
+    rarity: 'comum',
+    price: 90,
+    icon: '🥋',
+    bonus: { destreza: 2, constituicao: 1 }
+  },
+  {
+    id: 'lanca-vento',
+    name: 'Lança do Vento',
+    description: 'Ataques em área e longo alcance. +3 Destreza, +2 Constituição',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 260,
+    icon: '🗡️',
+    bonus: { destreza: 3, constituicao: 2 }
+  },
+  {
+    id: 'naginata',
+    name: 'Naginata',
+    description: 'Arma híbrida; bônus em esquiva. +4 Destreza, +1 Força',
+    type: 'weapon',
+    rarity: 'raro',
+    price: 280,
+    icon: '🗡️',
+    bonus: { destreza: 4, forca: 1 }
+  },
+  {
+    id: 'punhos-ferro',
+    name: 'Punhos de Ferro',
+    description: 'Estilo corpo a corpo puro. +3 Destreza, +1 Força',
+    type: 'weapon',
+    rarity: 'comum',
+    price: 120,
+    icon: '👊',
+    bonus: { destreza: 3, forca: 1 }
+  },
+  {
+    id: 'bastao-dragao',
+    name: 'Bastão do Dragão',
+    description: 'Lendário; canaliza energia espiritual. +3 Destreza, +4 Sabedoria',
+    type: 'weapon',
+    rarity: 'lendario',
+    price: 1200,
+    icon: '🐲',
+    bonus: { destreza: 3, sabedoria: 4 },
+    currency: 'arcaneEssence'
   },
 
   // === ARMADURAS ===
@@ -314,7 +736,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'epico',
     price: 500,
     icon: '🛡️',
-    bonus: { constituicao: 6, destreza: -1 }
+    bonus: { constituicao: 6, destreza: -1 },
+    currency: 'glory'
   },
   {
     id: 'armadura-couro-tachas',
@@ -335,6 +758,237 @@ export const SHOP_ITEMS: Item[] = [
     price: 420,
     icon: '🦺',
     bonus: { constituicao: 2, destreza: 3 }
+    ,setId: 'elfico'
+  },
+
+  // === FORJADOR: NOVAS ARMADURAS ===
+  {
+    id: 'armadura-ferro',
+    name: 'Armadura de Ferro',
+    description: 'Padrão entre os guardas da cidade. +4 Constituição',
+    type: 'armor',
+    rarity: 'comum',
+    price: 120,
+    icon: '🛡️',
+    bonus: { constituicao: 4 }
+  },
+  {
+    id: 'manto-arcano',
+    name: 'Manto Arcano',
+    description: 'Bordado com símbolos antigos. +1 Constituição, +3 Inteligência',
+    type: 'armor',
+    rarity: 'raro',
+    price: 220,
+    icon: '🪄',
+    bonus: { constituicao: 1, inteligencia: 3 },
+    setId: 'arcanista'
+  },
+  {
+    id: 'armadura-cacador',
+    name: 'Armadura do Caçador',
+    description: 'Perfeita para quem caça monstros nas sombras. +2 Constituição, +3 Destreza',
+    type: 'armor',
+    rarity: 'raro',
+    price: 260,
+    icon: '🦺',
+    bonus: { constituicao: 2, destreza: 3 }
+  },
+  {
+    id: 'armadura-escamas',
+    name: 'Armadura de Escamas',
+    description: 'Forjada a partir de escamas de draco. +4 Constituição, +2 Sabedoria',
+    type: 'armor',
+    rarity: 'raro',
+    price: 320,
+    icon: '🛡️',
+    bonus: { constituicao: 4, sabedoria: 2 }
+  },
+  {
+    id: 'cota-sagrada',
+    name: 'Cota Sagrada',
+    description: 'Imbuída com bênçãos divinas. +4 Constituição, +3 Sabedoria',
+    type: 'armor',
+    rarity: 'epico',
+    price: 520,
+    icon: '🛡️',
+    bonus: { constituicao: 4, sabedoria: 3 },
+    currency: 'glory',
+    setId: 'aurora'
+  },
+  {
+    id: 'armadura-cristal',
+    name: 'Armadura de Cristal',
+    description: 'Reflete tanto luz quanto feitiços. +5 Constituição, +3 Sabedoria',
+    type: 'armor',
+    rarity: 'epico',
+    price: 560,
+    icon: '🧿',
+    bonus: { constituicao: 5, sabedoria: 3 },
+    currency: 'glory'
+  },
+  {
+    id: 'vestes-arcanista',
+    name: 'Vestes do Arcanista',
+    description: 'Brilha suavemente sob a lua. +2 Constituição, +6 Inteligência',
+    type: 'armor',
+    rarity: 'epico',
+    price: 600,
+    icon: '🪄',
+    bonus: { constituicao: 2, inteligencia: 6 },
+    currency: 'arcaneEssence',
+    setId: 'arcanista'
+  },
+  {
+    id: 'armadura-dragao-anciao',
+    name: 'Armadura do Dragão Ancião',
+    description: 'Forjada das escamas de um dragão lendário. Bônus temáticos de resistência e XP.',
+    type: 'armor',
+    rarity: 'lendario',
+    price: 1400,
+    icon: '🛡️',
+    bonus: { constituicao: 8, sabedoria: 4 },
+    currency: 'arcaneEssence',
+    setId: 'eterno'
+  },
+
+  // === ARMADURAS — LISTA CURADA ===
+  // Pesadas (Guerreiro, Gladiador)
+  {
+    id: 'armadura-couro-reforcado',
+    name: 'Armadura de Couro Reforçado',
+    description: 'Couro reforçado para iniciantes. +3 Constituição, +1 Destreza',
+    type: 'armor',
+    rarity: 'comum',
+    price: 110,
+    icon: '🦺',
+    bonus: { constituicao: 3, destreza: 1 }
+  },
+  {
+    id: 'cota-malha-abencoada',
+    name: 'Cota de Malha Abençoada',
+    description: 'Proteção com bênçãos leves. +4 Constituição, +1 Sabedoria',
+    type: 'armor',
+    rarity: 'raro',
+    price: 280,
+    icon: '🛡️',
+    bonus: { constituicao: 4, sabedoria: 1 }
+  },
+  {
+    id: 'platina-imperial',
+    name: 'Platina Imperial',
+    description: 'Placas imperiais. +6 Constituição, +1 Carisma',
+    type: 'armor',
+    rarity: 'epico',
+    price: 560,
+    icon: '🛡️',
+    bonus: { constituicao: 6, carisma: 1 },
+    currency: 'glory'
+  },
+  // Leves (Assassino, Bardo, Monge)
+  {
+    id: 'tunica-couro',
+    name: 'Túnica de Couro',
+    description: 'Leve e prática. +2 Constituição, +1 Destreza',
+    type: 'armor',
+    rarity: 'comum',
+    price: 90,
+    icon: '🦺',
+    bonus: { constituicao: 2, destreza: 1 }
+  },
+  {
+    id: 'roupa-sombras',
+    name: 'Roupa das Sombras',
+    description: 'Feita para discrição. +3 Destreza, +1 Inteligência',
+    type: 'armor',
+    rarity: 'raro',
+    price: 240,
+    icon: '🦺',
+    bonus: { destreza: 3, inteligencia: 1 }
+  },
+  {
+    id: 'traje-viajante',
+    name: 'Traje do Viajante',
+    description: 'Confortável para longas jornadas. +2 Destreza, +1 Constituição',
+    type: 'armor',
+    rarity: 'comum',
+    price: 120,
+    icon: '🦺',
+    bonus: { destreza: 2, constituicao: 1 }
+  },
+  {
+    id: 'veste-bardo-errante',
+    name: 'Veste do Bardo Errante',
+    description: 'Cativa multidões. +2 Destreza, +2 Carisma',
+    type: 'armor',
+    rarity: 'raro',
+    price: 260,
+    icon: '🪶',
+    bonus: { destreza: 2, carisma: 2 }
+  },
+  {
+    id: 'roupas-celestes-monge',
+    name: 'Roupas Celestes do Monge',
+    description: 'Lendária; leve e espiritual. +3 Destreza, +3 Sabedoria',
+    type: 'armor',
+    rarity: 'lendario',
+    price: 900,
+    icon: '🥋',
+    bonus: { destreza: 3, sabedoria: 3 },
+    currency: 'arcaneEssence'
+  },
+  // Místicas (Mago, Clérigo)
+  {
+    id: 'veste-arcana',
+    name: 'Veste Arcana',
+    description: 'Favorece o estudo arcano. +1 Constituição, +4 Inteligência',
+    type: 'armor',
+    rarity: 'raro',
+    price: 300,
+    icon: '🪄',
+    bonus: { constituicao: 1, inteligencia: 4 }
+  },
+  {
+    id: 'manto-seda-espiritual',
+    name: 'Manto de Seda Espiritual',
+    description: 'Sereno e protetor. +2 Sabedoria, +1 Constituição',
+    type: 'armor',
+    rarity: 'raro',
+    price: 280,
+    icon: '🪄',
+    bonus: { sabedoria: 2, constituicao: 1 }
+  },
+  {
+    id: 'tunica-sol',
+    name: 'Túnica do Sol',
+    description: 'Banho de luz. +2 Constituição, +4 Sabedoria',
+    type: 'armor',
+    rarity: 'epico',
+    price: 520,
+    icon: '🪄',
+    bonus: { constituicao: 2, sabedoria: 4 },
+    currency: 'glory'
+  },
+  {
+    id: 'roupas-sabio-eterno',
+    name: 'Roupas do Sábio Eterno',
+    description: 'Sabedoria acumulada. +2 Constituição, +5 Inteligência',
+    type: 'armor',
+    rarity: 'epico',
+    price: 560,
+    icon: '🪄',
+    bonus: { constituicao: 2, inteligencia: 5 },
+    currency: 'glory'
+  },
+  {
+    id: 'manto-eternidade',
+    name: 'Manto da Eternidade',
+    description: 'Lendário; protege contra o esquecimento. +3 Constituição, +6 Inteligência',
+    type: 'armor',
+    rarity: 'lendario',
+    price: 1200,
+    icon: '🪄',
+    bonus: { constituicao: 3, inteligencia: 6 },
+    currency: 'arcaneEssence'
   },
 
   // === ACESSÓRIOS ===
@@ -356,7 +1010,9 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 180,
     icon: '🔮',
-    bonus: { sabedoria: 3 }
+    bonus: { sabedoria: 3 },
+    currency: 'arcaneEssence',
+    setId: 'arcanista'
   },
   {
     id: 'colar-carisma',
@@ -376,7 +1032,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 200,
     icon: '🏹',
-    bonus: { destreza: 2, sabedoria: 1 }
+    bonus: { destreza: 2, sabedoria: 1 },
+    currency: 'arcaneEssence'
   },
   {
     id: 'bracadeira-arqueiro',
@@ -387,6 +1044,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 160,
     icon: '🛡️',
     bonus: { destreza: 3 }
+    ,setId: 'elfico'
   },
   {
     id: 'anel-precisao',
@@ -396,7 +1054,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'epico',
     price: 280,
     icon: '💍',
-    bonus: { destreza: 2, inteligencia: 1 }
+    bonus: { destreza: 2, inteligencia: 1 },
+    setId: 'elfico'
   },
   {
     id: 'anel-aventureiro',
@@ -435,6 +1094,206 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 120,
     icon: '🪶'
+  },
+
+  // === FORJADOR: NOVOS ACESSÓRIOS ===
+  {
+    id: 'anel-bronze',
+    name: 'Anel de Bronze',
+    description: 'Um simples anel de sorte. +1 Sabedoria',
+    type: 'accessory',
+    rarity: 'comum',
+    price: 60,
+    icon: '💍',
+    bonus: { sabedoria: 1 }
+  },
+  {
+    id: 'colar-madeira',
+    name: 'Colar de Madeira',
+    description: 'Amuleto de proteção básica. +1 Constituição',
+    type: 'accessory',
+    rarity: 'comum',
+    price: 60,
+    icon: '📿',
+    bonus: { constituicao: 1 }
+  },
+  {
+    id: 'amuleto-vitalidade',
+    name: 'Amuleto da Vitalidade',
+    description: 'Energiza o corpo e a alma. Aumenta a vitalidade.',
+    type: 'accessory',
+    rarity: 'raro',
+    price: 240,
+    icon: '📿',
+    bonus: { constituicao: 3 }
+  },
+  {
+    id: 'anel-precisao-raro',
+    name: 'Anel de Precisão',
+    description: 'Ideal para arqueiros e assassinos. Bônus temático de crítico.',
+    type: 'accessory',
+    rarity: 'raro',
+    price: 220,
+    icon: '💍',
+    bonus: { destreza: 2 }
+  },
+  {
+    id: 'medalhao-guardiao',
+    name: 'Medalhão do Guardião',
+    description: 'Carrega uma prece antiga. +2 Constituição, +3 Sabedoria',
+    type: 'accessory',
+    rarity: 'raro',
+    price: 260,
+    icon: '📿',
+    bonus: { constituicao: 2, sabedoria: 3 },
+    setId: 'aurora'
+  },
+  {
+    id: 'anel-furia',
+    name: 'Anel da Fúria',
+    description: 'Libera um poder destrutivo, a um custo. +5 Força, -2 Constituição',
+    type: 'accessory',
+    rarity: 'epico',
+    price: 380,
+    icon: '💍',
+    bonus: { forca: 5, constituicao: -2 }
+  },
+  {
+    id: 'colar-equilibrio',
+    name: 'Colar do Equilíbrio',
+    description: 'Harmoniza corpo e mente. +3 Força, +3 Constituição',
+    type: 'accessory',
+    rarity: 'epico',
+    price: 400,
+    icon: '📿',
+    bonus: { forca: 3, constituicao: 3 }
+  },
+  {
+    id: 'amuleto-tempo',
+    name: 'Amuleto do Tempo',
+    description: 'Manipula o tempo a seu favor. Bônus temático de velocidade/XP.',
+    type: 'accessory',
+    rarity: 'lendario',
+    price: 900,
+    icon: '⌛',
+    bonus: { destreza: 3, carisma: 2 },
+    currency: 'arcaneEssence'
+  },
+  {
+    id: 'anel-eternidade',
+    name: 'Anel da Eternidade',
+    description: 'Símbolo da imortalidade dos verdadeiros heróis. Bônus temático de crítico/espírito.',
+    type: 'accessory',
+    rarity: 'lendario',
+    price: 1100,
+    icon: '💍',
+    bonus: { sabedoria: 5, destreza: 3 },
+    currency: 'arcaneEssence',
+    setId: 'eterno'
+  },
+
+  // === ACESSÓRIOS — LISTA CURADA ===
+  {
+    id: 'anel-vitalidade',
+    name: 'Anel da Vitalidade',
+    description: '+HP (representado por Constituição). +3 Constituição',
+    type: 'accessory',
+    rarity: 'raro',
+    price: 220,
+    icon: '💍',
+    bonus: { constituicao: 3 }
+  },
+  {
+    id: 'anel-foco-arcano',
+    name: 'Anel do Foco Arcano',
+    description: '+Mana (representado por Inteligência). +3 Inteligência',
+    type: 'accessory',
+    rarity: 'raro',
+    price: 240,
+    icon: '💍',
+    bonus: { inteligencia: 3 }
+  },
+  {
+    id: 'colar-viajante',
+    name: 'Colar do Viajante',
+    description: 'Velocidade e leveza. +2 Destreza',
+    type: 'accessory',
+    rarity: 'raro',
+    price: 200,
+    icon: '📿',
+    bonus: { destreza: 2 }
+  },
+  {
+    id: 'bracelete-gladiador',
+    name: 'Bracelete do Gladiador',
+    description: 'Poder do arena. +3 Força',
+    type: 'accessory',
+    rarity: 'raro',
+    price: 240,
+    icon: '🛡️',
+    bonus: { forca: 3 }
+  },
+  {
+    id: 'amuleto-cura',
+    name: 'Amuleto da Cura',
+    description: 'Restaura HP gradualmente (temático). +2 Constituição',
+    type: 'accessory',
+    rarity: 'epico',
+    price: 420,
+    icon: '📿',
+    bonus: { constituicao: 2 },
+    currency: 'glory'
+  },
+  {
+    id: 'anel-destreza',
+    name: 'Anel da Destreza',
+    description: 'Aprimora chances de crítico (temático). +2 Destreza',
+    type: 'accessory',
+    rarity: 'raro',
+    price: 220,
+    icon: '💍',
+    bonus: { destreza: 2 }
+  },
+  {
+    id: 'colar-inspiracao',
+    name: 'Colar da Inspiração',
+    description: 'Perfeito para bardos e clérigos. +3 Carisma, +1 Sabedoria',
+    type: 'accessory',
+    rarity: 'epico',
+    price: 400,
+    icon: '📿',
+    bonus: { carisma: 3, sabedoria: 1 }
+  },
+  {
+    id: 'pingente-resistencia',
+    name: 'Pingente da Resistência',
+    description: 'Proteção arcana. +2 Sabedoria',
+    type: 'accessory',
+    rarity: 'raro',
+    price: 240,
+    icon: '📿',
+    bonus: { sabedoria: 2 }
+  },
+  {
+    id: 'anel-tempestade',
+    name: 'Anel da Tempestade',
+    description: 'Chance de relâmpago (temático). +2 Destreza, +1 Inteligência',
+    type: 'accessory',
+    rarity: 'epico',
+    price: 420,
+    icon: '💍',
+    bonus: { destreza: 2, inteligencia: 1 },
+    currency: 'glory'
+  },
+  {
+    id: 'simbolo-luz',
+    name: 'Símbolo da Luz',
+    description: 'Reduz dano das trevas (temático). +2 Sabedoria, +1 Constituição',
+    type: 'accessory',
+    rarity: 'raro',
+    price: 260,
+    icon: '✝️',
+    bonus: { sabedoria: 2, constituicao: 1 }
   },
 
   // === COSMÉTICOS ===
@@ -577,10 +1436,15 @@ export const RARITY_CONFIG = {
     bgColor: '#F3F4F6',
     multiplier: 1.0
   },
+  incomum: {
+    color: '#10B981', // Emerald
+    bgColor: '#ECFDF5',
+    multiplier: 1.3
+  },
   raro: {
     color: '#3B82F6', // Blue
     bgColor: '#EFF6FF',
-    multiplier: 1.5
+    multiplier: 1.6
   },
   epico: {
     color: '#8B5CF6', // Purple
@@ -594,17 +1458,44 @@ export const RARITY_CONFIG = {
   }
 };
 
+// === CONJUNTOS DE ITENS ===
+export const ITEM_SETS: Record<string, { name: string; bonus: Partial<HeroAttributes> }> = {
+  arcanista: {
+    name: 'Conjunto Arcanista',
+    bonus: { inteligencia: 2, sabedoria: 1 }
+  },
+  aurora: {
+    name: 'Conjunto Aurora',
+    bonus: { forca: 2, sabedoria: 2 }
+  },
+  elfico: {
+    name: 'Conjunto Élfico do Arqueiro',
+    bonus: { destreza: 2, sabedoria: 1 }
+  },
+  eterno: {
+    name: 'Conjunto do Último Herói',
+    bonus: { forca: 3, carisma: 1, sabedoria: 1 }
+  }
+};
+
 // === FUNÇÕES DE COMPRA ===
 
 export interface PurchaseResult {
   success: boolean;
   message: string;
-  newGold?: number;
+  newGold?: number; // compatibilidade retro
+  currency?: 'gold' | 'glory' | 'arcaneEssence';
+  newBalance?: number;
   item?: Item;
 }
 
 export function canAfford(hero: Hero, item: Item): boolean {
-  return hero.progression.gold >= item.price;
+  const currency = item.currency || 'gold';
+  const prog = hero.progression;
+  const balance = currency === 'gold' ? (prog.gold || 0)
+                  : currency === 'glory' ? (prog.glory || 0)
+                  : (prog.arcaneEssence || 0);
+  return balance >= item.price;
 }
 
 export function purchaseItem(hero: Hero, itemId: string): PurchaseResult {
@@ -618,9 +1509,15 @@ export function purchaseItem(hero: Hero, itemId: string): PurchaseResult {
   }
   
   if (!canAfford(hero, item)) {
+    const currency = item.currency || 'gold';
+    const prog = hero.progression;
+    const balance = currency === 'gold' ? (prog.gold || 0)
+                    : currency === 'glory' ? (prog.glory || 0)
+                    : (prog.arcaneEssence || 0);
+    const currencyName = currency === 'gold' ? 'ouro' : currency === 'glory' ? 'glória' : 'essência arcana';
     return {
       success: false,
-      message: `Ouro insuficiente! Você precisa de ${item.price} ouro, mas tem apenas ${hero.progression.gold}.`
+      message: `${currencyName.charAt(0).toUpperCase() + currencyName.slice(1)} insuficiente! Você precisa de ${item.price} ${currencyName}, mas tem apenas ${balance}.`
     };
   }
   
@@ -635,10 +1532,20 @@ export function purchaseItem(hero: Hero, itemId: string): PurchaseResult {
     }
   }
   
+  const currency = item.currency || 'gold';
+  const prog = hero.progression;
+  const current = currency === 'gold' ? (prog.gold || 0)
+                  : currency === 'glory' ? (prog.glory || 0)
+                  : (prog.arcaneEssence || 0);
+  const newBalance = current - item.price;
+  const currencyName = currency === 'gold' ? 'ouro' : currency === 'glory' ? 'glória' : 'essência arcana';
   return {
     success: true,
-    message: `${item.name} comprado com sucesso!`,
-    newGold: hero.progression.gold - item.price,
+    message: `${item.name} comprado com sucesso! (-${item.price} ${currencyName})`,
+    // compat: manter newGold preenchido quando moeda for ouro
+    newGold: currency === 'gold' ? newBalance : undefined,
+    currency,
+    newBalance,
     item
   };
 }
@@ -773,7 +1680,20 @@ export function useConsumable(hero: Hero, itemId: string): { success: boolean; m
     effects.xp = 50;
     message += ` +50 XP`;
   }
-  
+
+  // Fadiga: reduzir diretamente na progressão
+  if (item.effects?.fatigue) {
+    const currentFatigue = hero.progression.fatigue ?? 0;
+    const reduction = Math.min(item.effects.fatigue, currentFatigue);
+    const newFatigue = Math.max(0, currentFatigue - reduction);
+    effects.fatigue = newFatigue;
+    if (reduction > 0) {
+      message += ` -${reduction} Fadiga`;
+    } else {
+      message += ` (sem efeito: Fadiga já 0)`;
+    }
+  }
+
   return {
     success: true,
     message,
@@ -810,6 +1730,25 @@ export function getDailyOffers(): Item[] {
 
 // === SISTEMA DE REPUTAÇÃO E DESCONTOS ===
 
+// Desconto adicional por rank do herói
+export const RANK_PRICE_DISCOUNT: Record<RankLevel, number> = {
+  F: 0.00,
+  E: 0.02,
+  D: 0.04,
+  C: 0.06,
+  B: 0.08,
+  A: 0.10,
+  S: 0.12
+};
+
+// Fator de moderação por raridade: itens mais raros recebem menos desconto efetivo
+export const RARITY_DISCOUNT_FACTOR: Record<'comum' | 'raro' | 'epico' | 'lendario', number> = {
+  comum: 1.0,
+  raro: 0.9,
+  epico: 0.8,
+  lendario: 0.7
+};
+
 export function getReputationDiscount(reputation: number): number {
   if (reputation >= 1000) return 0.15; // 15% desconto
   if (reputation >= 500) return 0.10;  // 10% desconto
@@ -818,8 +1757,30 @@ export function getReputationDiscount(reputation: number): number {
 }
 
 export function getDiscountedPrice(item: Item, hero: Hero): number {
-  const discount = getReputationDiscount(hero.progression.reputation);
-  return Math.floor(item.price * (1 - discount));
+  const reputationDiscount = getReputationDiscount(hero.progression.reputation);
+  const rankLevel: RankLevel = hero.rankData?.currentRank ?? 'F';
+  const rankDiscount = RANK_PRICE_DISCOUNT[rankLevel] ?? 0;
+  const rarityFactor = RARITY_DISCOUNT_FACTOR[item.rarity as 'comum' | 'incomum' | 'raro' | 'epico' | 'lendario'] ?? 1.0;
+
+  // Soma descontos de reputação e rank, moderados pela raridade; limita desconto total para evitar preços zero
+  const effectiveDiscount = Math.max(0, Math.min(0.5, (reputationDiscount + rankDiscount) * rarityFactor));
+  const basePrice = computeItemBasePrice(item);
+  return Math.floor(basePrice * (1 - effectiveDiscount));
+}
+
+// Preço base dinâmico: nível × multiplicador de raridade × 100.
+// Lendários com nível utilizam preço fixo dentro de 10k–25k.
+export function computeItemBasePrice(item: Item): number {
+  const rarityKey = item.rarity as keyof typeof RARITY_CONFIG;
+  const rarityMult = RARITY_CONFIG[rarityKey]?.multiplier ?? 1.0;
+  if (item.level && item.level > 0) {
+    if (item.rarity === 'lendario') {
+      const computed = item.level * rarityMult * 100;
+      return Math.max(10000, Math.min(25000, Math.floor(computed)));
+    }
+    return Math.floor(item.level * rarityMult * 100);
+  }
+  return item.price;
 }
 
 export type ItemPrefix = 'Flamejante' | 'do Caçador' | 'dos Ecos' | 'Gélido' | 'Trovejante';

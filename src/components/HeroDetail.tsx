@@ -1,7 +1,7 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useHeroStore } from '../store/heroStore';
-import { SHOP_ITEMS } from '../utils/shop';
+import { SHOP_ITEMS, ITEM_SETS } from '../utils/shop';
 import NarrativeChapters from './NarrativeChapters';
 
 const HeroDetail = () => {
@@ -45,6 +45,14 @@ const HeroDetail = () => {
     .entries(hero.inventory.items || {})
     .filter(([, qty]) => (qty as number) > 0);
   const myInvites = getReferralInvitesForHero(hero.id);
+
+  // Detectar conjunto ativo
+  const equipped = [hero.inventory.equippedWeapon, hero.inventory.equippedArmor, hero.inventory.equippedAccessory].filter(Boolean);
+  const equippedSetIds = equipped
+    .map(itemId => SHOP_ITEMS.find(i => i.id === itemId)?.setId)
+    .filter((sid): sid is string => !!sid);
+  const activeSetId = equippedSetIds.length === 3 && new Set(equippedSetIds).size === 1 ? equippedSetIds[0] : null;
+  const activeSet = activeSetId ? ITEM_SETS[activeSetId] : null;
 
   return (
     <div className="container mx-auto p-4 sm:p-6">
@@ -104,6 +112,20 @@ const HeroDetail = () => {
                 <div className="text-white">{getItemName(hero.inventory.equippedAccessory)}</div>
               </div>
             </div>
+            {activeSet && (
+              <div className="mt-4 bg-emerald-700/20 border border-emerald-500/30 rounded-md p-3">
+                <div className="text-emerald-300 text-sm font-semibold">Bônus de Conjunto Ativo</div>
+                <div className="text-white text-sm mt-1">{activeSet.name}</div>
+                <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                  {Object.entries(activeSet.bonus).map(([attr, val]) => (
+                    <div key={attr} className="bg-gray-700/40 px-2 py-1 rounded">
+                      <span className="text-gray-300 capitalize">{attr}</span>
+                      <span className="text-white ml-1">+{val as number}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

@@ -14,7 +14,7 @@ interface HeroProgressionProps {
 const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<'overview' | 'equipment' | 'achievements' | 'reputation'>('overview');
-  const { useItem, equipItem, sellItem } = useHeroStore();
+  const { useItem, equipItem, sellItem, unequipItem } = useHeroStore();
 
   // Calcular XP necessário para o próximo nível
   const calculateXPForLevel = (level: number): number => {
@@ -344,6 +344,12 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
                     )}
                   </div>
                   <button
+                    onClick={() => unequipItem(hero.id, equippedWeapon.id)}
+                    className="px-3 py-1 bg-gray-200 text-gray-900 text-sm rounded hover:bg-gray-300 transition-colors"
+                  >
+                    Desequipar
+                  </button>
+                  <button
                     onClick={() => sellItem(hero.id, equippedWeapon.id)}
                     className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors"
                   >
@@ -375,6 +381,12 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
                     )}
                   </div>
                   <button
+                    onClick={() => unequipItem(hero.id, equippedArmor.id)}
+                    className="px-3 py-1 bg-gray-200 text-gray-900 text-sm rounded hover:bg-gray-300 transition-colors"
+                  >
+                    Desequipar
+                  </button>
+                  <button
                     onClick={() => sellItem(hero.id, equippedArmor.id)}
                     className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors"
                   >
@@ -405,6 +417,12 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
                       </div>
                     )}
                   </div>
+                  <button
+                    onClick={() => unequipItem(hero.id, equippedAccessory.id)}
+                    className="px-3 py-1 bg-gray-200 text-gray-900 text-sm rounded hover:bg-gray-300 transition-colors"
+                  >
+                    Desequipar
+                  </button>
                   <button
                     onClick={() => sellItem(hero.id, equippedAccessory.id)}
                     className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors"
