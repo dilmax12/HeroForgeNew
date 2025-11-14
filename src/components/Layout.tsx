@@ -253,8 +253,8 @@ const Layout = () => {
                   </Link>
                 </li>
                 <li>
-                  <Link to="/missions" className={`${navLinkClass('/missions')} text-sm md:text-base`}>
-                    🎮 Jogar
+                  <Link to="/guild-hub" className={`${navLinkClass('/guild-hub')} text-sm md:text-base`}>
+                    🏰 Guilda dos Aventureiros
                   </Link>
                 </li>
                 <li>
@@ -268,28 +268,8 @@ const Layout = () => {
                   </Link>
                 </li>
                 <li>
-                  <Link to="/evolution" className={`${navLinkClass('/evolution')} text-sm md:text-base`}>
-                    🧬 Evolução
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/progression" className={`${navLinkClass('/progression')} text-sm md:text-base`}>
-                    📈 Progressão
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/guild-hub" className={`${navLinkClass('/guild-hub')} text-sm md:text-base`}>
-                    🏰 Guilda dos Aventureiros
-                  </Link>
-                </li>
-                <li>
                   <Link to="/tavern" className={`${navLinkClass('/tavern')} text-sm md:text-base`}>
                     🍺 Taverna
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/party" className={`${navLinkClass('/party')} text-sm md:text-base`}>
-                    👥 Party
                   </Link>
                 </li>
                 <li>

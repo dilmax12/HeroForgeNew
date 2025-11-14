@@ -83,13 +83,13 @@ export default function Dungeon20() {
   const maxFloorsAllowed = getMaxFloorsByRank(heroRank);
 
   const startRun = () => {
-    // Gate: exigir rank E ou superior para entrar
+    // Gate: exigir rank D ou superior para entrar
     if (!hero) {
       setError('Selecione um herói para jogar a Dungeon.');
       return;
     }
-    if (!heroRank || heroRank === 'F') {
-      setError('Rank insuficiente. Alcance pelo menos rank E para entrar.');
+    if (!heroRank || heroRank === 'F' || heroRank === 'E') {
+      setError('Rank insuficiente. A Dungeon Infinita requer rank D ou superior.');
       return;
     }
     setRunning(true);
@@ -566,11 +566,14 @@ export default function Dungeon20() {
         <div className="mt-4">
           <button
             onClick={startRun}
-            disabled={!hero}
+            disabled={!hero || !heroRank || heroRank === 'F' || heroRank === 'E'}
             className="px-3 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
           >
             Iniciar Tentativa
           </button>
+          {(!heroRank || heroRank === 'F' || heroRank === 'E') && (
+            <div className="mt-2 text-sm text-red-300">Requer rank D ou superior para entrar.</div>
+          )}
         </div>
       )}
 

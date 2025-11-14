@@ -259,6 +259,12 @@ export interface SkillUseResult {
  */
 export function resolveSkillUse(user: Hero, target: Hero | CombatEntity, skill: Skill): SkillUseResult {
   const targetElement = (target as Hero).element || 'physical';
+  console.debug('[combat] resolveSkillUse:start', {
+    user: user?.name,
+    target: (target as any)?.name || 'enemy',
+    skill: skill?.name,
+    effects: skill?.effects
+  });
   
   // Calcular poder base da habilidade
   let basePower = skill.basePower || 0;
@@ -275,9 +281,11 @@ export function resolveSkillUse(user: Hero, target: Hero | CombatEntity, skill: 
       basePower += user.attributes.carisma * 0.2;
       break;
   }
+  console.debug('[combat] basePower', basePower);
   
   // Calcular multiplicador elemental
   const elementMultiplier = getElementMultiplier(skill.element || 'physical', targetElement);
+  console.debug('[combat] elementMultiplier', elementMultiplier);
   
   // Calcular dano final
   let finalDamage = 0;
@@ -287,8 +295,10 @@ export function resolveSkillUse(user: Hero, target: Hero | CombatEntity, skill: 
   if (skill.type === 'attack') {
     const targetDefense = (target as any).constituicao || target.constituicao || 0;
     finalDamage = Math.max(0, Math.floor(basePower * elementMultiplier) - (targetDefense * 0.3));
+    console.debug('[combat] attack calc', { targetDefense, finalDamage });
   } else if (skill.type === 'support' && skill.name.includes('Cura')) {
     healing = Math.floor(basePower);
+    console.debug('[combat] healing calc', { healing });
   }
   
   // Adicionar efeitos especiais baseados na habilidade
@@ -300,11 +310,13 @@ export function resolveSkillUse(user: Hero, target: Hero | CombatEntity, skill: 
     if (e.buff?.attribute) effectTexts.push(`buff ${String(e.buff.attribute)}`);
     if (e.debuff?.attribute) effectTexts.push(`debuff ${String(e.debuff.attribute)}`);
     effects.push(...effectTexts);
+    console.debug('[combat] effects parsed', effectTexts);
   }
   
   // Determinar sucesso (pode falhar em casos específicos)
   const successRate = 0.9; // 90% de chance base
   const success = Math.random() < successRate;
+  console.debug('[combat] success roll', { success });
   
   // Gerar mensagem
   let message = `${user.name} usa ${skill.name}!`;

@@ -86,6 +86,24 @@ const JourneyFlow: React.FC = () => {
     if (hero) {
       const result = getOrRunDailyResult(hero);
       setDaily(result);
+      // Envio automático de resultados para ranking
+      (async () => {
+        try {
+          setSubmitting(true);
+          await fetch('/api/daily/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hero })
+          });
+          const resp = await fetch('/api/daily/leaderboard');
+          const data = await resp.json();
+          setLeaderboard(Array.isArray(data?.entries) ? data.entries : []);
+        } catch (err) {
+          console.warn('Falha no envio automático de resultado diário:', err);
+        } finally {
+          setSubmitting(false);
+        }
+      })();
     }
   }, [hero]);
 
@@ -139,13 +157,7 @@ const JourneyFlow: React.FC = () => {
       <div className="mt-8 rounded-xl p-6 bg-white/10 border border-white/20" data-testid="idle-daily-panel">
         <div className="flex items-center justify-between mb-4">
           <div className="text-xl font-bold text-amber-300">{medievalTheme.icons.ui.calendar} Resultados Diários</div>
-          <button
-            onClick={submitDaily}
-            disabled={!hero || submitting}
-            className={`px-4 py-2 rounded-lg text-white font-semibold transition-all duration-200 ${submitting ? 'bg-gray-600' : 'bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700'}`}
-          >
-            {submitting ? 'Enviando...' : 'Enviar para Ranking'}
-          </button>
+          <div className="text-sm text-gray-300">Envio automático ativo</div>
         </div>
         {daily && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">

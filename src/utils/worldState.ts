@@ -183,7 +183,7 @@ export class WorldStateManager {
 
     return {
       success,
-      rollResult,
+      rollResult: { ...rollResult, threshold: riskThreshold },
       appliedEffects,
       logEntry
     };
@@ -292,8 +292,8 @@ export class WorldStateManager {
     if (minutesElapsed >= 1 && hero.stamina.current < hero.stamina.max) {
       const settings = getGameSettings();
       const ratePerMinute = (settings?.regenStaminaPerMin ?? hero.stamina.recoveryRate ?? 5);
-      const wholeMinutes = Math.floor(minutesElapsed);
-      const recoveryAmount = wholeMinutes * ratePerMinute;
+      const wholeMinutes = Math.min(5, Math.floor(minutesElapsed));
+      const recoveryAmount = Math.max(ratePerMinute, wholeMinutes * ratePerMinute);
       hero.stamina.current = Math.min(hero.stamina.max, hero.stamina.current + recoveryAmount);
       // Atualiza lastRecovery para agora após aplicar a recuperação
       hero.stamina.lastRecovery = now.toISOString();
@@ -319,12 +319,12 @@ export class WorldStateManager {
     const minutesElapsed = (now.getTime() - lastTs.getTime()) / (1000 * 60);
 
     if (minutesElapsed >= 1) {
-      const wholeMinutes = Math.floor(minutesElapsed);
+    const wholeMinutes = Math.min(5, Math.floor(minutesElapsed));
       const settings = getGameSettings();
       const hpPerMin = settings?.regenHpPerMin ?? 5;
       const mpPerMin = settings?.regenMpPerMin ?? 5;
-      const hpRegenAmount = wholeMinutes * hpPerMin;
-      const mpRegenAmount = wholeMinutes * mpPerMin;
+      const hpRegenAmount = Math.max(hpPerMin, wholeMinutes * hpPerMin);
+      const mpRegenAmount = Math.max(mpPerMin, wholeMinutes * mpPerMin);
 
       // HP regen
       if (hero.derivedAttributes.currentHp < hero.derivedAttributes.hp) {

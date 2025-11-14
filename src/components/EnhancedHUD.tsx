@@ -182,6 +182,16 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
     }
   };
 
+  // Envio automático de resumo diário
+  useEffect(() => {
+    (async () => {
+      if (!hero) return;
+      if (submitting) return;
+      await submitDaily();
+    })();
+    // executar ao montar e quando herói mudar
+  }, [hero?.id]);
+
   return (
     <div className="fixed top-2 right-2 md:top-4 md:right-4 z-50 bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-lg p-3 md:p-4 min-w-64 md:min-w-80 shadow-xl">
       {/* Hero Level and Name */}
@@ -426,14 +436,7 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
           <div className="text-white text-sm font-medium flex items-center gap-1">
             ⚔️ Resumo Diário
           </div>
-          <button
-            onClick={submitDaily}
-            disabled={submitting}
-            className={`text-xs px-2 py-1 rounded ${submitting ? 'bg-gray-700 text-gray-400' : 'bg-amber-600 text-white hover:bg-amber-700'}`}
-            title="Enviar resultado para o ranking diário"
-          >
-            {submitting ? 'Enviando...' : 'Enviar'}
-          </button>
+          <div className="text-xs text-gray-400">Envio automático ativo</div>
         </div>
         <div className="grid grid-cols-4 gap-2 text-center">
           <div className="bg-gray-800 rounded p-2">

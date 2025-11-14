@@ -20,7 +20,7 @@ const AdventurersGuildHub: React.FC = () => {
   const [qtyByItem, setQtyByItem] = useState<Record<string, number>>({});
   const [selectedType, setSelectedType] = useState<'todos' | 'consumable' | 'weapon' | 'armor' | 'accessory' | 'material'>('todos');
   const [selectedRarity, setSelectedRarity] = useState<'todas' | 'comum' | 'raro' | 'epico' | 'lendario'>('todas');
-  const [activeSection, setActiveSection] = useState<'salao' | 'missoes' | 'recrutamento' | 'treinamento' | 'sala-herois' | 'conselho' | 'cofre'>('salao');
+  const [activeSection, setActiveSection] = useState<'salao' | 'recrutamento' | 'treinamento' | 'sala-herois' | 'conselho' | 'cofre'>('salao');
 
   useEffect(() => {
     ensureDefaultGuildExists();
@@ -283,7 +283,6 @@ const AdventurersGuildHub: React.FC = () => {
         <div className="mt-6 flex flex-wrap gap-2">
           {[
             { id: 'salao', label: 'Salão Principal', icon: '🏛️' },
-            { id: 'missoes', label: 'Quadro de Missões', icon: '📜' },
             { id: 'recrutamento', label: 'Recrutamento / Party', icon: '👥' },
             { id: 'treinamento', label: 'Sala de Treinamento', icon: '🏋️' },
             { id: 'sala-herois', label: 'Salão dos Heróis', icon: '🏆' },
@@ -304,33 +303,13 @@ const AdventurersGuildHub: React.FC = () => {
       {/* Conteúdo por seção */}
       {activeSection === 'salao' && (
         <div className="space-y-6">
-          {/* Missões resumidas */}
+          {/* Missões de Caça */}
           <div className="bg-white p-6 rounded-lg border border-gray-200 text-gray-800">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold text-gray-800">📜 Quadro de Missões</h2>
-              <button onClick={handleRefreshMissions} className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">Atualizar Missões</button>
+              <h2 className="text-2xl font-bold text-gray-800">🎯 Missões de Caça</h2>
+              <a href="/hunting" className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">Abrir</a>
             </div>
-            {availableQuests.length > 0 ? (
-              <ul className="space-y-3">
-                {availableQuests.slice(0, 6).map(q => (
-                  <li key={q.id} className="flex items-center justify-between bg-gray-50 p-3 rounded">
-                    <div>
-                      <div className="font-semibold text-gray-800">{q.title}</div>
-                      <div className="text-sm text-gray-600">Requer Nível {q.levelRequirement}</div>
-                    </div>
-                    <span className="text-xl">⚔️</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <div className="text-5xl mb-2">📜</div>
-                <p>Nenhuma missão listada no momento. Clique em atualizar.</p>
-              </div>
-            )}
-            <div className="mt-6 text-sm text-gray-600">
-              Dica: Use a página <span className="font-semibold">Party</span> para formar grupos e depois venha aqui aceitar missões.
-            </div>
+            <div className="text-sm text-gray-600">Missões geradas pela IA com fases, risco x recompensa e progressão de rank.</div>
           </div>
 
           {/* Ranking rápido */}
@@ -568,20 +547,7 @@ const AdventurersGuildHub: React.FC = () => {
         </div>
       )}
 
-      {activeSection === 'missoes' && (
-        <div className="bg-white p-6 rounded-lg border border-gray-200 text-gray-800">
-          <h2 className="text-2xl font-bold text-gray-800 mb-4">📜 Quadro de Missões Avançado</h2>
-          {selectedHero ? (
-            <EnhancedQuestBoard hero={selectedHero} />
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              <div className="text-5xl mb-2">🦸</div>
-              <p>Selecione um herói para ver missões avançadas.</p>
-              <a href="/" className="mt-4 inline-block px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300">Selecionar Herói</a>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Quadro de Missões removido por enquanto */}
 
       {activeSection === 'recrutamento' && (
         <div className="bg-white p-6 rounded-lg border border-gray-200 text-gray-800">

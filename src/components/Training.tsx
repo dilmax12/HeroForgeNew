@@ -170,6 +170,30 @@ const Training: React.FC = () => {
     return () => clearInterval(id);
   }, [activeTraining, trainingEndTime]);
 
+  // Retomar/Concluir treino baseado em stats persistidos
+  useEffect(() => {
+    if (!selectedHero) return;
+    const activeUntilISO = selectedHero.stats.trainingActiveUntil;
+    const activeName = selectedHero.stats.trainingActiveName;
+    if (!activeUntilISO || !activeName) return;
+    const endTs = new Date(activeUntilISO).getTime();
+    const now = Date.now();
+    const option = TRAINING_OPTIONS.find(o => o.name === activeName) || null;
+    if (!option) {
+      // Limpar status inválido
+      updateHero(selectedHero.id, { stats: { ...selectedHero.stats, trainingActiveUntil: undefined, trainingActiveName: undefined } });
+      return;
+    }
+    if (now < endTs) {
+      // Reativar contador local
+      setActiveTraining(option.id);
+      setTrainingEndTime(endTs);
+    } else {
+      // Concluir imediatamente e aplicar decremento diário
+      completeTraining(option);
+    }
+  }, [selectedHero?.id]);
+
   if (!selectedHero) {
     return (
       <div className="max-w-4xl mx-auto p-6 text-center">
@@ -212,6 +236,18 @@ const Training: React.FC = () => {
 
   const startTraining = (option: TrainingOption) => {
     if (!canAffordTraining(option) || !meetsRequirements(option)) return;
+
+    // Bloquear se qualquer atributo-alvo já estiver no limite
+    if (option.rewards.attributes) {
+      const atCap = Object.entries(option.rewards.attributes).some(([attr]) => {
+        const current = (selectedHero.attributes as any)[attr] || 0;
+        return current >= ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE;
+      });
+      if (atCap) {
+        alert('Este treinamento não pode ser iniciado: atributo já está no limite.');
+        return;
+      }
+    }
 
     // Verificar limite diário de treinos e reset se mudou o dia
     const now = new Date();
@@ -405,7 +441,11 @@ const Training: React.FC = () => {
           const trainingsToday = selectedHero.stats.trainingsToday || 0;
           const dailyLimit = selectedHero.stats.trainingDailyLimit || 5;
           const remaining = Math.max(0, dailyLimit - trainingsToday);
-          const isAvailable = canAfford && meetsReqs && !activeTraining && remaining > 0;
+          const attrCapBlocked = option.rewards.attributes ? Object.entries(option.rewards.attributes).some(([attr]) => {
+            const current = (selectedHero.attributes as any)[attr] || 0;
+            return current >= ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE;
+          }) : false;
+          const isAvailable = canAfford && meetsReqs && !activeTraining && remaining > 0 && !attrCapBlocked;
 
           return (
             <div
@@ -479,6 +519,7 @@ const Training: React.FC = () => {
               >
                 {!canAfford ? ((option.currency || 'gold') === 'gold' ? 'Ouro Insuficiente' : (option.currency || 'gold') === 'glory' ? 'Glória Insuficiente' : 'Essência Insuficiente') :
                  !meetsReqs ? 'Requisitos não atendidos' :
+                 attrCapBlocked ? 'Atributo no limite' :
                  activeTraining ? 'Treinamento em andamento' :
                  remaining <= 0 ? 'Limite diário atingido' :
                  'Iniciar Treinamento'}

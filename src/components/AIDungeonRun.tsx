@@ -101,6 +101,18 @@ export default function AIDungeonRun() {
           { key: 'Cautela', text: 'Avançar com cautela evitando armadilhas', success: cautious },
           { key: 'Audácia', text: 'Forçar passagem correndo riscos por recompensas', success: bold },
         ]);
+      } catch (err) {
+        // Fallback visual quando a geração da missão falhar
+        console.warn('[AIDungeonRun] Falha ao gerar missão IA, usando opções locais:', err);
+        const base = Math.min(0.85, 0.3 + (hero?.derivedAttributes.power || 5) / 40);
+        const cautious = Math.min(0.95, base + 0.1);
+        const bold = Math.max(0.25, base - 0.1);
+        setDescription(`Etapa ${stageIndex + 1}/${stagesTotal}: A sala está silenciosa, com marcas de batalha recentes nas paredes.`);
+        setChoices([
+          { key: 'Explorar', text: 'Vasculhar a área em busca de pistas', success: base },
+          { key: 'Cautela', text: 'Prosseguir com cuidado, evitando armadilhas', success: cautious },
+          { key: 'Audácia', text: 'Forçar passagem em busca de atalhos', success: bold },
+        ]);
       } finally {
         setLoading(false);
         inflightRef.current = false;

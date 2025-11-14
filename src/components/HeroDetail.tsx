@@ -3,11 +3,13 @@ import { useState } from 'react';
 import { useHeroStore } from '../store/heroStore';
 import { SHOP_ITEMS, ITEM_SETS } from '../utils/shop';
 import NarrativeChapters from './NarrativeChapters';
+import { getAvailableRecipes } from '../utils/forging';
+import { useHeroStore } from '../store/heroStore';
 
 const HeroDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { heroes, deleteHero, createReferralInvite, getReferralInvitesForHero } = useHeroStore();
+  const { heroes, deleteHero, createReferralInvite, getReferralInvitesForHero, craftItem } = useHeroStore();
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [creatingInvite, setCreatingInvite] = useState(false);
   
@@ -75,13 +77,7 @@ const HeroDetail = () => {
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             <span className="px-3 py-1 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 text-sm">Nível {hero.progression.level}</span>
-            <Link
-              to="/progression"
-              className="px-3 py-1 sm:px-4 sm:py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-              title="Abrir Progressão do Herói"
-            >
-              📈 Ver Progressão
-            </Link>
+            <span className="px-3 py-1 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-sm">Rank {hero.rankData?.currentRank || 'F'}</span>
           </div>
         </div>
 
@@ -94,6 +90,8 @@ const HeroDetail = () => {
               {hero.background && <div><span className="text-gray-400">Antecedente</span><div className="text-white">{hero.background[0].toUpperCase()+hero.background.slice(1)}</div></div>}
               <div><span className="text-gray-400">XP</span><div className="text-white">{hero.progression.xp}</div></div>
               <div><span className="text-gray-400">Ouro</span><div className="text-white">{hero.progression.gold}</div></div>
+              <div><span className="text-gray-400">Missões</span><div className="text-white">{hero.stats?.questsCompleted || 0}</div></div>
+              <div><span className="text-gray-400">Rank Atual</span><div className="text-white">{hero.rankData?.currentRank || 'F'}</div></div>
             </div>
           </div>
           <div className="rounded-xl p-4 bg-gray-800/70 border border-white/10">
@@ -171,6 +169,33 @@ const HeroDetail = () => {
               })}
             </div>
           )}
+
+          {/* Forja Simples */}
+          <div className="mt-4">
+            <h4 className="text-sm font-semibold text-white mb-2">Forja Simples</h4>
+            {(() => {
+              const recipes = getAvailableRecipes(hero);
+              if (recipes.length === 0) return (<div className="text-xs text-gray-400">Nenhuma receita disponível com seus materiais e rank atual.</div>);
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {recipes.map(r => (
+                    <div key={r.id} className="bg-gray-700/50 p-3 rounded-md flex items-center justify-between">
+                      <div>
+                        <div className="text-white text-sm font-medium">{r.name}</div>
+                        <div className="text-xs text-gray-300">Insumos: {r.inputs.map(i => `${i.qty}x ${SHOP_ITEMS.find(s => s.id === i.id)?.name || i.id}`).join(', ')}</div>
+                      </div>
+                      <button
+                        onClick={() => craftItem(hero.id, r.id)}
+                        className="px-3 py-1 rounded bg-emerald-600 text-white text-xs hover:bg-emerald-700"
+                      >
+                        Forjar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
         </div>
 
         {/* Capítulos da Jornada */}

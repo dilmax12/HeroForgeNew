@@ -8,6 +8,7 @@ import type { EnhancedQuestChoice } from '../types/hero';
 import { generateQuestBoard, QUEST_ACHIEVEMENTS } from '../utils/quests';
 import { resolveCombat, autoResolveCombat } from '../utils/combat';
 import { purchaseItem, sellItem, equipItem, useConsumable, SHOP_ITEMS, ITEM_SETS, generateProceduralItem } from '../utils/shop';
+import { RECIPES } from '../utils/forging';
 import { updateHeroReputation, generateReputationEvents } from '../utils/reputationSystem';
 import { generateAllLeaderboards, getHeroRanking, calculateTotalScore } from '../utils/leaderboardSystem';
 import { generateDailyGoals, updateDailyGoalProgress, checkPerfectDayGoal, removeExpiredGoals, getDailyGoalRewards } from '../utils/dailyGoalsSystem';
@@ -57,6 +58,7 @@ interface HeroState {
   equipItem: (heroId: string, itemId: string) => boolean;
   useItem: (heroId: string, itemId: string) => boolean;
   upgradeItem: (heroId: string, itemId: string) => boolean;
+  craftItem: (heroId: string, recipeId: string) => boolean;
   // Serviços de Forja
   refineEquippedItem: (heroId: string, slot: 'weapon' | 'armor' | 'accessory') => boolean;
   fuseItems: (heroId: string, itemAId: string, itemBId: string) => boolean;
@@ -735,6 +737,14 @@ export const useHeroStore = create<HeroState>()(
             get().addItemToInventory(heroId, item.id, 1);
           });
         }
+
+        // Reputação de facções para missões da guilda
+        if (quest.isGuildQuest) {
+          const repByDifficulty: Record<string, number> = { 'facil': 5, 'medio': 8, 'dificil': 12, 'epica': 20 };
+          const change = repByDifficulty[quest.difficulty] ?? 6;
+          // Aumentar reputação com a facção "Ordem" por padrão
+          state.updateReputation('Ordem', change);
+        }
         
         // Atualizar estatísticas
         const updatedHero = get().heroes.find(h => h.id === heroId)!;
@@ -1228,6 +1238,29 @@ export const useHeroStore = create<HeroState>()(
           derivedAttributes: derived
         });
 
+        return true;
+      },
+
+      craftItem: (heroId: string, recipeId: string) => {
+        const state = get();
+        const hero = state.heroes.find(h => h.id === heroId);
+        if (!hero) return false;
+        const recipe = RECIPES.find(r => r.id === recipeId);
+        if (!recipe) return false;
+        const rankOrder = ['F','E','D','C','B','A','S'] as const;
+        const heroRank = (hero.rankData?.currentRank || 'F') as typeof rankOrder[number];
+        const heroRankIdx = rankOrder.indexOf(heroRank);
+        const reqIdx = rankOrder.indexOf((recipe.rankRequired || 'F') as any);
+        if (heroRankIdx < reqIdx) return false;
+        for (const inp of recipe.inputs) {
+          if ((hero.inventory.items[inp.id] || 0) < inp.qty) return false;
+        }
+        const newItems = { ...hero.inventory.items };
+        recipe.inputs.forEach(inp => {
+          newItems[inp.id] = Math.max(0, (newItems[inp.id] || 0) - inp.qty);
+        });
+        newItems[recipe.output.id] = (newItems[recipe.output.id] || 0) + recipe.output.qty;
+        get().updateHero(heroId, { inventory: { ...hero.inventory, items: newItems } });
         return true;
       },
 

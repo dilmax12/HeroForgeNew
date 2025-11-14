@@ -1395,6 +1395,105 @@ export const SHOP_ITEMS: Item[] = [
     icon: '🔶',
     
   }
+  ,
+  // === Itens de Caça: Partes de Monstros ===
+  {
+    id: 'pele-lobo-sombrio',
+    name: 'Pele de Lobo Sombrio',
+    description: 'Material obtido em caçadas. Usado para reforçar armaduras leves.',
+    type: 'material',
+    rarity: 'comum',
+    price: 25,
+    icon: '🐺'
+  },
+  {
+    id: 'colmilho-vampirico',
+    name: 'Colmilho Vampírico',
+    description: 'Parte rara de monstros noturnos. Útil em forjas sombrias.',
+    type: 'material',
+    rarity: 'raro',
+    price: 80,
+    icon: '🧛'
+  },
+  {
+    id: 'osso-antigo',
+    name: 'Osso Antigo',
+    description: 'Osso resistente de criatura ancestral. Componente de armaduras.',
+    type: 'material',
+    rarity: 'raro',
+    price: 70,
+    icon: '🦴'
+  },
+  // === Itens de Caça: Ervas e Recursos ===
+  {
+    id: 'erva-sangue',
+    name: 'Erva de Sangue',
+    description: 'Planta vermelha usada por curandeiros em poções de vida.',
+    type: 'material',
+    rarity: 'comum',
+    price: 20,
+    icon: '🌿'
+  },
+  {
+    id: 'essencia-lunar',
+    name: 'Essência Lunar',
+    description: 'Essência rara coletada em clareiras sob lua cheia.',
+    type: 'material',
+    rarity: 'raro',
+    price: 120,
+    icon: '🌙'
+  },
+  {
+    id: 'cristal-runico',
+    name: 'Cristal Rúnico',
+    description: 'Cristal com inscrições arcanas, usado em encantamentos.',
+    type: 'material',
+    rarity: 'epico',
+    price: 220,
+    icon: '🔷'
+  },
+  // === Itens de Caça: Pergaminhos de Suporte ===
+  {
+    id: 'pergaminho-protecao',
+    name: 'Pergaminho de Proteção',
+    description: 'Aumenta a resistência a dano por 20 minutos.',
+    type: 'consumable',
+    rarity: 'raro',
+    price: 140,
+    icon: '📜',
+    effects: { duration: 20 }
+  },
+  {
+    id: 'pergaminho-velocidade',
+    name: 'Pergaminho de Velocidade',
+    description: 'Agilidade temporária para escoltas e evasão (20 min).',
+    type: 'consumable',
+    rarity: 'raro',
+    price: 140,
+    icon: '📜',
+    effects: { duration: 20 }
+  },
+  // === Caçadas Especiais: Recompensas épicas garantidas ===
+  {
+    id: 'lamina-alpha',
+    name: 'Lâmina Alpha',
+    description: 'Forjada do líder da alcateia. +4 Força, +3 Destreza',
+    type: 'weapon',
+    rarity: 'epico',
+    price: 620,
+    icon: '🗡️',
+    bonus: { forca: 4, destreza: 3 }
+  },
+  {
+    id: 'armadura-pedra-rachada',
+    name: 'Armadura de Pedra Rachada',
+    description: 'Resíduo de golem, pesado e protetor. +6 Constituição',
+    type: 'armor',
+    rarity: 'epico',
+    price: 640,
+    icon: '🛡️',
+    bonus: { constituicao: 6 }
+  }
 ];
 
 // === CATEGORIAS DA LOJA ===

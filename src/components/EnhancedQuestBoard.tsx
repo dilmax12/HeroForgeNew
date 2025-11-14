@@ -9,6 +9,7 @@ import { useHeroStore } from '../store/heroStore';
 import { EnhancedQuest, EnhancedQuestChoice, Hero } from '../types/hero';
 import { enhancedMissionGenerator } from '../utils/enhancedMissions';
 import { worldStateManager } from '../utils/worldState';
+import { rankSystem } from '../utils/rankSystem';
 import { resumeAudioContextIfNeeded, playSuccess, playFailure } from '../utils/audioEffects';
 
 interface EnhancedQuestBoardProps {
@@ -77,6 +78,20 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
         worldState: hero.worldState,
         stamina: hero.stamina 
       });
+
+      // Contabilizar missão narrativa para progresso de rank
+      const updatedStats = {
+        ...hero.stats,
+        questsCompleted: (hero.stats.questsCompleted || 0) + 1,
+        lastActiveAt: new Date().toISOString()
+      } as any;
+      updateHero(hero.id, { stats: updatedStats });
+
+      // Garantir rankData e atualizar progresso
+      const currentHero = useHeroStore.getState().heroes.find(h => h.id === hero.id)!;
+      const ensuredRank = currentHero.rankData ?? rankSystem.initializeRankData(currentHero);
+      const newRankData = rankSystem.updateRankData({ ...currentHero, stats: updatedStats }, ensuredRank);
+      updateHero(hero.id, { rankData: newRankData });
       
       setLastResult(result);
       setSelectedMission(null);

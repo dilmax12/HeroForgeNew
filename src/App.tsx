@@ -27,6 +27,7 @@ import Training from './components/Training'
 import { WorldStateDemo } from './components/WorldStateDemo'
 import MissionsHub from './components/MissionsHub'
 import Dungeon20 from './components/Dungeon20'
+import HuntingMissions from './components/HuntingMissions'
 import Inventory from './components/Inventory'
 import { useEffect } from 'react'
 import { useHeroStore } from './store/heroStore'
@@ -393,6 +394,7 @@ function App() {
           <Route path="missions" element={<MissionsHub />} />
           <Route path="dungeon-20" element={<Dungeon20 />} />
           <Route path="dungeon-infinita" element={<Dungeon20 />} />
+          <Route path="hunting" element={<HuntingMissions />} />
           {/* Centralização de modos de missão em um único hub */}
           <Route path="quests" element={<MissionsHub />} />
           <Route path="daily-goals" element={<DailyGoalsWrapper />} />
