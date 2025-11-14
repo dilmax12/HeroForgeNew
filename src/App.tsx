@@ -35,6 +35,7 @@ import MountsPanel from './components/MountsPanel'
 import { useEffect } from 'react'
 import { startPlaytimeHeartbeat, stopPlaytimeHeartbeat } from './services/progressService'
 import { useHeroStore } from './store/heroStore'
+import { formatTitleDisplay } from './utils/titles'
 import { HeroJournal } from './components/HeroJournal'
 import QuickMission from './components/QuickMission'
 import JourneyFlow from './components/JourneyFlow'
@@ -311,7 +312,10 @@ function QuickMissionWrapper() {
 }
 
 function App() {
-  const { heroes, markCelebrationViewed } = useHeroStore();
+  const heroes = useHeroStore(s => s.heroes);
+  const markCelebrationViewed = useHeroStore(s => s.markCelebrationViewed);
+  const selectedHeroId = useHeroStore(s => s.selectedHeroId);
+  const selectedHero = heroes.find(h => h.id === selectedHeroId);
   
   // Configuração de segurança básica
   useEffect(() => {
@@ -353,6 +357,16 @@ function App() {
       document.head.appendChild(cspMeta);
     }
   }, []);
+
+  useEffect(() => {
+    try {
+      if (selectedHero) {
+        document.title = formatTitleDisplay(selectedHero);
+      } else {
+        document.title = 'HeroForgeNew';
+      }
+    } catch {}
+  }, [selectedHero?.id, selectedHero?.activeTitle, selectedHero?.name]);
 
   useEffect(() => {
     try {

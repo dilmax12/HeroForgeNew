@@ -42,6 +42,8 @@ import { getPrefs, setPrefs } from '../utils/userPreferences';
 import { getRecommendedTalentPlan } from '../utils/talentRecommendations';
 import { getClassPreset } from '../utils/buildPresets';
 import { saveDraft, loadDraft, clearDraft } from '../utils/creationDraft';
+import ErrorBoundary from './ErrorBoundary';
+import { validateBuild } from '../utils/buildValidate';
 
 const HeroForm = () => {
   const [formData, setFormData] = useState<HeroCreationData>({
@@ -93,8 +95,10 @@ const HeroForm = () => {
     if (typeof prefs.autoSuggestDisabled === 'boolean') setDisableAutoSuggestion(prefs.autoSuggestDisabled);
   }, [formData.element, formData.class]);
 
+  const draftTimer = useRef<number | null>(null);
   useEffect(() => {
-    saveDraft(formData);
+    if (draftTimer.current) window.clearTimeout(draftTimer.current)
+    draftTimer.current = window.setTimeout(() => { saveDraft(formData) }, 300)
   }, [formData]);
 
   const handleGenerateName = async () => {
@@ -495,8 +499,30 @@ const HeroForm = () => {
         >
           Limpar rascunho
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            const res = validateBuild(formData as any)
+            if (res.ok) setLimitWarning('Build válido ✅')
+            else setLimitWarning(res.issues.join(' • '))
+          }}
+          className="px-3 py-1 rounded bg-amber-600 text-white text-xs hover:bg-amber-700"
+        >
+          Validar build
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setFormData(prev => ({ ...prev, name: '', race: 'humano', class: 'guerreiro', alignment: 'neutro-puro', attributes: createInitialAttributes(), element: 'physical', plannedTalents: [] }))
+            setLimitWarning('Build resetado')
+          }}
+          className="px-3 py-1 rounded bg-gray-600 text-white text-xs hover:bg-gray-700"
+        >
+          Resetar build
+        </button>
       </div>
       
+      <ErrorBoundary>
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Seção 1: Raça e Nome */}
         <div className="bg-gray-700 p-4 rounded-lg">
@@ -1084,6 +1110,7 @@ const HeroForm = () => {
           </button>
         </div>
       </form>
+      </ErrorBoundary>
 
       {confirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="confirm-create-title">

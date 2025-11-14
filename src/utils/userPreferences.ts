@@ -16,4 +16,3 @@ export function setPrefs(p: Prefs) {
     localStorage.setItem('hfn_prefs', JSON.stringify(next))
   } catch {}
 }
-

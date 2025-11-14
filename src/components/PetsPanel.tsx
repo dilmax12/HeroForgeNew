@@ -115,8 +115,8 @@ const EggCard: React.FC<{ egg: Egg; onIdentify: () => void; onIncubate: () => vo
   );
 };
 
-  const PetCard: React.FC<{ pet: Pet; onTrain: () => void; onSoulStone: () => void; onFeedBasic: () => void; onFeedDeluxe: () => void; onSetActive: () => void; onRename: (name: string) => void; onRefine: () => void; inventory: Record<string, number>; isActive: boolean }>
-  = ({ pet, onTrain, onSoulStone, onFeedBasic, onFeedDeluxe, onSetActive, onRename, onRefine, inventory, isActive }) => (
+  const PetCard: React.FC<{ pet: Pet; onTrain: () => void; onSoulStone: () => void; onFeedBasic: () => void; onFeedDeluxe: () => void; onSetActive: () => void; onRename: (name: string) => void; onRefine: () => void; onSuggestMission?: () => void; inventory: Record<string, number>; isActive: boolean }>
+  = ({ pet, onTrain, onSoulStone, onFeedBasic, onFeedDeluxe, onSetActive, onRename, onRefine, onSuggestMission, inventory, isActive }) => (
     <div className="p-4 rounded-lg bg-slate-800 border border-slate-700 flex flex-col gap-2">
       <div className="flex justify-between items-center">
         <div className="font-semibold">{pet.name} {isActive && <span className="ml-2 text-xs bg-emerald-700 text-white px-2 py-1 rounded">Ativo</span>} {pet.mutation?.visualBadge && <span className="ml-1">{pet.mutation.visualBadge}</span>}</div>
@@ -149,7 +149,21 @@ const EggCard: React.FC<{ egg: Egg; onIdentify: () => void; onIncubate: () => vo
         <button disabled={!inventory['racao-basica']} onClick={onFeedBasic} className={`px-3 py-1 rounded ${inventory['racao-basica'] ? 'bg-orange-600 hover:bg-orange-700' : 'bg-gray-700'} text-white text-sm`}>🍖 Ração (+50 XP)</button>
         <button disabled={!inventory['racao-deluxe']} onClick={onFeedDeluxe} className={`px-3 py-1 rounded ${inventory['racao-deluxe'] ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gray-700'} text-white text-sm`}>🍗 Ração Deluxe (+150 XP)</button>
         <button onClick={onSetActive} className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-sm">⭐ Tornar Ativo</button>
-        <button disabled={!inventory['essencia-vinculo']} onClick={onRefine} className={`px-3 py-1 rounded ${inventory['essencia-vinculo'] ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-700'} text-white text-sm`}>🔗 Refinar Vínculo (+1%)</button>
+        <button disabled={!inventory['essencia-vinculo'] && !inventory['pedra-magica']} onClick={onRefine} className={`px-3 py-1 rounded ${(inventory['essencia-vinculo'] || inventory['pedra-magica']) ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-700'} text-white text-sm`}>🔗 Refinar Vínculo (+1%)</button>
+        {onSuggestMission && !(inventory['essencia-vinculo'] || inventory['pedra-magica']) && (
+          <button onClick={onSuggestMission} className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-sm">🐾 Sugerir Missão</button>
+        )}
+        <span className="text-[11px] text-gray-400 self-center">
+          {(() => {
+            const needBond = !(inventory['essencia-vinculo'] || 0);
+            const needMagic = !(inventory['pedra-magica'] || 0);
+            const parts: string[] = [];
+            if (needBond) parts.push('🔗 Essência de Vínculo');
+            if (needMagic) parts.push('🔷 Pedra Mágica');
+            if (parts.length === 0) return 'Pronto para refino';
+            return `Materiais: ${parts.join(' ou ')}`;
+          })()}
+        </span>
         <button disabled={!inventory['tonico-companheiro']} onClick={() => {
           if (inventory['tonico-companheiro']) {
             if (consumeInventoryItem(useHeroStore.getState().getSelectedHero()!.id, 'tonico-companheiro', 1)) {
@@ -167,7 +181,7 @@ const EggCard: React.FC<{ egg: Egg; onIdentify: () => void; onIncubate: () => vo
 );
 
 export const PetsPanel: React.FC = () => {
-  const { getSelectedHero, generateEggForSelected, identifyEggForSelected, startIncubationForSelected, accelerateIncubationForSelected, hatchEggForSelected, consumeInventoryItem, addPetXPForSelected, setActivePet, updateHero, refinePetForSelected } = useHeroStore();
+  const { getSelectedHero, generateEggForSelected, identifyEggForSelected, startIncubationForSelected, accelerateIncubationForSelected, hatchEggForSelected, consumeInventoryItem, addPetXPForSelected, setActivePet, updateHero, refinePetForSelected, suggestCompanionQuestForSelected } = useHeroStore();
   const hero = getSelectedHero();
   const [tab, setTab] = useState<'ovos'|'camara'|'meus'|'historico'>('ovos');
   const [hatchingEggId, setHatchingEggId] = useState<string | null>(null);
@@ -417,6 +431,12 @@ export const PetsPanel: React.FC = () => {
                 onRename={(name) => updateHero(hero.id, { pets: (hero.pets || []).map(p => p.id === pet.id ? { ...p, name } : p) })}
                 isActive={hero.activePetId === pet.id}
                 onRefine={() => refinePetForSelected(pet.id)}
+                onSuggestMission={() => {
+                  const ok = suggestCompanionQuestForSelected();
+                  if (ok) {
+                    try { (window as any).notificationBus?.emit?.({ type: 'quest', title: 'Missão sugerida', message: 'Uma missão de companheiros foi adicionada ao quadro', icon: '🐾', duration: 2500 }); } catch {}
+                  }
+                }}
               />
             ))}
           </div>
@@ -472,6 +492,8 @@ export const PetsPanel: React.FC = () => {
         const cdMs = hero.hatchCooldownEndsAt ? Math.max(0, new Date(hero.hatchCooldownEndsAt).getTime() - Date.now()) : 0;
         const gold = hero.progression.gold || 0;
         const insufficient = gold < hatchCost;
+        const reduceMsPreview = Math.floor((confirmAccelerateGold / 10) * 60 * 1000);
+        const newCdMsPreview = cdMs > 0 ? Math.max(0, cdMs - reduceMsPreview) : 0;
         return (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center">
             <div className="w-full max-w-md rounded-xl border border-amber-500 bg-slate-900 p-5 text-white">
@@ -495,6 +517,9 @@ export const PetsPanel: React.FC = () => {
               <div className="mt-3">
                 <label className="text-xs text-gray-300">Acelerar cooldown com ouro (10 ouro = 1 min)</label>
                 <input type="number" min={0} value={confirmAccelerateGold} onChange={(e) => setConfirmAccelerateGold(Math.max(0, Number(e.target.value)))} className="mt-1 w-full px-2 py-1 rounded bg-slate-800 border border-slate-700" />
+                {confirmAccelerateGold > 0 && (
+                  <div className="mt-2 text-xs text-amber-300">Redução prevista: {Math.floor(reduceMsPreview/60000)} min • Novo cooldown: {Math.ceil(newCdMsPreview/1000)}s</div>
+                )}
               </div>
               {insufficient && <div className="mt-2 text-xs text-red-300">Ouro insuficiente para chocar.</div>}
               <div className="mt-4 flex gap-2">

@@ -118,6 +118,7 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
   const bestMountId = React.useMemo(() => {
     const mounts = hero.mounts || [];
     if (!mounts.length) return undefined as string | undefined;
+    if (hero.favoriteMountId && mounts.some(m => m.id === hero.favoriteMountId)) return hero.favoriteMountId as string;
     const stageOrder: Record<string, number> = { comum: 0, encantada: 1, lendaria: 2 };
     const rarityOrder: Record<string, number> = { comum: 0, incomum: 1, raro: 2, epico: 3, lendario: 4, mistico: 5 } as any;
     const score = (m: any) => {
@@ -125,7 +126,7 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
       return (m.speedBonus || 0) * 3 + attrSum + (stageOrder[m.stage] || 0) * 2 + (rarityOrder[m.rarity] || 0);
     };
     return mounts.slice().sort((a,b) => score(b) - score(a))[0]?.id as string | undefined;
-  }, [hero.mounts]);
+  }, [hero.mounts, hero.favoriteMountId]);
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();

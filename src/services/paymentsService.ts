@@ -36,4 +36,3 @@ export async function verifyPurchase(sessionId: string): Promise<{ ok: boolean; 
     return { ok: true };
   }
 }
-

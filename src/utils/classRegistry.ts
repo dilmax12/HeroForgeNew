@@ -146,3 +146,4 @@ export const CLASS_METADATA: Record<HeroClass, ClassMeta> = {
     suggestedRaces: ['humano', 'orc']
   }
 }
+

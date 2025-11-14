@@ -4,13 +4,20 @@ import { Mount } from '../types/hero'
 import { notificationBus } from './NotificationSystem'
 
 const sampleMounts: Mount[] = [
-  { id: crypto.randomUUID(), name: 'Cavalo Rústico', type: 'cavalo', rarity: 'comum', stage: 'comum', speedBonus: 1, attributes: {}, createdAt: new Date().toISOString() },
+  { id: crypto.randomUUID(), name: 'Cavalo Rústico', type: 'cavalo', rarity: 'comum', stage: 'comum', speedBonus: 1, attributes: { destreza: 1 }, createdAt: new Date().toISOString() },
   { id: crypto.randomUUID(), name: 'Lobo Gigante', type: 'lobo', rarity: 'raro', stage: 'comum', speedBonus: 0, attributes: { forca: 2 }, createdAt: new Date().toISOString() },
-  { id: crypto.randomUUID(), name: 'Grifo Jovem', type: 'grifo', rarity: 'raro', stage: 'comum', speedBonus: 1, attributes: { destreza: 1 }, createdAt: new Date().toISOString() }
+  { id: crypto.randomUUID(), name: 'Grifo Jovem', type: 'grifo', rarity: 'raro', stage: 'comum', speedBonus: 1, attributes: { destreza: 1 }, createdAt: new Date().toISOString() },
+  { id: crypto.randomUUID(), name: 'Urso Montanhês', type: 'urso', rarity: 'incomum', stage: 'comum', speedBonus: 0, attributes: { forca: 2 }, createdAt: new Date().toISOString() },
+  { id: crypto.randomUUID(), name: 'Felino Ágil', type: 'felino', rarity: 'raro', stage: 'comum', speedBonus: 1, attributes: { destreza: 2 }, createdAt: new Date().toISOString() },
+  { id: crypto.randomUUID(), name: 'Cervo Celeste', type: 'cervo', rarity: 'incomum', stage: 'comum', speedBonus: 1, attributes: { destreza: 1 }, createdAt: new Date().toISOString() },
+  { id: crypto.randomUUID(), name: 'Alce Majestoso', type: 'alce', rarity: 'raro', stage: 'comum', speedBonus: 1, attributes: { constituicao: 2 }, createdAt: new Date().toISOString() },
+  { id: crypto.randomUUID(), name: 'Hipogrifo Jovem', type: 'hipogrifo', rarity: 'raro', stage: 'comum', speedBonus: 1, attributes: { destreza: 2 }, createdAt: new Date().toISOString() },
+  { id: crypto.randomUUID(), name: 'Rinoceronte de Guerra', type: 'rinoceronte', rarity: 'raro', stage: 'comum', speedBonus: 0, attributes: { forca: 3, constituicao: 1 }, createdAt: new Date().toISOString() },
+  { id: crypto.randomUUID(), name: 'Wyvern Veloz', type: 'wyvern', rarity: 'raro', stage: 'comum', speedBonus: 1, attributes: { destreza: 2 }, createdAt: new Date().toISOString() }
 ]
 
 export const MountsPanel: React.FC = () => {
-  const { getSelectedHero, addMountToSelected, setActiveMount, evolveMountForSelected, refineCompanion, buyItem } = useHeroStore()
+  const { getSelectedHero, addMountToSelected, setActiveMount, evolveMountForSelected, refineCompanion, buyItem, setFavoriteMount, generateMountForSelected } = useHeroStore()
   const hero = getSelectedHero()
   const [sortKey, setSortKey] = useState<'velocidade'|'raridade'|'estagio'|'nome'>('estagio')
   const [showEvolvableOnly, setShowEvolvableOnly] = useState(false)
@@ -62,6 +69,7 @@ export const MountsPanel: React.FC = () => {
 
   const bestMountId = useMemo(() => {
     if (!mounts.length) return undefined
+    if (hero?.favoriteMountId && mounts.some(m => m.id === hero.favoriteMountId)) return hero.favoriteMountId
     const stageOrder: Record<string, number> = { comum: 0, encantada: 1, lendaria: 2 }
     const rarityOrder: Record<string, number> = { comum: 0, incomum: 1, raro: 2, epico: 3, lendario: 4, mistico: 5 }
     const score = (m: Mount) => {
@@ -69,7 +77,7 @@ export const MountsPanel: React.FC = () => {
       return (m.speedBonus || 0) * 3 + attrSum + (stageOrder[m.stage] || 0) * 2 + (rarityOrder[m.rarity] || 0)
     }
     return mounts.slice().sort((a,b) => score(b) - score(a))[0]?.id
-  }, [mounts])
+  }, [mounts, hero?.favoriteMountId])
 
   const activeSpeed = useMemo(() => {
     const am = (hero.mounts || []).find(m => m.id === activeId)
@@ -94,6 +102,10 @@ export const MountsPanel: React.FC = () => {
             <button key={m.id} onClick={() => addMountToSelected({ ...m, id: crypto.randomUUID() })} className="px-3 py-2 rounded bg-amber-600 hover:bg-amber-700 text-white text-sm">Adicionar {m.name}</button>
           ))}
           <button disabled={!bestMountId} onClick={() => bestMountId && setActiveMount(bestMountId)} className={`px-3 py-2 rounded ${bestMountId?'bg-indigo-600 hover:bg-indigo-700':'bg-gray-700'} text-white text-sm`}>Ativar melhor</button>
+          {hero?.favoriteMountId && (
+            <button onClick={() => setActiveMount(hero.favoriteMountId)} className="px-3 py-2 rounded bg-amber-600 hover:bg-amber-700 text-white text-sm">Ativar favorita ⭐</button>
+          )}
+          <button onClick={() => generateMountForSelected()} className="px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-sm">Gerar aleatória</button>
         </div>
       </div>
 
@@ -189,7 +201,7 @@ export const MountsPanel: React.FC = () => {
           return (
           <div key={m.id} className={`p-4 rounded-lg ${isActive?'border-amber-500':'border-slate-700'} bg-slate-800 border flex flex-col gap-2`}>
             <div className="flex justify-between items-center">
-              <div className="font-semibold">{typeIcon[m.type]} {m.name} {m.stage==='encantada' && <span className="ml-2 text-xs bg-purple-700 text-white px-2 py-1 rounded">Encantada</span>} {m.stage==='lendaria' && <span className="ml-2 text-xs bg-amber-600 text-white px-2 py-1 rounded">Lendária</span>} {typeof m.refineLevel==='number' && m.refineLevel>0 && <span className="ml-2 text-xs bg-violet-700 text-white px-2 py-1 rounded">Refino +{m.refineLevel}</span>}</div>
+              <div className="font-semibold">{typeIcon[m.type]} {m.name} {m.stage==='encantada' && <span className="ml-2 text-xs bg-purple-700 text-white px-2 py-1 rounded">Encantada</span>} {m.stage==='lendaria' && <span className="ml-2 text-xs bg-amber-600 text-white px-2 py-1 rounded">Lendária</span>} {typeof m.refineLevel==='number' && m.refineLevel>0 && <span className="ml-2 text-xs bg-violet-700 text-white px-2 py-1 rounded">Refino +{m.refineLevel}</span>} {hero.favoriteMountId===m.id && <span className="ml-2 text-xs bg-amber-700 text-white px-2 py-1 rounded">⭐ Favorita</span>}</div>
               <div className="text-xs text-amber-300">{m.type} • {m.stage} • {m.rarity}</div>
             </div>
             <div className="text-sm text-gray-200">Velocidade: +{m.speedBonus}</div>
@@ -207,15 +219,10 @@ export const MountsPanel: React.FC = () => {
               {isActive && (
                 <button onClick={() => setActiveMount(undefined)} className="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm">Desativar</button>
               )}
+              <button onClick={() => setFavoriteMount(hero.favoriteMountId===m.id?undefined:m.id)} className="px-3 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white text-sm">{hero.favoriteMountId===m.id?'Remover Favorita':'Favoritar ⭐'}</button>
               <button onClick={() => setCompareAId(m.id)} className="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm">Comparar A</button>
               <button onClick={() => setCompareBId(m.id)} className="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm">Comparar B</button>
               <button disabled={!canEvolve} title={canEvolve?`Consome 📜 x1${needsEssence?' + 🧬 x1':''} e ${m.stage==='comum'?200:700} ouro`:''} onClick={() => { if (canEvolve) { const ok = window.confirm(`Confirmar evolução de ${m.name}? Custos: 📜 x1${needsEssence?' + 🧬 x1':''} e ${m.stage==='comum'?200:700} ouro.`); if (ok) evolveMountForSelected(m.id); } }} className={`px-3 py-1 rounded ${canEvolve?'bg-purple-600 hover:bg-purple-700':'bg-gray-700'} text-white text-sm`}>Evoluir</button>
-              {!canEvolve && (
-                <button onClick={() => {
-                  const ok = suggestCompanionQuestForSelected();
-                  if (ok) notificationBus.emit({ type: 'quest', title: 'Missão sugerida', message: 'Uma missão de companheiros foi adicionada ao quadro', icon: '🐾', duration: 2500 });
-                }} className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-sm">Sugerir Missão</button>
-              )}
               <button disabled={!canRefineAny || isMaxRefine} title={isMaxRefine?'Refino máximo atingido':(canRefineAny?'Consome 🔷 Pedra Mágica ou 🔗 Essência de Vínculo':'') } onClick={() => { if (canRefineAny && !isMaxRefine) { const ok = window.confirm(`Tentar refinar ${m.name}? Consome 1 material e pode falhar.`); if (ok) refineCompanion(hero.id, 'mount', m.id); } }} className={`px-3 py-1 rounded ${(!canRefineAny || isMaxRefine)?'bg-gray-700':'bg-violet-600 hover:bg-violet-700'} text-white text-sm`}>{isMaxRefine?'Refino Máx.':'Refinar'}</button>
               {!isMaxRefine && <span className="text-[11px] text-gray-400 self-center">Chance ~{refineChance}%</span>}
             </div>

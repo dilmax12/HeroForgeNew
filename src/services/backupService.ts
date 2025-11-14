@@ -8,4 +8,3 @@ export async function triggerBackup(): Promise<{ ok: boolean; file?: string; siz
     return { ok: false, error: err?.message || String(err) };
   }
 }
-

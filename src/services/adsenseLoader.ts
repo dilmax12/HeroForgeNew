@@ -17,4 +17,3 @@ export function loadAdSense(clientId?: string) {
 export function pushAds() {
   try { (window as any).adsbygoogle = (window as any).adsbygoogle || []; (window as any).adsbygoogle.push({}); } catch {}
 }
-

@@ -55,3 +55,4 @@ export async function ensurePlayerProfile(userId: string, username?: string | nu
   if (insertError) return null;
   return (inserted && inserted[0]) as PlayerProfile;
 }
+

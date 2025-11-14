@@ -16,7 +16,10 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
-          router: ['react-router-dom']
+          router: ['react-router-dom'],
+          motion: ['framer-motion'],
+          state: ['zustand'],
+          supabase: ['@supabase/supabase-js']
         },
         assetFileNames: 'assets/[name]-[hash][extname]',
         chunkFileNames: 'assets/[name]-[hash].js',

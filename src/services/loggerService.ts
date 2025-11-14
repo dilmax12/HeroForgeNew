@@ -8,4 +8,3 @@ export async function logActivity(event: Record<string, any>): Promise<{ ok: boo
     return { ok: false, error: err?.message || String(err) };
   }
 }
-

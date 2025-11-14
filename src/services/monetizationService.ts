@@ -12,3 +12,4 @@ export async function getMonetizationConfig(): Promise<MonetizationConfig> {
   const data = await res.json();
   return data as MonetizationConfig;
 }
+

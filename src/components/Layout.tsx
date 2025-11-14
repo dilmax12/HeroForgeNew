@@ -302,9 +302,15 @@ const Layout = () => {
               {syncing && (
                 <span className="ml-2 text-xs text-amber-300">Sincronizando...</span>
               )}
-              {playerProgress?.last_login && (
-                <span className="ml-2 text-xs text-gray-300">Último login: {new Date(playerProgress.last_login).toLocaleString()}</span>
-              )}
+              {playerProgress?.last_login && (() => {
+                const d = new Date(playerProgress.last_login);
+                const diffMs = Date.now() - d.getTime();
+                const mins = Math.floor(diffMs / 60000);
+                const hours = Math.floor(mins / 60);
+                const days = Math.floor(hours / 24);
+                const rel = days > 0 ? `${days}d` : hours > 0 ? `${hours}h` : `${mins}m`;
+                return (<span className="ml-2 text-xs text-gray-300">Último login: {rel}</span>);
+              })()}
               {supabaseConfigured && (
                 <div className="hidden md:flex items-center gap-3 ml-3 bg-slate-800 border border-slate-600 px-3 py-2 rounded">
                   <button onClick={fetchPlayerProgressHeader} disabled={progressLoading} className={`px-2 py-1 rounded text-xs border ${progressLoading ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed' : 'bg-white text-gray-800 border-gray-300'}`}>{progressLoading ? (<span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></span><span>Progresso</span></span>) : 'Progresso'}</button>

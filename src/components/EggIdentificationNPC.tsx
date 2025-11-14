@@ -54,4 +54,3 @@ const EggIdentificationNPC: React.FC = () => {
 };
 
 export default EggIdentificationNPC;
-

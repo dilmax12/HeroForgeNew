@@ -29,4 +29,3 @@ export function getRecommendedTalentPlan(heroClass: HeroClass): string[] {
   }
   return plan
 }
-

@@ -11,4 +11,3 @@ export function getClassPreset(heroClass: HeroClass, race: HeroRace): { attribut
   const plannedTalents = getRecommendedTalentPlan(heroClass)
   return { attributes, element, plannedTalents }
 }
-

@@ -387,19 +387,6 @@ const AdventurersGuildHub: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <div className="mt-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">Conquistas Recentes</h3>
-                <div className="flex flex-wrap gap-2">
-                  {(selectedHero.progression.achievements || []).slice(Math.max(0, (selectedHero.progression.achievements || []).length - 6)).map((a, idx) => (
-                    <span key={idx} className="inline-flex items-center px-2 py-1 rounded text-sm bg-gray-100 text-gray-800 border border-gray-200">
-                      <span className="mr-1">{a.icon || '🏆'}</span>{a.title}
-                    </span>
-                  ))}
-                  {(selectedHero.progression.achievements || []).length === 0 && (
-                    <span className="text-sm text-gray-600">Nenhuma conquista registrada</span>
-                  )}
-                </div>
-              </div>
             </div>
           )}
 

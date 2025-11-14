@@ -53,7 +53,7 @@ function chooseBiome(hero: Hero): Biome {
 
 function gatingByRank(rank?: RankLevel): Array<HuntingCategory> {
   const r = rank || 'F'
-  if (r === 'F') return ['controle','coleta']
+  if (r === 'F') return ['controle','coleta','escolta']
   if (r === 'E') return ['controle','coleta','escolta']
   if (r === 'D') return ['controle','coleta','escolta']
   if (r === 'C') return ['controle','coleta','escolta']
@@ -70,9 +70,9 @@ function phasesByCategory(cat: HuntingCategory): number {
 
 function rankRequirement(cat: HuntingCategory): RankLevel {
   if (cat === 'especial') return 'A'
-  if (cat === 'escolta') return 'C'
-  if (cat === 'controle') return 'D'
-  return 'D'
+  if (cat === 'escolta') return 'F'
+  if (cat === 'controle') return 'F'
+  return 'F'
 }
 
 export function generateHuntingMission(hero: Hero, preferredBiome?: Biome): HuntingMission {
@@ -89,16 +89,20 @@ export function generateHuntingMission(hero: Hero, preferredBiome?: Biome): Hunt
     assassino: ['controle','especial']
   }
   const bias = Object.entries(classBias).find(([k]) => cls.includes(k))?.[1] || []
-  const pickPool = bias.length ? [...bias, ...allowed] : allowed
+  const pickPool = (rank === 'F') ? allowed : (bias.length ? [...bias, ...allowed] : allowed)
   const category = pickPool[Math.floor(Math.random() * pickPool.length)]
   const biome = preferredBiome || chooseBiome(hero)
   const pool = BIOME_TARGETS[biome]
   const chosen = pool[Math.floor(Math.random() * pool.length)]
   const amount = category === 'controle' ? (6 + Math.floor(Math.random()*5)) : category === 'coleta' ? (4 + Math.floor(Math.random()*4)) : category === 'escolta' ? 1 : 1
-  const diff: 'facil'|'medio'|'dificil'|'epica' = category === 'especial' ? 'epica' : hero.progression.level < 5 ? 'facil' : hero.progression.level < 10 ? 'medio' : 'dificil'
-  const phases = phasesByCategory(category)
+  let diff: 'facil'|'medio'|'dificil'|'epica' = category === 'especial' ? 'epica' : hero.progression.level < 5 ? 'facil' : hero.progression.level < 10 ? 'medio' : 'dificil'
+  let phases = phasesByCategory(category)
   const rankReq = rankRequirement(category)
-  const baseRewards = { xp: diff === 'epica' ? 120 : diff === 'dificil' ? 90 : diff === 'medio' ? 60 : 40, gold: diff === 'epica' ? 70 : diff === 'dificil' ? 50 : diff === 'medio' ? 35 : 20 }
+  if (rankReq === 'F') diff = 'facil'
+  if (rankReq === 'F' && category === 'coleta') phases = 2
+  if (rankReq === 'F' && category === 'escolta') phases = 3
+  let baseRewards = { xp: diff === 'epica' ? 120 : diff === 'dificil' ? 90 : diff === 'medio' ? 60 : 40, gold: diff === 'epica' ? 70 : diff === 'dificil' ? 50 : diff === 'medio' ? 35 : 20 }
+  if (rankReq === 'F' && category === 'escolta') baseRewards = { ...baseRewards, gold: baseRewards.gold + 5 }
   const title = category === 'controle' ? `Controle da ${chosen.target}` : category === 'coleta' ? `Coleta de Recursos` : category === 'escolta' ? `Escolta Segura` : `Alvo Especial`
   const objective = category === 'coleta' ? `Coletar ${amount} ${chosen.target === 'Bruxa da Névoa' ? 'Essências Umbral' : 'Ervas/Recursos'}` : `${chosen.objectivePrefix} ${category === 'controle' ? amount : chosen.target}`
   const narrative = category === 'controle' ? `A população de ${chosen.target} ameaça caravanas em ${biome}. Reduza sua presença.` : category === 'coleta' ? `Recursos raros foram avistados em ${biome}. Obtenha-os sob risco controlado.` : category === 'escolta' ? `Um NPC precisa alcançar ${biome} em segurança. O caminho é perigoso.` : `Um alvo único foi identificado em ${biome}. Derrube-o para obter recompensas.`

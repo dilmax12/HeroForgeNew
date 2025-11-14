@@ -6,4 +6,3 @@ create policy if not exists heroes_own_write on public.heroes for update using (
 
 create policy if not exists quests_own_read on public.quests for select using (auth.uid() = user_id);
 create policy if not exists quests_own_write on public.quests for update using (auth.uid() = user_id);
-

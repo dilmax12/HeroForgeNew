@@ -97,7 +97,7 @@ export type MountStage = 'comum' | 'encantada' | 'lendaria';
 export interface Mount {
   id: string;
   name: string;
-  type: 'cavalo' | 'lobo' | 'grifo' | 'javali' | 'lagarto' | 'draconiano';
+  type: 'cavalo' | 'lobo' | 'grifo' | 'javali' | 'lagarto' | 'draconiano' | 'urso' | 'felino' | 'cervo' | 'alce' | 'hipogrifo' | 'rinoceronte' | 'wyvern';
   rarity: MountRarity;
   stage: MountStage;
   speedBonus: number;
@@ -619,11 +619,12 @@ export interface Hero {
   // Mascotes e Ovos
   eggs?: Egg[];
   pets?: Pet[];
-  hatchHistory?: { eggId: string; petId: string; timestamp: string }[];
+  hatchHistory?: { eggId: string; petId: string; timestamp: string; rarity?: EggRarity; hatchCost?: number }[];
   activePetId?: string;
   hatchCooldownEndsAt?: string;
   mounts?: Mount[];
   activeMountId?: string;
+  favoriteMountId?: string;
 }
 
 export interface HeroCreationData {

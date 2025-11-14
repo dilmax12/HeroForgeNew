@@ -38,4 +38,3 @@ const ThemePreviewModal: React.FC<Props> = ({ open, onClose, previewFrameId }) =
 };
 
 export default ThemePreviewModal;
-

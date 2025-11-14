@@ -34,4 +34,3 @@ export function getRecommendedAttributePlan(heroClass: HeroClass): Array<{ attri
     default: return []
   }
 }
-

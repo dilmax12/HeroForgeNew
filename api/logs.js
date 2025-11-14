@@ -40,9 +40,14 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       try { await supabase.storage.createBucket('logs', { public: false }); } catch {}
-      const { data, error } = await supabase.storage.from('logs').list('', { limit: 20, sortBy: { column: 'created_at', order: 'desc' } });
+      const type = (req.query?.type || '').toString();
+      const limit = Number(req.query?.limit || 20);
+      const offset = Number(req.query?.offset || 0);
+      const { data, error } = await supabase.storage.from('logs').list('', { limit: limit, offset: offset, sortBy: { column: 'created_at', order: 'desc' } });
       if (error) return res.status(500).json({ error: error.message || 'Falha ao listar logs' });
-      return res.status(200).json({ files: data || [] });
+      const files = Array.isArray(data) ? data : [];
+      const filtered = type ? files.filter(f => String(f?.name || '').startsWith(type)) : files;
+      return res.status(200).json({ files: filtered });
     } catch (err) {
       console.error('logs list error', err);
       return res.status(500).json({ error: err?.message || 'Erro ao listar logs' });

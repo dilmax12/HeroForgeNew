@@ -74,9 +74,12 @@ export default function AdminDashboard() {
   const [progressLoading, setProgressLoading] = useState(false);
   const [progressError, setProgressError] = useState<string | null>(null);
   const [playerProgress, setPlayerProgress] = useState<{ missions_completed: number; achievements_unlocked: number; playtime_minutes: number; last_login?: string | null } | null>(null);
+  const [playerProfile, setPlayerProfile] = useState<any | null>(null);
   const [adminToken, setAdminToken] = useState('');
   const [logFiles, setLogFiles] = useState<any[]>([]);
   const [logPreview, setLogPreview] = useState<string>('—');
+  const [logType, setLogType] = useState<string>('');
+  const [logOffset, setLogOffset] = useState<number>(0);
 
   async function testSupabase() {
     setSbLoading(true);
@@ -119,6 +122,9 @@ export default function AdminDashboard() {
         const json = await res.json();
         if (!res.ok) throw new Error(json?.error || 'Falha ao carregar progresso');
         setPlayerProgress(json?.progress || null);
+        const res2 = await fetch(`/api/users?action=get&id=${encodeURIComponent(userId)}`);
+        const json2 = await res2.json();
+        if (res2.ok) setPlayerProfile(json2?.profile || null);
       }
     } catch (e: any) {
       setProgressError(e?.message || String(e));
@@ -130,7 +136,11 @@ export default function AdminDashboard() {
 
   async function fetchLogs() {
     try {
-      const res = await fetch('/api/logs', { headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : {} });
+      const qs = new URLSearchParams();
+      if (logType) qs.set('type', logType);
+      qs.set('limit', '20');
+      qs.set('offset', String(logOffset));
+      const res = await fetch(`/api/logs?${qs.toString()}`, { headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : {} });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Falha ao listar logs');
       setLogFiles(Array.isArray(data?.files) ? data.files : []);
@@ -487,6 +497,10 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
             <div className="text-sm text-gray-600">Último login</div>
             <div className="text-xs text-gray-900">{playerProgress?.last_login ? new Date(playerProgress.last_login).toLocaleString() : '—'}</div>
           </div>
+          <div className="bg-white p-4 rounded-lg border border-gray-200">
+            <div className="text-sm text-gray-600">Criado em</div>
+            <div className="text-xs text-gray-900">{playerProfile?.created_at ? new Date(playerProfile.created_at).toLocaleString() : '—'}</div>
+          </div>
         </div>
       </div>
 
@@ -575,13 +589,23 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
       {/* Logs Admin Panel */}
       <div className="bg-white p-6 rounded-lg border border-gray-200 mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-3">🧾 Logs (Admin)</h2>
-        <div className="flex items-end gap-2 mb-3">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Admin Token</label>
-            <input value={adminToken} onChange={e => setAdminToken(e.target.value)} className="bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Bearer token" />
+          <div className="flex items-end gap-2 mb-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Admin Token</label>
+              <input value={adminToken} onChange={e => setAdminToken(e.target.value)} className="bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Bearer token" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Tipo</label>
+              <select value={logType} onChange={e => { setLogType(e.target.value); setLogOffset(0); }} className="bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                <option value="">Todos</option>
+                <option value="backup-">Backup</option>
+                <option value="evt-">Eventos</option>
+              </select>
+            </div>
+            <button onClick={fetchLogs} className="px-3 py-2 bg-white text-purple-700 border border-purple-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">Listar logs</button>
+            <button onClick={() => { setLogOffset(Math.max(0, logOffset - 20)); fetchLogs(); }} className="px-2 py-2 bg-white text-gray-700 border border-gray-300 rounded">Prev</button>
+            <button onClick={() => { setLogOffset(logOffset + 20); fetchLogs(); }} className="px-2 py-2 bg-white text-gray-700 border border-gray-300 rounded">Next</button>
           </div>
-          <button onClick={fetchLogs} className="px-3 py-2 bg-white text-purple-700 border border-purple-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">Listar logs</button>
-        </div>
         <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
           {logFiles.length === 0 && (
             <div className="text-xs text-gray-500">—</div>
@@ -825,8 +849,14 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
             <div className="text-sm text-gray-600 mb-2">Relatório gerado</div>
             <div className="bg-white text-gray-800 border border-gray-200 rounded p-3 whitespace-pre-wrap text-sm min-h-[96px]">{aiReport || '—'}</div>
             <div className="mt-3 flex gap-2">
-              <button className="px-3 py-2 bg-white text-green-700 border border-green-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" onClick={exportKPIJson}>Exportar .json</button>
-              <button className="px-3 py-2 bg-white text-green-700 border border-green-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" onClick={exportKPICsv}>Exportar .csv</button>
+              <button className={`px-3 py-2 text-white rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center gap-2`} onClick={exportKPIJson}>
+                {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+                <span>Exportar .json</span>
+              </button>
+              <button className={`px-3 py-2 text-white rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center gap-2`} onClick={exportKPICsv}>
+                {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+                <span>Exportar .csv</span>
+              </button>
             </div>
           </div>
         </div>

@@ -513,6 +513,50 @@ export const BlacksmithNPC: React.FC<BlacksmithNPCProps> = ({ className = '' }) 
                                 </div>
                               )
                             })()}
+                            {(() => {
+                              const deficits = r.inputs.map(inp => {
+                                const have = hero.inventory.items[inp.id] || 0
+                                const need = Math.max(0, inp.qty - have)
+                                const item = SHOP_ITEMS.find(i => i.id === inp.id)
+                                const priceEach = item ? getDiscountedPrice(item, hero) : 0
+                                const currency = item?.currency || 'gold'
+                                return { id: inp.id, need, priceEach, currency, available: !!item }
+                              }).filter(d => d.need > 0)
+                              if (deficits.length === 0) return null
+                              const totals: Record<'gold'|'glory'|'arcaneEssence', number> = { gold: 0, glory: 0, arcaneEssence: 0 }
+                              deficits.forEach(d => {
+                                if (!d.available) return
+                                const cur = (d.currency as 'gold'|'glory'|'arcaneEssence')
+                                totals[cur] += d.priceEach * d.need
+                              })
+                              const haveGold = hero.progression.gold || 0
+                              const haveGlory = hero.progression.glory || 0
+                              const haveEss = hero.progression.arcaneEssence || 0
+                              const enough = (totals.gold <= haveGold) && (totals.glory <= haveGlory) && (totals.arcaneEssence <= haveEss)
+                              return (
+                                <div className="mt-3 p-2 rounded bg-slate-900/60 border border-white/10">
+                                  <div className="text-xs text-white mb-1">Compra rápida (faltantes)</div>
+                                  <div className="text-[11px] text-gray-200 space-x-2">
+                                    <span>Ouro: {Math.ceil(totals.gold)}</span>
+                                    <span>Glória: {Math.ceil(totals.glory)}</span>
+                                    <span>Essência: {Math.ceil(totals.arcaneEssence)}</span>
+                                  </div>
+                                  <div className="text-[11px] text-gray-400 mt-1">Saldo • Ouro: {haveGold} • Glória: {haveGlory} • Essência: {haveEss}</div>
+                                  <div className="mt-2 flex items-center gap-2">
+                                    <button
+                                      onClick={() => quickBuyAllForRecipe(r.id)}
+                                      disabled={!enough}
+                                      className={`px-2 py-1 rounded text-xs ${enough ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-slate-700 text-gray-300 cursor-not-allowed'}`}
+                                    >
+                                      Confirmar compra
+                                    </button>
+                                    {!enough && (
+                                      <span className="text-[11px] text-red-300">Saldo insuficiente para todos os insumos.</span>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })()}
                           </div>
                         )}
                       </div>

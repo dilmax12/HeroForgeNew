@@ -98,3 +98,4 @@ export default async function handler(req, res) {
     if (error) return res.status(500).json({ error: error.message || 'Falha ao atualizar login' });
     return res.status(200).json({ profile: Array.isArray(data) && data[0] ? data[0] : null });
   }
+

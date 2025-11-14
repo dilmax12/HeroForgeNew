@@ -14,4 +14,3 @@ export function getElementSuggestionReason(heroClass: HeroClass, race: HeroRace,
 
 function capitalize(str: string) { return str.charAt(0).toUpperCase() + str.slice(1) }
 function capitalizeClass(cls: string) { return cls.charAt(0).toUpperCase() + cls.slice(1) }
-

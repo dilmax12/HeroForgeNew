@@ -13,4 +13,3 @@ export function loadDraft(): Partial<HeroCreationData> | null {
 export function clearDraft() {
   try { localStorage.removeItem(KEY) } catch {}
 }
-

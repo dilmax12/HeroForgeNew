@@ -13,4 +13,3 @@ create policy "own_read" on public.player_progress for select using (auth.uid() 
 create policy "own_write" on public.player_progress for update using (auth.uid() = user_id);
 
 create index if not exists player_progress_updated_idx on public.player_progress (updated_at);
-

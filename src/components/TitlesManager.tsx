@@ -9,6 +9,7 @@ import {
   getRarityColor,
   getRarityBg
 } from '../utils/titles';
+import { getTitleAttributeBonus } from '../utils/titles';
 import { generateDynamicTitleForHero } from '../services/titleAIService';
 
 const TitlesManager: React.FC = () => {
@@ -163,6 +164,22 @@ const TitlesManager: React.FC = () => {
                   <p className="text-amber-400 text-sm mt-1">
                     Como será exibido: {formatTitleDisplay(selectedHero)}
                   </p>
+                  {/* Bônus passivos */}
+                  {(() => {
+                    const bonus = getTitleAttributeBonus(activeTitle.id);
+                    const entries = Object.entries(bonus).filter(([, v]) => typeof v === 'number' && v !== 0);
+                    if (!entries.length) return null;
+                    return (
+                      <div className="mt-2 text-xs text-gray-300">
+                        <span className="font-semibold">Bônus passivo:</span>{' '}
+                        {entries.map(([attr, val], idx) => (
+                          <span key={attr}>
+                            {attr} +{val}{idx < entries.length - 1 ? ', ' : ''}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
               <button
@@ -170,6 +187,21 @@ const TitlesManager: React.FC = () => {
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md font-medium transition-colors"
               >
                 Remover Título
+              </button>
+              <button
+                onClick={() => {
+                  try {
+                    const text = formatTitleDisplay(selectedHero);
+                    navigator.clipboard?.writeText(text);
+                    alert('Exibição copiada para a área de transferência');
+                  } catch {
+                    alert('Não foi possível copiar automaticamente. Copie manualmente: ' + formatTitleDisplay(selectedHero));
+                  }
+                }}
+                className="ml-3 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-md font-medium transition-colors"
+                title="Copiar exibição"
+              >
+                Copiar Exibição
               </button>
             </div>
           ) : (
@@ -267,6 +299,19 @@ const TitlesManager: React.FC = () => {
             className="h-4 w-4 text-amber-600 focus:ring-amber-500 border-gray-600 rounded"
           />
           <label htmlFor="favOnly" className="text-sm text-gray-300">Mostrar apenas favoritos</label>
+          <button
+            onClick={() => {
+              setSelectedCategory('all');
+              setSelectedRarity('all');
+              setSearchTerm('');
+              setShowFavoritesOnly(false);
+              setSortMode('favoritesFirst');
+            }}
+            className="ml-4 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-md text-sm"
+            title="Limpar filtros"
+          >
+            Limpar filtros
+          </button>
         </div>
       </div>
 

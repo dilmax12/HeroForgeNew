@@ -10,6 +10,8 @@ import {
   getDailyGoalDifficultyColor, 
   getDailyGoalRewards 
 } from '../utils/dailyGoalsSystem';
+import { useMonetizationStore } from '../store/monetizationStore';
+import { seasonalThemes, getSeasonalButtonGradient } from '../styles/medievalTheme';
 
 interface DailyGoalsProps {
   heroId: string;
@@ -25,6 +27,7 @@ export const DailyGoals: React.FC<DailyGoalsProps> = ({ heroId }) => {
 
   const hero = heroes.find(h => h.id === heroId);
   const initializedRef = useRef<Set<string>>(new Set());
+  const { activeSeasonalTheme } = useMonetizationStore();
   
   useEffect(() => {
     if (!heroId || initializedRef.current.has(heroId)) return;
@@ -151,16 +154,18 @@ export const DailyGoals: React.FC<DailyGoalsProps> = ({ heroId }) => {
             </span>
             <button
               onClick={() => { cleanupExpiredGoals(heroId); generateDailyGoalsForHero(heroId); }}
-              className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white border border-blue-400/40"
+              className={`px-2 py-1 rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white border border-white/10 hover:brightness-110 flex items-center gap-2`}
             >
-              ♻️ Atualizar Metas
+              {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+              <span>♻️ Atualizar Metas</span>
             </button>
             {claimableGoals.length > 0 && (
               <button
                 onClick={() => claimableGoals.forEach(g => completeDailyGoal(heroId, g.id))}
-                className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white border border-green-400/40"
+                className={`px-2 py-1 rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white border border-white/10 hover:brightness-110 flex items-center gap-2`}
               >
-                🎁 Coletar Tudo
+                {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+                <span>🎁 Coletar Tudo</span>
               </button>
             )}
           </div>
@@ -237,10 +242,10 @@ export const DailyGoals: React.FC<DailyGoalsProps> = ({ heroId }) => {
                 {goal.completed && !goal.claimed && (
                   <button
                     onClick={() => handleClaimReward(goal)}
-                    className="ml-4 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2"
+                    className={`ml-4 bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 hover:brightness-110`}
                   >
-                    <span>🎁</span>
-                    Coletar
+                    <span>{(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || '🎁'}</span>
+                    <span>Coletar</span>
                   </button>
                 )}
               </div>

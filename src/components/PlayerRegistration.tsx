@@ -26,6 +26,14 @@ const PlayerRegistration: React.FC = () => {
   const [passwordInput, setPasswordInput] = useState('');
   const [useEmailPassword, setUseEmailPassword] = useState(false);
   const [cloudSync, setCloudSync] = useState(true);
+  function isValidEmail(v: string) {
+    const s = (v || '').trim();
+    return /.+@.+\..+/.test(s);
+  }
+  function isValidUsername(v: string) {
+    const s = (v || '').trim().toLowerCase();
+    return s.length >= 3 && /^[a-z0-9_\.\-]+$/.test(s);
+  }
   const [heroName, setHeroName] = useState('');
   const [heroRace, setHeroRace] = useState<'humano'|'elfo'|'anao'|'orc'|'halfling'>('humano');
   const [heroClass, setHeroClass] = useState<'guerreiro'|'mago'|'ladino'|'clerigo'|'patrulheiro'|'paladino'|'arqueiro'>('guerreiro');
@@ -95,6 +103,10 @@ const PlayerRegistration: React.FC = () => {
           setError('Informe email válido e senha (mín. 6 caracteres).');
           return;
         }
+        if (!isValidEmail(emailInput)) {
+          setError('Formato de email inválido.');
+          return;
+        }
         const { data, error: signUpErr } = await supabase.auth.signUp({ email: emailInput, password: passwordInput, options: { emailRedirectTo: window.location.origin } });
         if (signUpErr) {
           setError(signUpErr.message || 'Falha ao criar conta');
@@ -113,6 +125,10 @@ const PlayerRegistration: React.FC = () => {
 
       // Validar unicidade de username (cliente) antes de persistir
       if (username && cloudSync) {
+        if (!isValidUsername(username)) {
+          setError('Username inválido. Use letras/números/._- e mínimo de 3 caracteres.');
+          return;
+        }
         const available = await isUsernameAvailable(username.trim().toLowerCase());
         if (!available) {
           setError('Nome de usuário já está em uso. Escolha outro.');

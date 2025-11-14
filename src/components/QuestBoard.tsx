@@ -335,6 +335,17 @@ const QuestBoard: React.FC = () => {
         </div>
       </div>
 
+      {(() => {
+        const bannerQuest = availableQuests.find(q => q.isGuildQuest && q.sticky && String(q.id).startsWith('companion-'));
+        if (!bannerQuest) return null;
+        return (
+          <div className="mb-6 p-3 rounded-lg bg-emerald-900/30 border border-emerald-600/30 text-emerald-200 text-sm flex items-center justify-between">
+            <div className="flex items-center gap-2"><span>🐾 Nova Missão de Companheiros adicionada:</span><span className="font-semibold">{bannerQuest.title}</span></div>
+            <a href="#" className="px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-xs" onClick={(e) => { e.preventDefault(); setSelectedTab('available'); }}>Ver</a>
+          </div>
+        );
+      })()}
+
       {/* Tabs */}
       <div className="flex space-x-1 mb-6 bg-gray-800 p-1 rounded-lg">
         <button
