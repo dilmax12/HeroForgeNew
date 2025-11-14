@@ -2,7 +2,8 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { imageAIService } from '../services/imageAIService';
 import { Hero } from '../types/hero';
-import { medievalTheme } from '../styles/medievalTheme';
+import { medievalTheme, seasonalThemes, getSeasonalButtonColors } from '../styles/medievalTheme';
+import { useMonetizationStore } from '../store/monetizationStore';
 
 interface AIAvatarGeneratorProps {
   hero: Hero;
@@ -67,7 +68,9 @@ export const AIAvatarGenerator: React.FC<AIAvatarGeneratorProps> = ({
   }, [hero, style]);
 
   return (
-    <div className={`ai-avatar-generator ${className}`}>
+    <div className={className}>
+      <div className={`rounded-xl border ${(useMonetizationStore().activeSeasonalTheme ? (seasonalThemes as any)[useMonetizationStore().activeSeasonalTheme]?.border || 'border-white/20' : 'border-white/20')}`}>
+        <div className={`ai-avatar-generator`}>
       <style>{`
         .ai-avatar-generator {
           background: linear-gradient(${medievalTheme.gradients.backgrounds.secondary});
@@ -338,6 +341,13 @@ export const AIAvatarGenerator: React.FC<AIAvatarGeneratorProps> = ({
           <button
             className="generate-button"
             onClick={generateAvatar}
+            style={{
+              backgroundImage: ((): string => {
+                const { activeSeasonalTheme } = useMonetizationStore();
+                const { from, to } = getSeasonalButtonColors(activeSeasonalTheme as any);
+                return `linear-gradient(135deg, ${from}, ${to})`;
+              })()
+            }}
             disabled={isGenerating}
           >
             {isGenerating ? 'Gerando...' : '✨ Gerar Avatar com IA'}
@@ -347,6 +357,13 @@ export const AIAvatarGenerator: React.FC<AIAvatarGeneratorProps> = ({
             <button
               className="regenerate-button"
               onClick={regenerateAvatar}
+              style={{
+                backgroundImage: ((): string => {
+                  const { activeSeasonalTheme } = useMonetizationStore();
+                  const { from, to } = getSeasonalButtonColors(activeSeasonalTheme as any);
+                  return `linear-gradient(135deg, ${from}, ${to})`;
+                })()
+              }}
               disabled={isGenerating}
             >
               🔄 Regenerar
@@ -365,6 +382,8 @@ export const AIAvatarGenerator: React.FC<AIAvatarGeneratorProps> = ({
           {error}
         </motion.div>
       )}
+        </div>
+      </div>
     </div>
   );
 };

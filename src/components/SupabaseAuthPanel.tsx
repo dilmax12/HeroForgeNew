@@ -4,6 +4,7 @@ import { ensurePlayerProfile } from '../services/playersService';
 
 const SupabaseAuthPanel: React.FC = () => {
   const [email, setEmail] = useState('');
+  const [resetEmail, setResetEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -15,8 +16,7 @@ const SupabaseAuthPanel: React.FC = () => {
     setUserEmail(u?.email || null);
     setUserId(u?.id || null);
     if (u?.id) {
-      // tenta garantir perfil na tabela players
-      await ensurePlayerProfile(u.id, u.email || null);
+      try { await fetch(`/api/users?action=touch-login&id=${encodeURIComponent(u.id)}`); } catch {}
     }
   }
 
@@ -60,6 +60,24 @@ const SupabaseAuthPanel: React.FC = () => {
     }
   }
 
+  async function resetPassword() {
+    setLoading(true);
+    setError(null);
+    try {
+      const target = resetEmail || email;
+      if (!target) {
+        throw new Error('Informe o email para recuperação');
+      }
+      const { error } = await supabase.auth.resetPasswordForEmail(target, { redirectTo: window.location.origin });
+      if (error) throw error;
+      alert('Verifique seu email para instruções de redefinição de senha.');
+    } catch (err: any) {
+      setError(err?.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="bg-white p-6 rounded-lg border border-gray-200 mb-6">
       <h2 className="text-lg font-semibold text-gray-900 mb-3">🔐 Supabase Auth</h2>
@@ -90,6 +108,23 @@ const SupabaseAuthPanel: React.FC = () => {
             disabled={loading}
           >
             Atualizar usuário
+          </button>
+        </div>
+        <div className="bg-white p-4 rounded-lg border border-gray-200">
+          <label className="block text-sm text-gray-600 mb-2">Recuperação de conta</label>
+          <input
+            type="email"
+            className="w-full bg-white text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            placeholder="seu@email.com"
+            value={resetEmail}
+            onChange={e => setResetEmail(e.target.value)}
+          />
+          <button
+            className="mt-2 px-3 py-2 bg-white text-amber-700 border border-amber-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            onClick={resetPassword}
+            disabled={loading}
+          >
+            Enviar link de redefinição
           </button>
         </div>
         <div className="bg-white p-4 rounded-lg border border-gray-200">

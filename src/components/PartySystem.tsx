@@ -778,11 +778,11 @@ const PartySystem: React.FC<PartySystemProps> = ({ hero }) => {
 
       {/* Modal de Confirmação */}
       {confirmAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title">
           <div className="absolute inset-0 bg-black/60" onClick={() => setConfirmAction(null)} />
           <div className="relative z-10 w-full max-w-md rounded-lg border border-gray-700 bg-gray-800 p-4 shadow-xl">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Confirmação</h2>
+              <h2 id="confirm-dialog-title" className="text-lg font-bold text-white">Confirmação</h2>
               <button onClick={() => setConfirmAction(null)} className="text-gray-300 hover:text-white">✖</button>
             </div>
             <div className="mt-3 text-sm text-gray-200">

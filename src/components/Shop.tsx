@@ -3,10 +3,16 @@ import { Link } from 'react-router-dom';
 import { useHeroStore } from '../store/heroStore';
 import { SHOP_CATEGORIES, purchaseItem, canAfford, getDailyOffers, getDiscountedPrice, RARITY_CONFIG } from '../utils/shop';
 import { Item } from '../types/hero';
+import { useMonetizationStore } from '../store/monetizationStore';
+import ThemePreviewModal from './ThemePreviewModal';
+import { trackMetric } from '../utils/metricsSystem';
 
 const Shop: React.FC = () => {
   const { getSelectedHero, updateHero } = useHeroStore();
   const selectedHero = getSelectedHero();
+  const { ownedFrames, activeFrameId, setActiveFrame, markPurchase, ownedThemes, activeThemeId, setActiveTheme } = useMonetizationStore();
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewId, setPreviewId] = useState<'medieval'|'futurista'|'noir'|undefined>(undefined);
   const [activeCategory, setActiveCategory] = useState('consumables');
   const [showDailyOffers, setShowDailyOffers] = useState(false);
   const [showForgeServices, setShowForgeServices] = useState(false);
@@ -222,6 +228,46 @@ const Shop: React.FC = () => {
         </button>
       </div>
 
+      {/* Comunicação de fairness e remover anúncios */}
+      <div className="max-w-full sm:max-w-4xl mx-auto mb-6">
+        <div className="rounded-lg border bg-white p-3 sm:p-4">
+          <div className="text-sm sm:text-base text-gray-700">
+            O jogo core é gratuito e justo. Compras são 100% opcionais e apenas cosméticas ou narrativas.
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              onClick={async () => {
+                try {
+                  const { startCheckout, verifyPurchase } = await import('../services/paymentsService');
+                  const resp = await startCheckout('remove-ads');
+                  if (resp.ok) {
+                    const v = await verifyPurchase(resp.sessionId || '');
+                    if (v.ok) {
+                      trackMetric.purchaseInitiated(selectedHero.id, 'remove-ads');
+                      markPurchase('remove-ads', { id: resp.sessionId || `rcpt-${Date.now()}` });
+                      useMonetizationStore.getState().removeAdsForever();
+                      trackMetric.purchaseCompleted(selectedHero.id, 'remove-ads', resp.sessionId || undefined);
+                      alert('Anúncios removidos. Obrigado pelo apoio!');
+                    }
+                  }
+                } catch {
+                  // fallback local
+                  trackMetric.purchaseInitiated(selectedHero.id, 'remove-ads');
+                  markPurchase('remove-ads', { id: `rcpt-${Date.now()}` });
+                  useMonetizationStore.getState().removeAdsForever();
+                  trackMetric.purchaseCompleted(selectedHero.id, 'remove-ads');
+                  alert('Anúncios removidos. Obrigado pelo apoio!');
+                }
+              }}
+              className={`px-3 sm:px-4 py-2 rounded bg-gradient-to-r ${((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.buttonGradient) || 'from-rose-600 to-amber-600'} text-white text-sm sm:text-base hover:brightness-110 flex items-center gap-2`}
+            >
+              {((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.accents?.[0]) || ''}
+              <span>Remover anúncios (IAP único)</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       {showDailyOffers ? (
         /* Ofertas Diárias */
         <div>
@@ -301,7 +347,10 @@ const Shop: React.FC = () => {
                 </select>
               </div>
             </div>
-            <button onClick={handleFuse} className="mt-3 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">Fundir</button>
+            <button onClick={handleFuse} className={`mt-3 px-4 py-2 bg-gradient-to-r ${((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.buttonGradient) || 'from-green-600 to-emerald-600'} text-white rounded hover:brightness-110 flex items-center gap-2`}>
+              {((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.accents?.[0]) || ''}
+              <span>Fundir</span>
+            </button>
           </div>
 
           {/* Encantar */}
@@ -321,9 +370,10 @@ const Shop: React.FC = () => {
                     <button
                       onClick={() => handleEnchant(slot)}
                       disabled={!equippedId}
-                      className={`mt-3 w-full py-2 px-4 rounded ${equippedId ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                      className={`mt-3 w-full py-2 px-4 rounded ${equippedId ? `bg-gradient-to-r ${((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.buttonGradient) || 'from-purple-600 to-violet-600'} text-white hover:brightness-110 flex items-center gap-2` : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
                     >
-                      Encantar (Lifesteal)
+                      {equippedId ? (((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.accents?.[0]) || '') : ''}
+                      <span>Encantar (Lifesteal)</span>
                     </button>
                   </div>
                 );
@@ -356,10 +406,10 @@ const Shop: React.FC = () => {
             {SHOP_CATEGORIES[activeCategory as keyof typeof SHOP_CATEGORIES].items.map(renderItem)}
           </div>
 
-          {/* Cosméticos (placeholder) */}
+          {/* Cosméticos e Premium (visual) */}
           <div id="cosmetics" className="mt-8 sm:mt-12">
-            <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-800">🎨 Cosméticos (visual)</h2>
-            <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">Personalize molduras e fundos do herói. Desbloqueios naturais por XP e reputação.</p>
+            <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-800">🎨 Cosméticos (visual) e Premium</h2>
+            <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">Personalize molduras e fundos do herói. Itens premium são opcionais e não afetam o balanceamento narrativo.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
               {[{
                 id: 'frame-gold', name: 'Moldura Dourada', icon: '🟨', req: '500 XP', unlocked: (selectedHero.progression.xp || 0) >= 500
@@ -367,24 +417,155 @@ const Shop: React.FC = () => {
                 id: 'frame-royal', name: 'Moldura Real', icon: '👑', req: 'Rank B+', unlocked: (selectedHero.rankData?.currentRank || 'F') <= 'B'
               }, {
                 id: 'bg-aurora', name: 'Fundo Aurora', icon: '🌌', req: 'Reputação 10+', unlocked: (selectedHero.progression.reputation || 0) >= 10
+              }, {
+                id: 'frame-futurista', name: 'Moldura Futurista (Premium)', icon: '🧪', req: 'Produto Premium', unlocked: ownedFrames.includes('futurista')
+              }, {
+                id: 'frame-noir', name: 'Moldura Noir (Premium)', icon: '🕶️', req: 'Produto Premium', unlocked: ownedFrames.includes('noir')
+              }, {
+                id: 'theme-futurista', name: 'Tema Futurista (Premium)', icon: '🌌', req: 'Tema Premium', unlocked: ownedThemes.includes('futurista')
+              }, {
+                id: 'theme-noir', name: 'Tema Noir (Premium)', icon: '🖤', req: 'Tema Premium', unlocked: ownedThemes.includes('noir')
+              }, {
+                id: 'season-natal', name: 'Tema Sazonal: Festival de Inverno', icon: '🌿', req: 'Sazonal', unlocked: true
+              }, {
+                id: 'season-pascoa', name: 'Tema Sazonal: Renascimento Rúnico', icon: '🥚', req: 'Sazonal', unlocked: true
+              }, {
+                id: 'season-ano-novo', name: 'Tema Sazonal: Profecias do Ano Novo', icon: '🎆', req: 'Sazonal', unlocked: true
+              }, {
+                id: 'season-carnaval', name: 'Tema Sazonal: Mascarada dos Bardos', icon: '🎭', req: 'Sazonal', unlocked: true
               }].map(c => (
                 <div key={c.id} className={`p-3 sm:p-4 rounded-lg border ${c.unlocked ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-gray-50'}`}>
                   <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">{c.icon}</div>
                   <div className="font-semibold text-sm sm:text-base">{c.name}</div>
                   <div className="text-xs sm:text-sm text-gray-600">Requisito: {c.req}</div>
-                  <div className="mt-2 sm:mt-3">
-                    <button
-                      disabled={!c.unlocked}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium ${c.unlocked ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'} focus:outline-none focus:ring-2 focus:ring-indigo-500`}
-                    >
-                      {c.unlocked ? 'Aplicar' : 'Bloqueado'}
-                    </button>
+                  <div className="mt-2 sm:mt-3 flex gap-2">
+                <button
+                  onClick={() => { if (c.id.startsWith('frame-')) {
+                    const map: Record<string, any> = { 'frame-gold': 'medieval', 'frame-royal': 'medieval', 'frame-futurista': 'futurista', 'frame-noir': 'noir' };
+                    const target = map[c.id] as ('medieval'|'futurista'|'noir');
+                    setPreviewId(target); setPreviewOpen(true);
+                  }}}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium bg-gray-700 text-white hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                >
+                  Pré-visualizar
+                </button>
+                <button
+                  disabled={!c.unlocked}
+                  onClick={() => { if (c.id.startsWith('frame-')) {
+                    const map: Record<string, any> = { 'frame-gold': 'medieval', 'frame-royal': 'medieval', 'frame-futurista': 'futurista', 'frame-noir': 'noir' };
+                    const target = map[c.id] as ('medieval'|'futurista'|'noir');
+                    setActiveFrame(target);
+                  } else if (c.id.startsWith('theme-')) {
+                    const target = c.id === 'theme-futurista' ? 'futurista' : 'noir';
+                    setActiveTheme(target);
+                  } else if (c.id.startsWith('season-')) {
+                    const map: Record<string, any> = { 'season-natal': 'natal', 'season-pascoa': 'pascoa', 'season-ano_novo': 'ano_novo', 'season-ano-novo': 'ano_novo', 'season-carnaval': 'carnaval' };
+                    const target = map[c.id];
+                    useMonetizationStore.getState().setActiveSeasonalTheme(target);
+                  }}}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium ${c.unlocked ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'} focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                >
+                  {c.unlocked ? (
+                    c.id.startsWith('frame-')
+                      ? (activeFrameId === (c.id === 'frame-futurista' ? 'futurista' : c.id === 'frame-noir' ? 'noir' : 'medieval') ? 'Aplicado' : 'Aplicar')
+                      : (c.id.startsWith('theme-')
+                          ? (activeThemeId === (c.id === 'theme-futurista' ? 'futurista' : 'noir') ? 'Aplicado' : 'Aplicar')
+                          : 'Aplicar')
+                  ) : 'Bloqueado'}
+                </button>
+                    {c.id === 'frame-futurista' || c.id === 'frame-noir' || c.id === 'theme-futurista' || c.id === 'theme-noir' ? (
+                      <button
+                        onClick={() => {
+                          const target = c.id.endsWith('futurista') ? 'futurista' : 'noir';
+                          if (c.id.startsWith('frame-')) {
+                            if (!ownedFrames.includes(target)) {
+                              trackMetric.purchaseInitiated(selectedHero.id, `frame-${target}`);
+                              markPurchase(`frame-${target}`, { id: `rcpt-${Date.now()}` });
+                              trackMetric.purchaseCompleted(selectedHero.id, `frame-${target}`);
+                            }
+                          } else {
+                            if (!ownedThemes.includes(target)) {
+                              trackMetric.purchaseInitiated(selectedHero.id, `theme-${target}`);
+                              markPurchase(`theme-${target}`, { id: `rcpt-${Date.now()}` });
+                              trackMetric.purchaseCompleted(selectedHero.id, `theme-${target}`);
+                            }
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium bg-gradient-to-r ${((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.buttonGradient) || 'from-amber-600 to-yellow-600'} text-white hover:brightness-110 flex items-center gap-2`}
+                      >
+                        {((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.accents?.[0]) || ''}
+                        <span>Comprar Premium</span>
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               ))}
             </div>
             <div className="mt-6 text-sm text-gray-500">
-              Em breve: compra de cosméticos premium para apoiar o projeto.
+              Itens premium são opcionais; servem apenas para personalização visual.
+            </div>
+          </div>
+          <ThemePreviewModal open={previewOpen} previewFrameId={previewId} onClose={() => setPreviewOpen(false)} />
+          {/* Conteúdo Premium: DLCs, Final Alternativo, Passe e Tip Jar */}
+          <div id="premium-content" className="mt-10">
+            <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-800">📦 Conteúdo Premium</h2>
+            <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">Opcional, narrativo e sem impacto em balanceamento. Gratuito permanece completo.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              <div className="p-4 rounded-lg border bg-white">
+                <div className="font-semibold">Capítulo Bônus: Ecos do Destino</div>
+                <div className="text-sm text-gray-600 mb-2">Adiciona um capítulo extra à sua jornada com cenas exclusivas.</div>
+                <button
+                  onClick={() => {
+                    trackMetric.purchaseInitiated(selectedHero.id, 'dlc-ecos-destino');
+                    markPurchase('dlc-ecos-destino', { id: `rcpt-${Date.now()}` });
+                    if (selectedHero) {
+                      const now = new Date().toISOString();
+                      const chapters = selectedHero.journeyChapters || [];
+                      const bonus = {
+                        id: `dlc-bonus-${selectedHero.id}`,
+                        index: (chapters.length || 0) + 1,
+                        title: 'Capítulo Bônus: Ecos do Destino',
+                        summary: 'Um eco misterioso revela caminhos ocultos e memórias antigas.',
+                        createdAt: now,
+                        levelMilestone: selectedHero.progression.level,
+                        locked: false,
+                        relatedQuests: selectedHero.completedQuests || []
+                      } as any;
+                      updateHero(selectedHero.id, { journeyChapters: [...chapters, bonus] });
+                    }
+                    trackMetric.purchaseCompleted(selectedHero.id, 'dlc-ecos-destino');
+                  }}
+                  className="mt-2 px-3 py-2 rounded bg-amber-600 text-white hover:bg-amber-700"
+                >Comprar DLC</button>
+              </div>
+              <div className="p-4 rounded-lg border bg-white">
+                <div className="font-semibold">Final Alternativo: Caminho das Sombras</div>
+                <div className="text-sm text-gray-600 mb-2">Desbloqueia um epílogo alternativo com escolhas dramáticas.</div>
+                <button
+                  onClick={() => { markPurchase('dlc-final-sombras', { id: `rcpt-${Date.now()}` }); }}
+                  className="mt-2 px-3 py-2 rounded bg-amber-600 text-white hover:bg-amber-700"
+                >Comprar DLC</button>
+              </div>
+              <div className="p-4 rounded-lg border bg-white">
+                <div className="font-semibold">Passe de Temporada</div>
+                <div className="text-sm text-gray-600 mb-2">Conteúdo narrativo exclusivo por temporada.</div>
+                <button
+                  onClick={() => { trackMetric.purchaseInitiated(selectedHero.id, 'season-pass'); markPurchase('season-pass', { id: `rcpt-${Date.now()}` }); trackMetric.purchaseCompleted(selectedHero.id, 'season-pass'); }}
+                  className="mt-2 px-3 py-2 rounded bg-purple-600 text-white hover:bg-purple-700"
+                >Ativar Passe</button>
+              </div>
+              <div className="p-4 rounded-lg border bg-white">
+                <div className="font-semibold">Apoio ao Criador (Tip Jar)</div>
+                <div className="text-sm text-gray-600 mb-2">Recompensas simbólicas: emblemas e molduras de agradecimento.</div>
+                <div className="flex gap-2">
+                  {['bronze','silver','gold'].map(l => (
+                    <button key={l}
+                      onClick={() => { trackMetric.purchaseInitiated(selectedHero.id, `tip-${l}`); markPurchase(`tip-${l}`, { id: `rcpt-${Date.now()}` }); trackMetric.purchaseCompleted(selectedHero.id, `tip-${l}`); }}
+                      className={`px-3 py-2 rounded ${l==='gold' ? 'bg-yellow-600' : l==='silver' ? 'bg-gray-400' : 'bg-orange-600'} text-white hover:opacity-90`}
+                    >{l==='bronze' ? 'Bronze' : l==='silver' ? 'Prata' : 'Ouro'}</button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>

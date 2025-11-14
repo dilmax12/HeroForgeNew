@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { dynamicMissionsAI } from '../services/dynamicMissionsAI';
 import { Hero } from '../types/hero';
 import { DynamicMission, MissionObjective, NPCDialogue } from '../services/dynamicMissionsAI';
-import { medievalTheme } from '../styles/medievalTheme';
+import { medievalTheme, seasonalThemes, getSeasonalButtonColors } from '../styles/medievalTheme';
+import { useMonetizationStore } from '../store/monetizationStore';
 
 interface DynamicMissionsPanelProps {
   hero: Hero;
@@ -121,7 +122,8 @@ export const DynamicMissionsPanel: React.FC<DynamicMissionsPanelProps> = ({
   };
 
   return (
-    <div className={`dynamic-missions-panel ${className}`}>
+    <div className={className}>
+      <div className={`dynamic-missions-panel rounded-xl border ${(useMonetizationStore().activeSeasonalTheme ? (seasonalThemes as any)[useMonetizationStore().activeSeasonalTheme]?.border || 'border-white/20' : 'border-white/20')}`}>
       <style>{`
         .dynamic-missions-panel {
           background: ${medievalTheme.colors.background.secondary};
@@ -423,12 +425,19 @@ export const DynamicMissionsPanel: React.FC<DynamicMissionsPanelProps> = ({
               <path d="M12 2L13.09 8.26L20 9L13.09 9.74L12 16L10.91 9.74L4 9L10.91 8.26L12 2Z"/>
             </svg>
             IA
-          </div>
-        </div>
+      </div>
+    </div>
         <button
           className="generate-button"
           onClick={generateMissions}
           disabled={isGenerating}
+          style={{
+            backgroundImage: ((): string => {
+              const { activeSeasonalTheme } = useMonetizationStore();
+              const { from, to } = getSeasonalButtonColors(activeSeasonalTheme as any);
+              return `linear-gradient(135deg, ${from}, ${to})`;
+            })()
+          }}
         >
           {isGenerating ? '⏳ Gerando...' : '🔄 Gerar Novas'}
         </button>
@@ -606,6 +615,7 @@ export const DynamicMissionsPanel: React.FC<DynamicMissionsPanelProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
     </div>
   );
 };

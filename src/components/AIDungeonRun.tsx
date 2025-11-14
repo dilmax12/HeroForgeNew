@@ -4,6 +4,8 @@ import { dynamicMissionsAI } from '../services/dynamicMissionsAI';
 import { generateOutcomeNarrative } from '../services/narratorAI';
 import { resolveCombat } from '../utils/combat';
 import BattleModal from './BattleModal';
+import { useMonetizationStore } from '../store/monetizationStore';
+import { seasonalThemes } from '../styles/medievalTheme';
 import { worldStateManager } from '../utils/worldState';
 import { rankSystem } from '../utils/rankSystem';
 
@@ -77,6 +79,8 @@ export default function AIDungeonRun() {
   const maxHp = hero?.derivedAttributes.hp || 1;
   const currentHp = hero?.derivedAttributes.currentHp ?? maxHp;
   const isRecovering = currentHp <= 0;
+  const { activeSeasonalTheme } = useMonetizationStore();
+  const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-gray-700' : 'border-gray-700';
 
   const inflightRef = useRef(false);
 
@@ -273,7 +277,7 @@ export default function AIDungeonRun() {
     <div className="max-w-3xl mx-auto p-6">
       <h2 className="text-2xl font-bold text-white">Masmorra IA</h2>
       <p className="text-gray-300">Etapa {stageIndex + 1} de {stagesTotal} • Dificuldade: {difficulty}</p>
-      <div className="mt-4 p-4 border rounded bg-gray-800 border-gray-700">
+      <div className={`mt-4 p-4 border rounded bg-gray-800 ${seasonalBorder}`}>
         <p className="text-gray-200 whitespace-pre-line">{description}</p>
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
           {choices.map(ch => (

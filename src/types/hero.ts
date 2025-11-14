@@ -6,7 +6,21 @@ import { HeroRankData } from './ranks';
 
 export type Attribute = 'forca' | 'destreza' | 'constituicao' | 'inteligencia' | 'sabedoria' | 'carisma';
 
-export type HeroClass = 'guerreiro' | 'mago' | 'ladino' | 'clerigo' | 'patrulheiro' | 'paladino' | 'arqueiro';
+export type HeroClass =
+  | 'guerreiro'
+  | 'mago'
+  | 'ladino'
+  | 'clerigo'
+  | 'patrulheiro'
+  | 'paladino'
+  | 'arqueiro'
+  | 'bardo'
+  | 'monge'
+  | 'assassino'
+  | 'barbaro'
+  | 'lanceiro'
+  | 'druida'
+  | 'feiticeiro';
 
 export type HeroRace = 'humano' | 'elfo' | 'anao' | 'orc' | 'halfling';
 
@@ -26,6 +40,71 @@ export type QuestType = 'contrato' | 'caca' | 'exploracao' | 'historia' | 'narra
 export type QuestDifficulty = 'rapida' | 'padrao' | 'epica' | 'facil' | 'medio' | 'dificil';
 export type ItemRarity = 'comum' | 'incomum' | 'raro' | 'epico' | 'lendario';
 export type ItemType = 'weapon' | 'armor' | 'accessory' | 'consumable' | 'cosmetic' | 'material';
+// Sistema de Mascotes e Ovos
+export type EggRarity = 'comum' | 'incomum' | 'raro' | 'epico' | 'lendario' | 'mistico';
+export type EggStatus = 'misterioso' | 'identificado' | 'incubando' | 'pronto_para_chocar' | 'chocado';
+export type PetElementType = 'feral' | 'arcano' | 'sagrado' | 'sombrio';
+export type PetClass = 'coleta' | 'combate' | 'suporte';
+export type PetStage = 'bebe' | 'jovem' | 'adulto' | 'forma_final';
+
+export interface EggIdentifiedInfo {
+  type: PetElementType;
+  petClass: PetClass;
+  rarity: EggRarity;
+  initialBonus?: Partial<HeroAttributes>;
+  skillChancePercent?: number; // 0-100
+  revealedName?: string; // ex.: "Ovo Feral Raro"
+  candidates?: string[];
+}
+
+export interface Egg {
+  id: string;
+  name: string;
+  status: EggStatus;
+  baseRarity: EggRarity; // raridade antes da identificação
+  description?: string;
+  identified?: EggIdentifiedInfo;
+  incubationEndsAt?: string; // ISO
+  incubatingSlot?: number; // 0..2
+  createdAt: string; // ISO
+}
+
+export interface PetMutationInfo {
+  variant?: 'albino' | 'sombrio_corrupto' | 'arcano_puro' | 'feral_brutal' | 'sagrado';
+  visualBadge?: string; // ex.: '✨', '🌑', etc.
+}
+
+export interface Pet {
+  id: string;
+  name: string;
+  type: PetElementType;
+  petClass: PetClass;
+  rarity: EggRarity;
+  qualityRoll: number; // 0-100 dentro da raridade
+  level: number;
+  stage: PetStage;
+  mutation?: PetMutationInfo;
+  attributes?: Partial<HeroAttributes>;
+  exclusiveSkill?: string;
+  refineLevel?: number;
+  energy?: number;
+  createdAt: string; // ISO
+}
+
+export type MountRarity = 'comum' | 'incomum' | 'raro' | 'epico' | 'lendario' | 'mistico';
+export type MountStage = 'comum' | 'encantada' | 'lendaria';
+
+export interface Mount {
+  id: string;
+  name: string;
+  type: 'cavalo' | 'lobo' | 'grifo' | 'javali' | 'lagarto' | 'draconiano';
+  rarity: MountRarity;
+  stage: MountStage;
+  speedBonus: number;
+  attributes?: Partial<HeroAttributes>;
+  refineLevel?: number;
+  createdAt: string;
+}
 
 // === NOVOS TIPOS PARA SISTEMA DE DECISÕES E MUNDO ===
 
@@ -274,10 +353,11 @@ export interface Title {
   id: string;
   name: string;
   description: string;
-  rarity: 'comum' | 'raro' | 'epico' | 'lendario';
+  rarity: 'comum' | 'raro' | 'epico' | 'lendario' | 'especial';
   unlockedAt: Date;
   category: 'combat' | 'exploration' | 'social' | 'achievement' | 'special';
   badge?: string; // Emoji ou ícone
+  favorite?: boolean;
 }
 
 export interface ReputationFaction {
@@ -390,6 +470,11 @@ export interface CombatResult {
   goldGained: number;
   itemsGained: Item[];
   log: string[];
+  petEnergyUsed?: number;
+  petDamage?: number;
+  petHealing?: number;
+  petStuns?: number;
+  petElementHighlights?: Element[];
 }
 
 // === INTERFACES EXPANDIDAS ===
@@ -475,6 +560,7 @@ export interface Hero {
   avatar?: string;
   backstory?: string;
   shortBio?: string;
+  plannedTalents?: string[];
   createdAt: string; // ISO string
   updatedAt: string; // ISO string
   
@@ -504,6 +590,10 @@ export interface Hero {
     // Status de treino ativo (para HUD)
     trainingActiveUntil?: string; // ISO de término do treino atual
     trainingActiveName?: string; // nome da opção de treino ativa
+    talentsUnlockedPlanned?: number; // progresso de talentos planejados
+    companionQuestsCompleted?: number;
+    beastEssenceCollected?: number;
+    mountScrollsFound?: number;
   };
   
   // Advanced Features
@@ -526,6 +616,14 @@ export interface Hero {
   };
   // Capítulos da Jornada (persistentes)
   journeyChapters?: JourneyChapter[];
+  // Mascotes e Ovos
+  eggs?: Egg[];
+  pets?: Pet[];
+  hatchHistory?: { eggId: string; petId: string; timestamp: string }[];
+  activePetId?: string;
+  hatchCooldownEndsAt?: string;
+  mounts?: Mount[];
+  activeMountId?: string;
 }
 
 export interface HeroCreationData {
@@ -542,6 +640,7 @@ export interface HeroCreationData {
   avatar?: string;
   backstory?: string;
   shortBio?: string;
+  plannedTalents?: string[];
 }
 
 export interface Party {

@@ -50,7 +50,12 @@ export type MetricEventType =
   | 'activity-commented'
   | 'activity-shared'
   | 'guild-joined'
-  | 'guild-left';
+  | 'guild-left'
+  | 'purchase-initiated'
+  | 'purchase-completed'
+  | 'ad-impression'
+  | 'ad-click'
+  | 'rewarded-ad-completed';
 
 export interface SessionMetrics {
   sessionId: string;

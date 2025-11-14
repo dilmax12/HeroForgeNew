@@ -12,15 +12,21 @@ import Leaderboards from './Leaderboards';
 import { EvolutionPanel } from './EvolutionPanel';
 import ReputationPanel from './ReputationPanel';
 import RankProgressComponent from './RankProgress';
+import { useMonetizationStore } from '../store/monetizationStore';
+import { seasonalThemes } from '../styles/medievalTheme';
+
+const EggIdentificationNPC = React.lazy(() => import('./EggIdentificationNPC'));
 
 const AdventurersGuildHub: React.FC = () => {
   const { guilds, ensureDefaultGuildExists, refreshQuests, availableQuests, heroes, getSelectedHero, sellItem, getHeroRankProgress, activateGuildEvent, clearGuildEvent, approvePartyAlliance, rejectPartyAlliance } = useHeroStore();
   const selectedHero = getSelectedHero();
   const rankProgress = selectedHero ? getHeroRankProgress(selectedHero.id) : null;
+  const { activeSeasonalTheme } = useMonetizationStore();
+  const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-gray-200' : 'border-gray-200';
   const [qtyByItem, setQtyByItem] = useState<Record<string, number>>({});
   const [selectedType, setSelectedType] = useState<'todos' | 'consumable' | 'weapon' | 'armor' | 'accessory' | 'material'>('todos');
   const [selectedRarity, setSelectedRarity] = useState<'todas' | 'comum' | 'raro' | 'epico' | 'lendario'>('todas');
-  const [activeSection, setActiveSection] = useState<'salao' | 'recrutamento' | 'treinamento' | 'sala-herois' | 'conselho' | 'cofre'>('salao');
+  const [activeSection, setActiveSection] = useState<'salao' | 'recrutamento' | 'treinamento' | 'sala-herois' | 'conselho' | 'cofre' | 'zoologo'>('salao');
 
   useEffect(() => {
     ensureDefaultGuildExists();
@@ -255,7 +261,7 @@ const AdventurersGuildHub: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto p-6">
       {/* Header e Navegação */}
-      <div className="bg-white p-6 rounded-lg border border-gray-200 mb-4 text-gray-800">
+      <div className={`bg-white p-6 rounded-lg border ${seasonalBorder} mb-4 text-gray-800`}>
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-800">🏰 Foja dos Herois</h1>
@@ -287,7 +293,8 @@ const AdventurersGuildHub: React.FC = () => {
             { id: 'treinamento', label: 'Sala de Treinamento', icon: '🏋️' },
             { id: 'sala-herois', label: 'Salão dos Heróis', icon: '🏆' },
             { id: 'conselho', label: 'Conselho da Guilda', icon: '🎖️' },
-            { id: 'cofre', label: 'Cofre da Guilda', icon: '💎' }
+            { id: 'cofre', label: 'Cofre da Guilda', icon: '💎' },
+            { id: 'zoologo', label: 'Mestre Zoólogo Arkemis', icon: '🔮' }
           ].map(t => (
             <button
               key={t.id}
@@ -304,7 +311,7 @@ const AdventurersGuildHub: React.FC = () => {
       {activeSection === 'salao' && (
         <div className="space-y-6">
           {/* Missões de Caça */}
-          <div className="bg-white p-6 rounded-lg border border-gray-200 text-gray-800">
+          <div className={`bg-white p-6 rounded-lg border ${seasonalBorder} text-gray-800`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold text-gray-800">🎯 Missões de Caça</h2>
               <a href="/hunting" className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">Abrir</a>
@@ -313,7 +320,7 @@ const AdventurersGuildHub: React.FC = () => {
           </div>
 
           {/* Ranking rápido */}
-          <div className="bg-white p-6 rounded-lg border border-gray-200 text-gray-800">
+          <div className={`bg-white p-6 rounded-lg border ${seasonalBorder} text-gray-800`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold text-gray-800">🏆 Ranking Rápido</h2>
               <a href="/leaderboards" className="px-4 py-2 rounded bg-amber-600 text-black hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">Ver Completo</a>
@@ -338,8 +345,66 @@ const AdventurersGuildHub: React.FC = () => {
             )}
           </div>
 
+          {selectedHero && (
+            <div className={`bg-white p-6 rounded-lg border ${seasonalBorder} text-gray-800`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold text-gray-800">🐾 Companheiros</h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-emerald-600">{selectedHero.stats?.companionQuestsCompleted || 0}</div>
+                  <div className="text-sm text-gray-600">Missões de Companheiros</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-amber-600">{selectedHero.inventory.items['essencia-bestial'] || 0}</div>
+                  <div className="text-sm text-gray-600">Essência Bestial</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-purple-600">{selectedHero.inventory.items['pergaminho-montaria'] || 0}</div>
+                  <div className="text-sm text-gray-600">Pergaminhos de Montaria</div>
+                </div>
+              </div>
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">Progresso de Companheiros</h3>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between text-xs text-gray-600"><span>Amigo dos Animais</span><span>{Math.min(5, selectedHero.stats?.companionQuestsCompleted || 0)}/5</span></div>
+                    <div className="h-2 bg-gray-200 rounded">
+                      <div className="h-2 bg-emerald-500 rounded" style={{ width: `${Math.min(100, ((selectedHero.stats?.companionQuestsCompleted || 0)/5)*100)}%` }} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs text-gray-600"><span>Domador de Feras</span><span>{Math.min(3, selectedHero.stats?.beastEssenceCollected || 0)}/3</span></div>
+                    <div className="h-2 bg-gray-200 rounded">
+                      <div className="h-2 bg-amber-500 rounded" style={{ width: `${Math.min(100, ((selectedHero.stats?.beastEssenceCollected || 0)/3)*100)}%` }} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs text-gray-600"><span>Cavaleiro Mítico</span><span>{Math.min(2, selectedHero.stats?.mountScrollsFound || 0)}/2</span></div>
+                    <div className="h-2 bg-gray-200 rounded">
+                      <div className="h-2 bg-purple-500 rounded" style={{ width: `${Math.min(100, ((selectedHero.stats?.mountScrollsFound || 0)/2)*100)}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">Conquistas Recentes</h3>
+                <div className="flex flex-wrap gap-2">
+                  {(selectedHero.progression.achievements || []).slice(Math.max(0, (selectedHero.progression.achievements || []).length - 6)).map((a, idx) => (
+                    <span key={idx} className="inline-flex items-center px-2 py-1 rounded text-sm bg-gray-100 text-gray-800 border border-gray-200">
+                      <span className="mr-1">{a.icon || '🏆'}</span>{a.title}
+                    </span>
+                  ))}
+                  {(selectedHero.progression.achievements || []).length === 0 && (
+                    <span className="text-sm text-gray-600">Nenhuma conquista registrada</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Dungeon Infinita */}
-          <div className="bg-white p-6 rounded-lg border border-gray-200 text-gray-800">
+          <div className={`bg-white p-6 rounded-lg border ${seasonalBorder} text-gray-800`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold text-gray-800">🗝️ Dungeon Infinita</h2>
               <div className="flex gap-2">
@@ -376,7 +441,7 @@ const AdventurersGuildHub: React.FC = () => {
           </div>
 
           {/* Salão da Fama */}
-          <div className="bg-white p-6 rounded-lg border border-gray-200 text-gray-800">
+          <div className={`bg-white p-6 rounded-lg border ${seasonalBorder} text-gray-800`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold text-gray-800">🏰 Salão da Fama (Semana)</h2>
               <a href="/leaderboards" className="px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">Ver Rankings</a>
@@ -416,7 +481,7 @@ const AdventurersGuildHub: React.FC = () => {
           </div>
 
           {/* Mercado de Espólios */}
-          <div className="bg-white p-6 rounded-lg border border-gray-200 text-gray-800">
+          <div className={`bg-white p-6 rounded-lg border ${seasonalBorder} text-gray-800`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold text-gray-800">💰 Mercado de Espólios</h2>
               <div className="flex items-center gap-2">
@@ -745,6 +810,27 @@ const AdventurersGuildHub: React.FC = () => {
               <a href="/guild" className="mt-4 inline-block px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Abrir Gestão da Guilda</a>
             </div>
           )}
+        </div>
+      )}
+
+      {activeSection === 'zoologo' && (
+        <div className="bg-white p-6 rounded-lg border border-gray-200 text-gray-800">
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">🔮 Mestre Zoólogo Arkemis</h2>
+          <div className="text-sm text-gray-600 mb-4">Identificação oficial de ovos misteriosos, com custos variáveis por raridade.</div>
+          <div className="bg-gray-50 rounded p-4">
+            {selectedHero ? (
+              <div className="space-y-4">
+                <React.Suspense fallback={<div className="text-sm text-gray-600">Carregando...</div>}>
+                  <EggIdentificationNPC />
+                </React.Suspense>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <div className="text-5xl mb-2">🦸</div>
+                <p>Selecione um herói para consultar o Mestre Zoólogo.</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

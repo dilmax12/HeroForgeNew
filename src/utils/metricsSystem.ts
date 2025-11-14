@@ -670,7 +670,18 @@ export const trackMetric = {
     metricsManager.trackEvent('feature-used', heroId, { feature }),
 
   attributePointsAllocated: (heroId: string, data: { totalSpent: number; allocations: Record<string, number> }) =>
-    metricsManager.trackEvent('attribute-increased', heroId, data)
+    metricsManager.trackEvent('attribute-increased', heroId, data),
+
+  purchaseInitiated: (heroId: string, productId: string) =>
+    metricsManager.trackEvent('purchase-initiated', heroId, { productId }),
+  purchaseCompleted: (heroId: string, productId: string, receiptId?: string) =>
+    metricsManager.trackEvent('purchase-completed', heroId, { productId, receiptId }),
+  adImpression: (heroId: string, placement: string) =>
+    metricsManager.trackEvent('ad-impression', heroId, { placement }),
+  adClick: (heroId: string, placement: string) =>
+    metricsManager.trackEvent('ad-click', heroId, { placement }),
+  rewardedAdCompleted: (heroId: string, reward: string) =>
+    metricsManager.trackEvent('rewarded-ad-completed', heroId, { reward })
 };
 
 // Finalizar sessão quando a página é fechada

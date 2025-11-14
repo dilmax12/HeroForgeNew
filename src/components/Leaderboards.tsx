@@ -14,6 +14,8 @@ import {
 import type { Leaderboard, LeaderboardEntry } from '../types/hero';
 import { getOrRunDailyResult } from '../services/idleBattleService';
 import { notificationBus } from './NotificationSystem';
+import { useMonetizationStore } from '../store/monetizationStore';
+import { seasonalThemes } from '../styles/medievalTheme';
 
 interface DailyEntry {
   heroId: string;
@@ -29,6 +31,9 @@ interface DailyEntry {
 const Leaderboards: React.FC = () => {
   const { getSelectedHero, heroes } = useHeroStore();
   const selectedHero = getSelectedHero();
+  const { activeSeasonalTheme } = useMonetizationStore();
+  const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-amber-600/30' : 'border-amber-600/30';
+  const seasonalHeaderBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-amber-500/30' : 'border-amber-500/30';
   const [localHeroId, setLocalHeroId] = useState<string | null>(selectedHero?.id ?? (heroes[0]?.id ?? null));
   const viewHero = (localHeroId ? heroes.find(h => h.id === localHeroId) : undefined) || selectedHero;
   const [selectedLeaderboard, setSelectedLeaderboard] = useState('xp');
@@ -120,7 +125,7 @@ const Leaderboards: React.FC = () => {
     <div className="space-y-6">
       {/* Ranking Diário (MVP) */}
       {viewHero && (
-        <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-amber-600/30">
+        <div className={`bg-gray-800 rounded-lg p-4 md:p-6 border ${seasonalBorder}`}>
           <div className="flex items-center justify-between mb-3 md:mb-4">
             <h3 className="text-lg md:text-xl font-bold text-white flex items-center">
               <span className="mr-2">📅</span>
@@ -224,7 +229,7 @@ const Leaderboards: React.FC = () => {
         </div>
       )}
       {/* Header com Ranking do Herói */}
-      <div className="bg-gradient-to-r from-amber-900/50 to-amber-800/30 rounded-lg p-4 md:p-6 border border-amber-500/30">
+      <div className={`bg-gradient-to-r from-amber-900/50 to-amber-800/30 rounded-lg p-4 md:p-6 border ${seasonalHeaderBorder}`}>
         <h2 className="text-xl md:text-2xl font-bold text-amber-400 mb-3 md:mb-4 flex items-center">
           <span className="text-2xl md:text-3xl mr-2 md:mr-3">🏆</span>
           Rankings & Leaderboards

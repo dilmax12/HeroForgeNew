@@ -1,4 +1,5 @@
 import { Routes, Route, Link } from 'react-router-dom'
+import React, { Suspense } from 'react'
 import Layout from './components/Layout'
 import HeroList from './components/HeroList'
 import HeroForm from './components/HeroForm'
@@ -19,27 +20,31 @@ import EventsPanel from './components/EventsPanel'
 import ActivityFeed from './components/ActivityFeed'
 import { EvolutionPanel } from './components/EvolutionPanel'
 import { RankCelebrationManager } from './components/RankCelebration'
-import AIAvatarGenerator from './components/AIAvatarGenerator'
-import DynamicMissionsPanel from './components/DynamicMissionsPanel'
-import AIRecommendationsPanel from './components/AIRecommendationsPanel'
+const AIAvatarGeneratorLazy = React.lazy(() => import('./components/AIAvatarGenerator'))
+const DynamicMissionsPanelLazy = React.lazy(() => import('./components/DynamicMissionsPanel'))
+const AIRecommendationsPanelLazy = React.lazy(() => import('./components/AIRecommendationsPanel'))
 import Shop from './components/Shop'
 import Training from './components/Training'
 import { WorldStateDemo } from './components/WorldStateDemo'
-import MissionsHub from './components/MissionsHub'
+const MissionsHubLazy = React.lazy(() => import('./components/MissionsHub'))
 import Dungeon20 from './components/Dungeon20'
 import HuntingMissions from './components/HuntingMissions'
 import Inventory from './components/Inventory'
+import PetsPanel from './components/PetsPanel'
+import MountsPanel from './components/MountsPanel'
 import { useEffect } from 'react'
+import { startPlaytimeHeartbeat, stopPlaytimeHeartbeat } from './services/progressService'
 import { useHeroStore } from './store/heroStore'
 import { HeroJournal } from './components/HeroJournal'
 import QuickMission from './components/QuickMission'
 import JourneyFlow from './components/JourneyFlow'
 // (removido import duplicado de MissionsHub)
-import AdminDashboard from './components/AdminDashboard'
+const AdminDashboardLazy = React.lazy(() => import('./components/AdminDashboard'))
 import IntroCinematic from './components/IntroCinematic'
 import PlayerRegistration from './components/PlayerRegistration'
 import Tavern from './components/Tavern'
 import Messenger from './components/Messenger'
+import HeroForge from './components/HeroForge'
 
 // Componente wrapper para HeroProgression que precisa do herói selecionado
 function HeroProgressionWrapper() {
@@ -170,11 +175,13 @@ function AIAvatarGeneratorWrapper() {
   };
 
   return (
-    <AIAvatarGenerator 
-      hero={selectedHero} 
-      className="max-w-4xl mx-auto" 
-      onAvatarGenerated={handleAvatarGenerated}
-    />
+    <Suspense fallback={<div className="p-6">Carregando...</div>}>
+      <AIAvatarGeneratorLazy 
+        hero={selectedHero} 
+        className="max-w-4xl mx-auto" 
+        onAvatarGenerated={handleAvatarGenerated}
+      />
+    </Suspense>
   );
 }
 
@@ -208,7 +215,7 @@ function DynamicMissionsPanelWrapper() {
     }
   };
 
-  return <DynamicMissionsPanel hero={selectedHero} className="max-w-6xl mx-auto" onMissionAccept={handleMissionAccept} />;
+  return <Suspense fallback={<div className="p-6">Carregando...</div>}><DynamicMissionsPanelLazy hero={selectedHero} className="max-w-6xl mx-auto" onMissionAccept={handleMissionAccept} /></Suspense>;
 }
 
 // Componente wrapper para AIRecommendationsPanel que precisa do herói selecionado
@@ -251,11 +258,13 @@ function AIRecommendationsPanelWrapper() {
   };
 
   return (
-    <AIRecommendationsPanel 
-      hero={selectedHero} 
-      className="max-w-6xl mx-auto" 
-      onRecommendationApply={handleApply}
-    />
+    <Suspense fallback={<div className="p-6">Carregando...</div>}>
+      <AIRecommendationsPanelLazy 
+        hero={selectedHero} 
+        className="max-w-6xl mx-auto" 
+        onRecommendationApply={handleApply}
+      />
+    </Suspense>
   );
 }
 
@@ -345,6 +354,24 @@ function App() {
     }
   }, []);
 
+  useEffect(() => {
+    try {
+      startPlaytimeHeartbeat(1);
+      const onVis = () => {
+        if (document.hidden) {
+          stopPlaytimeHeartbeat();
+        } else {
+          startPlaytimeHeartbeat(1);
+        }
+      };
+      document.addEventListener('visibilitychange', onVis);
+      return () => {
+        document.removeEventListener('visibilitychange', onVis);
+        stopPlaytimeHeartbeat();
+      };
+    } catch {}
+  }, []);
+
   // Coletar todas as celebrações pendentes
   const allCelebrations = heroes.flatMap(hero => 
     (hero.rankData?.pendingCelebrations || []).map((celebration, index) => ({
@@ -391,12 +418,12 @@ function App() {
         <Route path="party-lobby" element={<PartySystemWrapper />} />
           {/* Hub da Guilda dos Aventureiros */}
           <Route path="guild-hub" element={<AdventurersGuildHub />} />
-          <Route path="missions" element={<MissionsHub />} />
+          <Route path="missions" element={<Suspense fallback={<div className="p-6">Carregando...</div>}><MissionsHubLazy /></Suspense>} />
           <Route path="dungeon-20" element={<Dungeon20 />} />
           <Route path="dungeon-infinita" element={<Dungeon20 />} />
           <Route path="hunting" element={<HuntingMissions />} />
           {/* Centralização de modos de missão em um único hub */}
-          <Route path="quests" element={<MissionsHub />} />
+          <Route path="quests" element={<Suspense fallback={<div className="p-6">Carregando...</div>}><MissionsHubLazy /></Suspense>} />
           <Route path="daily-goals" element={<DailyGoalsWrapper />} />
           <Route path="events" element={<EventsPanel />} />
           <Route path="activities" element={<ActivityFeed />} />
@@ -405,7 +432,7 @@ function App() {
           {/* Rota de tutorial removida temporariamente */}
           <Route path="titles" element={<TitlesManager />} />
           <Route path="leaderboards" element={<Leaderboards />} />
-          <Route path="metrics" element={<AdminDashboard />} />
+          <Route path="metrics" element={<Suspense fallback={<div className="p-6">Carregando...</div>}><AdminDashboardLazy /></Suspense>} />
           <Route path="ai-avatar" element={<AIAvatarGeneratorWrapper />} />
           <Route path="ai-missions" element={<DynamicMissionsPanelWrapper />} />
           <Route path="ai-recommendations" element={<AIRecommendationsPanelWrapper />} />
@@ -416,10 +443,13 @@ function App() {
           {/* Rotas de missões narrativas removidas */}
           <Route path="hero-journal" element={<HeroJournalWrapper />} />
           <Route path="quick-mission" element={<QuickMissionWrapper />} />
-          <Route path="admin" element={<AdminDashboard />} />
+          <Route path="admin" element={<Suspense fallback={<div className="p-6">Carregando...</div>}><AdminDashboardLazy /></Suspense>} />
           <Route path="shop" element={<Shop />} />
           <Route path="inventory" element={<Inventory />} />
+          <Route path="hero-forge" element={<HeroForge />} />
           <Route path="training" element={<Training />} />
+          <Route path="pets" element={<PetsPanel />} />
+          <Route path="mounts" element={<MountsPanel />} />
           <Route path="world-state-demo" element={<WorldStateDemo />} />
         </Route>
       </Routes>

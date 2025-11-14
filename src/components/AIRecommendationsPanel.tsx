@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { recommendationAI } from '../services/recommendationAI';
 import { Hero } from '../types/hero';
 import { Recommendation } from '../services/recommendationAI';
-import { medievalTheme } from '../styles/medievalTheme';
+import { medievalTheme, seasonalThemes, getSeasonalButtonColors } from '../styles/medievalTheme';
+import { useMonetizationStore } from '../store/monetizationStore';
 
 interface AIRecommendationsPanelProps {
   hero: Hero;
@@ -113,7 +114,8 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
   };
 
   return (
-    <div className={`ai-recommendations-panel ${className}`}>
+    <div className={className}>
+      <div className={`ai-recommendations-panel rounded-xl border ${(useMonetizationStore().activeSeasonalTheme ? (seasonalThemes as any)[useMonetizationStore().activeSeasonalTheme]?.border || 'border-white/20' : 'border-white/20')}`}>
       <style>{`
         .ai-recommendations-panel {
           background: ${medievalTheme.colors.background.secondary};
@@ -470,6 +472,13 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
           className="refresh-button"
           onClick={generateRecommendations}
           disabled={isLoading}
+          style={{
+            backgroundImage: ((): string => {
+              const { activeSeasonalTheme } = useMonetizationStore();
+              const { from, to } = getSeasonalButtonColors(activeSeasonalTheme as any);
+              return `linear-gradient(135deg, ${from}, ${to})`;
+            })()
+          }}
         >
           {isLoading ? '⏳ Analisando...' : '🔄 Atualizar'}
         </button>
@@ -667,6 +676,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
             )}
           </AnimatePresence>
         )}
+      </div>
       </div>
     </div>
   );

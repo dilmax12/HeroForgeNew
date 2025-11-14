@@ -34,17 +34,20 @@ export function getCachedImage(prompt: string): string | null {
   const entry = store[prompt];
   if (!entry) return null;
   if (Date.now() > entry.expiresAt) {
-    // expired, cleanup
     delete store[prompt];
     saveStore(store);
     return null;
   }
-  return entry.url;
+  const url = entry.url || '';
+  if (typeof url === 'string' && url.includes('pollinations.ai')) {
+    return `/api/pollinations-image?prompt=${encodeURIComponent(prompt)}&width=512&height=512`;
+  }
+  return url;
 }
 
 export function setCachedImage(prompt: string, url: string, ttlMs: number, source?: ImageCacheEntry['source']) {
-  // Only cache http(s) URLs to avoid large data URIs in localStorage
-  if (!/^https?:\/\//.test(url)) return;
+  if (typeof url !== 'string') return;
+  if (url.startsWith('data:')) return;
   const store = loadStore();
   store[prompt] = {
     url,

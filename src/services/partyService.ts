@@ -9,7 +9,9 @@ export interface ServerParty {
 }
 
 export async function listParties(): Promise<ServerParty[]> {
-  const res = await fetch('/api/party/list');
+  const apiBase = (import.meta as any)?.env?.VITE_API_BASE;
+  if (!apiBase) return [];
+  const res = await fetch(`${apiBase}/party/list`);
   if (!res.ok) throw new Error(`Falha ao listar parties: ${res.status}`);
   const data = await res.json();
   return Array.isArray(data?.parties) ? data.parties : [];

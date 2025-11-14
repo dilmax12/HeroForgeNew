@@ -12,12 +12,14 @@ import {
 import { generateDynamicTitleForHero } from '../services/titleAIService';
 
 const TitlesManager: React.FC = () => {
-  const { getSelectedHero, setActiveTitle, addTitleToSelectedHero } = useHeroStore();
+  const { getSelectedHero, setActiveTitle, addTitleToSelectedHero, toggleFavoriteTitle } = useHeroStore();
   const selectedHero = getSelectedHero();
   const [selectedCategory, setSelectedCategory] = useState<'all' | Title['category']>('all');
   const [selectedRarity, setSelectedRarity] = useState<'all' | Title['rarity']>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [sortMode, setSortMode] = useState<'name' | 'rarity' | 'recent' | 'favoritesFirst'>('favoritesFirst');
 
   if (!selectedHero) {
     return (
@@ -47,6 +49,34 @@ const TitlesManager: React.FC = () => {
       title.description.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }
+
+  if (showFavoritesOnly) {
+    filteredTitles = filteredTitles.filter(t => t.favorite);
+  }
+
+  const rarityRank: Record<Title['rarity'], number> = {
+    comum: 1,
+    raro: 2,
+    epico: 3,
+    lendario: 4,
+    especial: 5
+  } as const;
+
+  filteredTitles = [...filteredTitles].sort((a, b) => {
+    switch (sortMode) {
+      case 'name':
+        return a.name.localeCompare(b.name, 'pt-BR');
+      case 'rarity':
+        return (rarityRank[b.rarity] - rarityRank[a.rarity]) || a.name.localeCompare(b.name, 'pt-BR');
+      case 'recent':
+        return new Date(b.unlockedAt).getTime() - new Date(a.unlockedAt).getTime();
+      case 'favoritesFirst':
+      default:
+        return (Number(!!b.favorite) - Number(!!a.favorite))
+          || (rarityRank[b.rarity] - rarityRank[a.rarity])
+          || a.name.localeCompare(b.name, 'pt-BR');
+    }
+  });
 
   const handleSetActiveTitle = (titleId: string) => {
     setActiveTitle(titleId);
@@ -157,7 +187,7 @@ const TitlesManager: React.FC = () => {
       <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 mb-6">
         <h3 className="text-lg font-bold text-white mb-4">Filtros</h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* Busca */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -209,6 +239,34 @@ const TitlesManager: React.FC = () => {
               <option value="especial">Especial</option>
             </select>
           </div>
+
+          {/* Ordenação */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Ordenar por
+            </label>
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as any)}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="favoritesFirst">Favoritos primeiro</option>
+              <option value="rarity">Raridade</option>
+              <option value="recent">Mais recentes</option>
+              <option value="name">Nome (A–Z)</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center space-x-3">
+          <input
+            id="favOnly"
+            type="checkbox"
+            checked={showFavoritesOnly}
+            onChange={(e) => setShowFavoritesOnly(e.target.checked)}
+            className="h-4 w-4 text-amber-600 focus:ring-amber-500 border-gray-600 rounded"
+          />
+          <label htmlFor="favOnly" className="text-sm text-gray-300">Mostrar apenas favoritos</label>
         </div>
       </div>
 
@@ -239,6 +297,13 @@ const TitlesManager: React.FC = () => {
                   </div>
                 </div>
               </div>
+              <button
+                onClick={() => toggleFavoriteTitle(title.id)}
+                className={`ml-2 px-2 py-1 rounded-md text-xs font-medium ${title.favorite ? 'bg-amber-600 hover:bg-amber-700 text-black' : 'bg-gray-700 hover:bg-gray-600 text-white'} transition-colors`}
+                title={title.favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+              >
+                {title.favorite ? '★ Favorito' : '☆ Favoritar'}
+              </button>
             </div>
 
             <p className="text-gray-300 text-sm mb-4">{title.description}</p>

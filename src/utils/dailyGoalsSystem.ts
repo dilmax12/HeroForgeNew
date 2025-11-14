@@ -61,6 +61,26 @@ const DAILY_GOAL_TEMPLATES: DailyGoalTemplate[] = [
     difficulty: 'easy',
     levelRequirement: 1
   },
+  {
+    id: 'hatch-pet',
+    name: 'Domador Iniciante',
+    description: 'Chocar 1 mascote',
+    category: 'collection',
+    maxProgress: 1,
+    baseRewards: { xp: 60, gold: 40 },
+    difficulty: 'easy',
+    levelRequirement: 1
+  },
+  {
+    id: 'train-pet',
+    name: 'Cuidar do Companheiro',
+    description: 'Treinar ou alimentar um mascote 1 vez',
+    category: 'progression',
+    maxProgress: 1,
+    baseRewards: { xp: 50, gold: 30 },
+    difficulty: 'easy',
+    levelRequirement: 1
+  },
 
   // MEDIUM GOALS (Level 3+)
   {
@@ -251,6 +271,12 @@ export function updateDailyGoalProgress(
         break;
       case 'npc-interaction':
         shouldUpdate = goal.id.includes('social-interaction');
+        break;
+      case 'pet-hatched':
+        shouldUpdate = goal.id.includes('hatch-pet');
+        break;
+      case 'pet-trained':
+        shouldUpdate = goal.id.includes('train-pet');
         break;
     }
 

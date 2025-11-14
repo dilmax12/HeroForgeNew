@@ -11,6 +11,8 @@ import { enhancedMissionGenerator } from '../utils/enhancedMissions';
 import { worldStateManager } from '../utils/worldState';
 import { rankSystem } from '../utils/rankSystem';
 import { resumeAudioContextIfNeeded, playSuccess, playFailure } from '../utils/audioEffects';
+import { useMonetizationStore } from '../store/monetizationStore';
+import { seasonalThemes, getSeasonalButtonGradient } from '../styles/medievalTheme';
 
 interface EnhancedQuestBoardProps {
   hero: Hero;
@@ -127,7 +129,7 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
   return (
     <div className="space-y-6">
       {/* Header com Stamina */}
-      <div className="bg-gray-800 rounded-lg p-4">
+      <div className={`bg-gray-800 rounded-lg p-4 border ${seasonalBorder}`}>
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-white">Missões Narrativas</h2>
           <div className="flex items-center space-x-4">
@@ -139,8 +141,9 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
             </div>
             <button
               onClick={generateMissions}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+              className={`px-4 py-2 bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white rounded hover:brightness-110 transition-colors flex items-center gap-2`}
             >
+              {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
               Atualizar Missões
             </button>
           </div>
@@ -202,7 +205,7 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
             className={`bg-gray-800 rounded-lg p-4 border-2 transition-all ${
               selectedMission?.id === mission.id 
                 ? 'border-blue-500 shadow-lg shadow-blue-500/20' 
-                : 'border-gray-700 hover:border-gray-600'
+                : `${seasonalBorder} hover:border-gray-600`
             }`}
           >
             <div className="flex justify-between items-start mb-3">
@@ -296,3 +299,5 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
     </div>
   );
 };
+  const { activeSeasonalTheme } = useMonetizationStore();
+  const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-gray-700' : 'border-gray-700';

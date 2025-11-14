@@ -152,7 +152,11 @@ export async function getDungeonLeaderboard(limit = 10): Promise<{ data: Dungeon
       .from('dungeon_leaderboard')
       .select('*')
       .limit(limit);
-    if (error) return { data: [], error: error.message };
+    if (error) {
+      const msg = String(error.message || '');
+      const notFound = msg.includes('Could not find the table') || msg.includes('does not exist');
+      return notFound ? { data: [], offline: true } : { data: [], error: error.message };
+    }
     return { data: (Array.isArray(data) ? data : []) as DungeonLeaderboardEntry[] };
   } catch (err: any) {
     return { data: [], error: err?.message || 'Falha ao carregar leaderboard da dungeon.' };
@@ -195,7 +199,9 @@ export async function getWeeklyDungeonHighlights(): Promise<{ data: WeeklyDungeo
       .limit(1);
 
     if (errBest || errLoot) {
-      return { data: {}, error: (errBest?.message || errLoot?.message) };
+      const msg = String(errBest?.message || errLoot?.message || '');
+      const notFound = msg.includes('Could not find the table') || msg.includes('does not exist');
+      return notFound ? { data: {}, offline: true } : { data: {}, error: (errBest?.message || errLoot?.message) };
     }
 
     const bestRun = Array.isArray(bestRuns) && bestRuns.length ? bestRuns[0] : undefined;

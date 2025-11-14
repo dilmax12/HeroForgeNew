@@ -4,6 +4,8 @@ import { supabase, supabaseConfigured } from '../lib/supabaseClient';
 import { listMessages, sendMessage, sendMessageForApproval, moderateMessage, TavernMessage, TavernScope, reportMessage, adminListPendingMessages, adminSetMessageApproval, generateRumorsAI } from '../services/tavernService';
 import { getWeeklyDungeonHighlights } from '../services/dungeonService';
 import { activityManager } from '../utils/activitySystem';
+import { useMonetizationStore } from '../store/monetizationStore';
+import { seasonalThemes, getSeasonalButtonGradient } from '../styles/medievalTheme';
 
 type Tab = 'chat' | 'mural' | 'eventos' | 'moderacao';
 
@@ -33,6 +35,7 @@ function pickDailyEvent() {
 const Tavern: React.FC = () => {
   const { getSelectedHero, restAtTavern } = useHeroStore();
   const selectedHero = getSelectedHero();
+  const { activeSeasonalTheme } = useMonetizationStore();
 
   const [tab, setTab] = useState<Tab>('chat');
   const [scope, setScope] = useState<TavernScope>('global');
@@ -208,9 +211,10 @@ const Tavern: React.FC = () => {
     }
   };
 
+  const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-white/20' : 'border-white/20';
   return (
     <div className="max-w-5xl mx-auto p-6">
-      <div className="bg-white/10 border border-white/20 rounded-lg p-6">
+      <div className={`bg-white/10 border ${seasonalBorder} rounded-lg p-6`}>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-amber-300">🍺 Taverna "Pônei Saltitante"</h1>
@@ -359,9 +363,10 @@ const Tavern: React.FC = () => {
               <button
                 onClick={handleGenerateRumors}
                 disabled={rumorsLoading}
-                className="px-3 py-2 rounded bg-amber-700 text-black hover:bg-amber-600"
+                className={`px-3 py-2 rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}
               >
-                {rumorsLoading ? 'Gerando…' : 'Gerar Rumores IA'}
+                {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+                <span>{rumorsLoading ? 'Gerando…' : 'Gerar Rumores IA'}</span>
               </button>
               {rumorsError && <span className="text-xs text-red-300">{rumorsError}</span>}
             </div>

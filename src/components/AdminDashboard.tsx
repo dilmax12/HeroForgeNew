@@ -1,4 +1,6 @@
 import React, { useMemo, useEffect, useState } from 'react';
+import { useMonetizationStore } from '../store/monetizationStore';
+import { seasonalThemes, getSeasonalButtonGradient } from '../styles/medievalTheme';
 import { useHeroStore } from '../store/heroStore';
 import { useGameSettingsStore } from '../store/gameSettingsStore';
 import { metricsManager } from '../utils/metricsSystem';
@@ -7,6 +9,7 @@ import { supabase } from '../lib/supabaseClient';
 import SupabaseAuthPanel from './SupabaseAuthPanel';
 import SupabaseHeroesSyncPanel from './SupabaseHeroesSyncPanel';
 import SupabaseQuestsPanel from './SupabaseQuestsPanel';
+import { triggerBackup } from '../services/backupService';
 
 export default function AdminDashboard() {
   const heroes = useHeroStore(s => s.heroes);
@@ -35,6 +38,8 @@ export default function AdminDashboard() {
     selected: selectedHero ? selectedHero.name : '—',
     level: selectedHero ? selectedHero.progression.level : 0,
   }), [heroes.length, selectedHero?.name, selectedHero?.progression.level]);
+
+  const { activeSeasonalTheme } = useMonetizationStore();
 
   // Métricas
   const [engagement, setEngagement] = useState(() => metricsManager.getEngagementMetrics());
@@ -65,6 +70,13 @@ export default function AdminDashboard() {
   const [sbStatus, setSbStatus] = useState<string>('—');
   const [sbError, setSbError] = useState<string | null>(null);
   const [sbPlayers, setSbPlayers] = useState<any[]>([]);
+  const [backupStatus, setBackupStatus] = useState<string>('—');
+  const [progressLoading, setProgressLoading] = useState(false);
+  const [progressError, setProgressError] = useState<string | null>(null);
+  const [playerProgress, setPlayerProgress] = useState<{ missions_completed: number; achievements_unlocked: number; playtime_minutes: number; last_login?: string | null } | null>(null);
+  const [adminToken, setAdminToken] = useState('');
+  const [logFiles, setLogFiles] = useState<any[]>([]);
+  const [logPreview, setLogPreview] = useState<string>('—');
 
   async function testSupabase() {
     setSbLoading(true);
@@ -80,6 +92,64 @@ export default function AdminDashboard() {
       setSbStatus('Erro');
     } finally {
       setSbLoading(false);
+    }
+  }
+
+  async function runBackup() {
+    setBackupStatus('Executando...');
+    const resp = await triggerBackup();
+    if (resp.ok) {
+      setBackupStatus(`OK (${resp.file})`);
+    } else {
+      setBackupStatus(`Erro: ${resp.error}`);
+    }
+  }
+
+  async function fetchPlayerProgress() {
+    setProgressLoading(true);
+    setProgressError(null);
+    try {
+      const { data } = await supabase.auth.getUser();
+      const userId = data?.user?.id || null;
+      if (!userId) {
+        setProgressError('Faça login para ver seu progresso.');
+        setPlayerProgress(null);
+      } else {
+        const res = await fetch(`/api/player-progress?action=get&id=${encodeURIComponent(userId)}`);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error || 'Falha ao carregar progresso');
+        setPlayerProgress(json?.progress || null);
+      }
+    } catch (e: any) {
+      setProgressError(e?.message || String(e));
+      setPlayerProgress(null);
+    } finally {
+      setProgressLoading(false);
+    }
+  }
+
+  async function fetchLogs() {
+    try {
+      const res = await fetch('/api/logs', { headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : {} });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Falha ao listar logs');
+      setLogFiles(Array.isArray(data?.files) ? data.files : []);
+    } catch (e: any) {
+      setLogFiles([]);
+      console.error('fetchLogs error', e?.message || String(e));
+    }
+  }
+
+  async function fetchLogContent(name: string) {
+    try {
+      const headers: Record<string, string> = adminToken ? { Authorization: `Bearer ${adminToken}` } : {};
+      const res = await fetch(`/api/logs?action=get&name=${encodeURIComponent(name)}`, { headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Falha ao obter log');
+      const content = data?.json ? JSON.stringify(data.json, null, 2) : (data?.content || '—');
+      setLogPreview(content);
+    } catch (e: any) {
+      setLogPreview(e?.message || String(e));
     }
   }
 
@@ -389,6 +459,37 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
         </div>
       </div>
 
+      {/* Progresso do Jogador */}
+      <div className="bg-white p-6 rounded-lg border border-gray-200 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">🎮 Seu Progresso</h2>
+        <div className="flex items-center gap-2 mb-3">
+          <button onClick={fetchPlayerProgress} className="px-3 py-2 bg-white text-indigo-700 border border-indigo-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            {progressLoading ? 'Carregando...' : 'Atualizar agora'}
+          </button>
+          {progressError && (
+            <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">{progressError}</div>
+          )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-lg border border-gray-200">
+            <div className="text-sm text-gray-600">Missões concluídas</div>
+            <div className="text-2xl text-gray-900">{playerProgress?.missions_completed ?? '—'}</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-gray-200">
+            <div className="text-sm text-gray-600">Conquistas</div>
+            <div className="text-2xl text-gray-900">{playerProgress?.achievements_unlocked ?? '—'}</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-gray-200">
+            <div className="text-sm text-gray-600">Tempo de jogo (min)</div>
+            <div className="text-2xl text-gray-900">{playerProgress?.playtime_minutes ?? '—'}</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-gray-200">
+            <div className="text-sm text-gray-600">Último login</div>
+            <div className="text-xs text-gray-900">{playerProgress?.last_login ? new Date(playerProgress.last_login).toLocaleString() : '—'}</div>
+          </div>
+        </div>
+      </div>
+
       {/* KPIs adicionais e tendências (estilo Playtest) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-lg border border-gray-200">
@@ -439,6 +540,13 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
             {sbLoading ? 'Conectando...' : 'Testar conexão (tabela players)'}
           </button>
           <div className="text-sm text-gray-700">Status: {sbStatus}</div>
+          <button
+            onClick={runBackup}
+            className="px-3 py-2 bg-white text-purple-700 border border-purple-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            Fazer backup agora
+          </button>
+          <div className="text-sm text-gray-700">Backup: {backupStatus}</div>
         </div>
         {sbError && (
           <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2 mb-3">
@@ -461,6 +569,36 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
         <div className="text-xs text-gray-500 mt-2">
           Dica: configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` em `.env.local`.
           Se RLS bloquear, ajuste políticas para leitura pública de `players` em desenvolvimento.
+        </div>
+      </div>
+
+      {/* Logs Admin Panel */}
+      <div className="bg-white p-6 rounded-lg border border-gray-200 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">🧾 Logs (Admin)</h2>
+        <div className="flex items-end gap-2 mb-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Admin Token</label>
+            <input value={adminToken} onChange={e => setAdminToken(e.target.value)} className="bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Bearer token" />
+          </div>
+          <button onClick={fetchLogs} className="px-3 py-2 bg-white text-purple-700 border border-purple-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">Listar logs</button>
+        </div>
+        <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+          {logFiles.length === 0 && (
+            <div className="text-xs text-gray-500">—</div>
+          )}
+          {logFiles.map((f, idx) => (
+            <div key={idx} className="bg-white p-3 rounded border border-gray-200 text-xs text-gray-700 flex items-center justify-between gap-2">
+              <span>{String(f?.name || '—')} • {String(f?.created_at || '')}</span>
+              <button onClick={() => fetchLogContent(String(f?.name || ''))} className="px-2 py-1 bg-white text-gray-800 border border-gray-300 rounded">Ver</button>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3">
+          <div className="text-sm text-gray-700 mb-1">Prévia</div>
+          <pre className="bg-white p-3 rounded border border-gray-200 text-xs text-gray-700 overflow-auto max-h-64 whitespace-pre-wrap">{logPreview}</pre>
+        </div>
+        <div className="text-xs text-gray-500 mt-2">
+          Dica: configure `ADMIN_API_TOKEN` no ambiente do servidor. Apenas para produção.
         </div>
       </div>
 
@@ -677,7 +815,10 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
           <div className="bg-white p-4 rounded-lg border border-gray-200">
             <div className="text-sm text-gray-600 mb-2">Prompt do Forjador</div>
             <textarea className="w-full bg-white text-gray-900 border border-gray-300 rounded px-3 py-2 h-24 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} />
-            <button className="mt-2 px-3 py-2 bg-white text-amber-700 border border-amber-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" onClick={generateAIReport}>Gerar relatório</button>
+            <button className={`mt-2 px-3 py-2 text-white rounded bg-gradient-to-r ${(seasonalThemes as any)[activeSeasonalTheme || '']?.buttonGradient || 'from-amber-600 to-yellow-600'} hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center gap-2`} onClick={generateAIReport}>
+              {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+              <span>Gerar relatório</span>
+            </button>
             <div className="mt-3 text-xs text-gray-500">Dica: Ele narra com voz medieval e sugere ajustes.</div>
           </div>
           <div className="bg-white p-4 rounded-lg border border-gray-200">

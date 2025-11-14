@@ -49,7 +49,7 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
   };
 
   const gridClasses = {
-    small: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6',
+    small: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
     medium: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
     large: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
   };
@@ -204,7 +204,7 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
         </div>
       ) : (
         <div className="text-center py-12">
-          <div className="text-6xl mb-4">🦸</div>
+          <div className="text-4xl sm:text-6xl mb-4">🦸</div>
           <h3 className="text-xl font-bold text-yellow-400 mb-2">
             Nenhum herói encontrado
           </h3>

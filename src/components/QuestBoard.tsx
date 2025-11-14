@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useHeroStore } from '../store/heroStore';
 import { Quest, QuestDifficulty, Hero } from '../types/hero';
 import { generateQuestBoard } from '../utils/quests';
+import { SHOP_ITEMS } from '../utils/shop';
 import { getClassIcon } from '../styles/medievalTheme';
 import { ELEMENT_INFO } from '../utils/elementSystem';
 import { getElementInfoSafe } from '../utils/elementSystem';
@@ -97,6 +98,7 @@ const QuestBoard: React.FC = () => {
   const selectedHero = getSelectedHero();
   
   const [selectedTab, setSelectedTab] = useState<'available' | 'active' | 'completed'>('available');
+  const [companionsOnly, setCompanionsOnly] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(0);
 
   // Selecionar automaticamente o primeiro herói se não há nenhum selecionado
@@ -211,6 +213,19 @@ const QuestBoard: React.FC = () => {
                 {getDifficultyLabel(quest.difficulty)}
               </span>
               <span className="text-gray-400 text-sm">Nível {quest.levelRequirement}+</span>
+              {quest.isGuildQuest && (
+                <span className="px-2 py-1 rounded-md text-xs font-medium bg-purple-900/30 text-purple-300 border border-purple-600/30 flex items-center gap-1">
+                  🏰 Guilda <span className="text-emerald-300">🐾</span>
+                </span>
+              )}
+              {(() => {
+                try {
+                  const ids = (quest.rewards?.items || []).map(i => (typeof (i as any) === 'string' ? (i as any) : (i as any).id));
+                  const set = new Set(['racao-basica','racao-deluxe','pedra-alma','pedra-magica','essencia-vinculo','essencia-bestial','pergaminho-montaria','essencia-calor','brasas-magicas']);
+                  const has = ids.some(id => set.has(id));
+                  return has ? (<span className="px-2 py-1 rounded-md text-xs font-medium bg-emerald-900/30 text-emerald-300 border border-emerald-600/30 flex items-center gap-1">🐾 Companheiros</span>) : null;
+                } catch { return null; }
+              })()}
             </div>
           </div>
         </div>
@@ -249,9 +264,18 @@ const QuestBoard: React.FC = () => {
             <span>{quest.rewards?.xp || 0} XP</span>
           </span>
           {quest.rewards?.items && quest.rewards.items.length > 0 && (
-            <span className="flex items-center space-x-1">
-              <span>🎁</span>
-              <span>{quest.rewards.items.length} item(s)</span>
+            <span className="flex items-center space-x-2">
+              {quest.rewards.items.map(({ id, qty }, idx) => {
+                const it = SHOP_ITEMS.find(s => s.id === id);
+                const r = it?.rarity;
+                const c = r === 'lendario' ? 'text-amber-300' : r === 'epico' ? 'text-purple-300' : r === 'raro' ? 'text-blue-300' : r === 'incomum' ? 'text-green-300' : 'text-gray-300';
+                return (
+                  <span key={`${id}-${idx}`} className={`flex items-center gap-1 ${c}`}>
+                    <span>{it?.icon || '🎁'}</span>
+                    <span>{id} x{qty || 1}</span>
+                  </span>
+                );
+              })}
             </span>
           )}
         </div>
@@ -292,15 +316,23 @@ const QuestBoard: React.FC = () => {
     <div className="container mx-auto p-6">
       <div className="flex items-center justify-between mb-8">
         <h2 className="text-3xl font-bold text-amber-400">Quadro de Missões</h2>
-        <button
-          onClick={() => {
-            console.log('🔄 Atualizando missões para herói:', selectedHero?.name, 'Level:', selectedHero?.progression.level);
-            refreshQuests(selectedHero?.progression.level || 1);
-          }}
-          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-md font-medium transition-colors"
-        >
-          🔄 Atualizar Missões
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCompanionsOnly(v => !v)}
+            className={`px-3 py-2 rounded-md font-medium transition-colors ${companionsOnly ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'}`}
+            title="Mostrar apenas missões de companheiros"
+          >
+            🐾 Companheiros {companionsOnly ? '✓' : ''}
+          </button>
+          <button
+            onClick={() => {
+              refreshQuests(selectedHero?.progression.level || 1);
+            }}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-md font-medium transition-colors"
+          >
+            🔄 Atualizar Missões
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -340,7 +372,9 @@ const QuestBoard: React.FC = () => {
 
       {/* Quest Content */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {selectedTab === 'available' && availableQuests.map(quest => renderQuestCard(quest))}
+        {selectedTab === 'available' && availableQuests
+          .filter(q => (companionsOnly ? q.isGuildQuest : true))
+          .map(quest => renderQuestCard(quest))}
         {/* Conteúdo Narrativas removido */}
         {selectedTab === 'active' && selectedHero.activeQuests
           .map(id => availableQuests.find(q => q.id === id))

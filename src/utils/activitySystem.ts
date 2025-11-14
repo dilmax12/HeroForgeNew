@@ -108,6 +108,12 @@ export class ActivityManager {
         return `🧪 ${heroName} (${heroClass}) usou${itemLabel}${effectText}.`;
       }
 
+      case 'pet-hatched': {
+        const rarity = data.eggRarity ? ` (${String(data.eggRarity)})` : '';
+        const petLabel = data.petName ? ` ${data.petName}` : 'um mascote';
+        return `🐣 ${heroName} (${heroClass}) chocou${rarity} e obteve${petLabel}!`;
+      }
+
       case 'guild-event-activated': {
         const xp = typeof data.xpBuffPercent === 'number' ? `+${data.xpBuffPercent}% XP` : '';
         const tr = typeof data.trainingDiscountPercent === 'number' ? `-${data.trainingDiscountPercent}% treino` : '';
@@ -135,7 +141,8 @@ export class ActivityManager {
       'rank-promotion': '🏆',
       'tavern-rest': '🛏️',
       'item-used': '🧪',
-      'guild-event-activated': '🏛️'
+      'guild-event-activated': '🏛️',
+      'pet-hatched': '🐣'
     };
     return icons[type] || '🎮';
   }
@@ -154,7 +161,8 @@ export class ActivityManager {
       'rank-promotion': 'from-amber-400 to-yellow-600',
       'tavern-rest': 'from-amber-400 to-amber-600',
       'item-used': 'from-indigo-400 to-indigo-600',
-      'guild-event-activated': 'from-indigo-500 to-indigo-700'
+      'guild-event-activated': 'from-indigo-500 to-indigo-700',
+      'pet-hatched': 'from-amber-400 to-emerald-600'
     };
     return colors[type] || 'from-gray-400 to-gray-600';
   }
@@ -394,4 +402,7 @@ export const logActivity = {
 
   guildEventActivated: (data: ActivityData) =>
     activityManager.createActivity('guild-event-activated', data)
+  ,
+  petHatched: (data: ActivityData) =>
+    activityManager.createActivity('pet-hatched', data)
 };

@@ -6,10 +6,25 @@ export type PlayerProfile = {
   created_at?: string;
 };
 
+// Verifica se um nome de usuário já está em uso na tabela `players`
+export async function isUsernameAvailable(username: string): Promise<boolean> {
+  const clean = (username || '').trim().toLowerCase();
+  if (!clean) return false;
+  const { data, error } = await supabase
+    .from('players')
+    .select('id')
+    .eq('username', clean)
+    .limit(1);
+  if (error) {
+    return false;
+  }
+  return !(Array.isArray(data) && data.length > 0);
+}
+
 // Garante um perfil na tabela `players` para o usuário autenticado
 export async function ensurePlayerProfile(userId: string, username?: string | null): Promise<PlayerProfile | null> {
   if (!userId) return null;
-  const safeUsername = username || null;
+  const safeUsername = (username || null) as string | null;
   // tenta buscar o perfil
   const { data: existing, error: fetchError } = await supabase
     .from('players')
@@ -40,4 +55,3 @@ export async function ensurePlayerProfile(userId: string, username?: string | nu
   if (insertError) return null;
   return (inserted && inserted[0]) as PlayerProfile;
 }
-

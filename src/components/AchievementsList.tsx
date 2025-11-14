@@ -38,6 +38,15 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ hero }) => {
       case 'lenda-epica':
         currentProgress = Math.min(template.maxProgress!, Math.floor(hero.stats.questsCompleted * 0.1));
         break;
+      case 'amigo-dos-animais':
+        currentProgress = Math.min(template.maxProgress!, (hero.stats.companionQuestsCompleted || 0));
+        break;
+      case 'domador-de-feras':
+        currentProgress = Math.min(template.maxProgress!, (hero.stats.beastEssenceCollected || 0));
+        break;
+      case 'cavaleiro-mitico':
+        currentProgress = Math.min(template.maxProgress!, (hero.stats.mountScrollsFound || 0));
+        break;
     }
     
     return {
@@ -162,6 +171,15 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ hero }) => {
           )}
           {hero.stats.questsCompleted < 10 && (
             <div>• Continue completando missões para desbloquear mais conquistas!</div>
+          )}
+          {(hero.stats.companionQuestsCompleted || 0) < 5 && (
+            <div>• Conclua {(5 - (hero.stats.companionQuestsCompleted || 0))} missões de Companheiros para "Amigo dos Animais"</div>
+          )}
+          {(hero.stats.beastEssenceCollected || 0) < 3 && (
+            <div>• Colete {(3 - (hero.stats.beastEssenceCollected || 0))} Essências Bestiais para "Domador de Feras"</div>
+          )}
+          {(hero.stats.mountScrollsFound || 0) < 2 && (
+            <div>• Encontre {(2 - (hero.stats.mountScrollsFound || 0))} Pergaminhos de Montaria para "Cavaleiro Mítico"</div>
           )}
         </div>
       </div>

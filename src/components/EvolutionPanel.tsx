@@ -6,6 +6,8 @@ import { Hero } from '../types/hero';
 import { RankLevel, RankHistory, RankComparison } from '../types/ranks';
 import { RankProgressAnimation, FloatingRankBadge } from './RankAnimations';
 import { rankSystem } from '../utils/rankSystem';
+import { useMonetizationStore } from '../store/monetizationStore';
+import { seasonalThemes } from '../styles/medievalTheme';
 import { 
   TrendingUp, 
   Trophy, 
@@ -62,6 +64,8 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
   className = '' 
 }) => {
   const { heroes, getHeroRankProgress, getRankLeaderboard, promoteHero, updateHero, getSelectedHero } = useHeroStore();
+  const { activeSeasonalTheme } = useMonetizationStore();
+  const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-amber-700/30' : 'border-amber-700/30';
   const [viewMode, setViewMode] = useState<ViewMode>('overview');
   const [selectedHeroForComparison, setSelectedHeroForComparison] = useState<string>('');
   const [historyFilter, setHistoryFilter] = useState<RankLevel | 'all'>('all');
@@ -144,7 +148,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
   const renderOverview = () => (
     <div className="space-y-6">
       {/* Hero Summary */}
-      <div className="bg-gradient-to-r from-amber-900/20 to-yellow-900/20 rounded-lg p-6 border border-amber-700/30">
+      <div className={`bg-gradient-to-r from-amber-900/20 to-yellow-900/20 rounded-lg p-6 border ${seasonalBorder}`}>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-xl font-bold text-amber-100">{currentHero.name}</h3>
@@ -531,10 +535,19 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
       {/* Header */}
       <div className="p-6 border-b border-slate-700">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-slate-100 flex items-center">
-            <Trophy className="w-6 h-6 mr-2 text-amber-400" />
-            Painel de Evolução
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-bold text-slate-100 flex items-center font-serif tracking-wide">
+              <Trophy className="w-6 h-6 mr-2 text-amber-400" />
+              Painel de Evolução
+            </h2>
+            {(() => {
+              const cfg = (seasonalThemes as any)[activeSeasonalTheme || ''];
+              const accents: string[] = cfg?.accents || [];
+              return accents.length ? (
+                <div className="text-xl opacity-80">{accents[0]}{accents[1]}{accents[2]}</div>
+              ) : null;
+            })()}
+          </div>
           {(rankProgress.rankData?.pendingCelebrations?.length || 0) > 0 && (
             <div className="bg-amber-500 text-amber-900 px-3 py-1 rounded-full text-sm font-medium">
               {rankProgress.rankData?.pendingCelebrations?.length || 0} nova(s) conquista(s)!

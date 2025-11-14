@@ -4,7 +4,8 @@ import { useHeroStore } from '../store/heroStore';
 import { SHOP_ITEMS, ITEM_SETS } from '../utils/shop';
 import NarrativeChapters from './NarrativeChapters';
 import { getAvailableRecipes } from '../utils/forging';
-import { useHeroStore } from '../store/heroStore';
+import TalentPlanManager from './TalentPlanManager';
+import UpcomingSkills from './UpcomingSkills';
 
 const HeroDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -64,7 +65,11 @@ const HeroDetail = () => {
           <div className="flex items-center gap-4">
             {hero.image && (
               <img
-                src={hero.image}
+                src={hero.image.includes('image.pollinations.ai/prompt/')
+                  ? hero.image
+                      .replace('https://image.pollinations.ai/prompt/', '/api/pollinations-image?prompt=')
+                      .replace('?n=1&', '&')
+                  : hero.image}
                 alt={`Avatar de ${hero.name}`}
                 className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover border border-gray-700"
                 onError={(e) => { (e.currentTarget as HTMLImageElement).src = 'https://placehold.co/160x160?text=Avatar'; }}
@@ -92,6 +97,9 @@ const HeroDetail = () => {
               <div><span className="text-gray-400">Ouro</span><div className="text-white">{hero.progression.gold}</div></div>
               <div><span className="text-gray-400">Missões</span><div className="text-white">{hero.stats?.questsCompleted || 0}</div></div>
               <div><span className="text-gray-400">Rank Atual</span><div className="text-white">{hero.rankData?.currentRank || 'F'}</div></div>
+              {hero.stats?.talentsUnlockedPlanned !== undefined && (
+                <div><span className="text-gray-400">Talentos planejados</span><div className="text-white">{hero.stats?.talentsUnlockedPlanned || 0} / {(hero.plannedTalents || []).length}</div></div>
+              )}
             </div>
           </div>
           <div className="rounded-xl p-4 bg-gray-800/70 border border-white/10">
@@ -125,7 +133,31 @@ const HeroDetail = () => {
               </div>
             )}
           </div>
+          <div className="rounded-xl p-4 bg-gray-800/70 border border-white/10">
+            <h3 className="text-base sm:text-lg font-semibold text-white mb-3">Companheiros</h3>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="bg-gray-700/50 p-3 rounded-md">
+                <div className="text-gray-400">Mascote Ativo</div>
+                <div className="text-white">{(hero.pets||[]).find(p => p.id===hero.activePetId)?.name || '-'}</div>
+                {hero.activePetId && (
+                  <div className="text-xs text-gray-300 mt-1">Refino: +{((hero.pets||[]).find(p => p.id===hero.activePetId)?.refineLevel||0)}%</div>
+                )}
+                <Link to="/pets" className="mt-2 inline-block px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-xs">Gerenciar Mascotes</Link>
+              </div>
+              <div className="bg-gray-700/50 p-3 rounded-md">
+                <div className="text-gray-400">Montaria Ativa</div>
+                <div className="text-white">{(hero.mounts||[]).find(m => m.id===hero.activeMountId)?.name || '-'}</div>
+                {hero.activeMountId && (
+                  <div className="text-xs text-gray-300 mt-1">Speed: +{((hero.mounts||[]).find(m => m.id===hero.activeMountId)?.speedBonus||0)} • Refino: +{((hero.mounts||[]).find(m => m.id===hero.activeMountId)?.refineLevel||0)}%</div>
+                )}
+                <Link to="/mounts" className="mt-2 inline-block px-3 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white text-xs">Gerenciar Montarias</Link>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <TalentPlanManager />
+        <UpcomingSkills />
 
         {/* Atributos */}
         <div className="rounded-xl p-4 bg-gray-800/70 border border-white/10">
@@ -173,6 +205,9 @@ const HeroDetail = () => {
           {/* Forja Simples */}
           <div className="mt-4">
             <h4 className="text-sm font-semibold text-white mb-2">Forja Simples</h4>
+            <div className="mb-2">
+              <Link to="/hero-forge" className="inline-flex items-center gap-2 px-2 py-1 rounded bg-amber-600 text-white text-xs hover:bg-amber-700">Ir à Forja ⚒️</Link>
+            </div>
             {(() => {
               const recipes = getAvailableRecipes(hero);
               if (recipes.length === 0) return (<div className="text-xs text-gray-400">Nenhuma receita disponível com seus materiais e rank atual.</div>);

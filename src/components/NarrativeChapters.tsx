@@ -1,5 +1,6 @@
 import React from 'react';
 import { useHeroStore } from '../store/heroStore';
+import DialogueFrame from './DialogueFrame';
 
 const NarrativeChapters: React.FC = () => {
   const { getSelectedHero } = useHeroStore();
@@ -20,9 +21,11 @@ const NarrativeChapters: React.FC = () => {
       <ul className="space-y-3">
         {chapters.map((c) => (
           <li key={c.id} className="text-sm text-gray-200">
-            <div className="font-semibold text-white mb-1">{c.title}</div>
-            <div className="text-gray-300">{c.summary}</div>
-            <div className="text-xs text-gray-400 mt-1">Criado em {new Date(c.createdAt).toLocaleString()} • Nível {c.levelMilestone}</div>
+            <DialogueFrame>
+              <div className="font-semibold text-white mb-1">{c.title}</div>
+              <div className="text-gray-300">{c.summary}</div>
+              <div className="text-xs text-gray-400 mt-1">Criado em {new Date(c.createdAt).toLocaleString()} • Nível {c.levelMilestone}</div>
+            </DialogueFrame>
           </li>
         ))}
       </ul>

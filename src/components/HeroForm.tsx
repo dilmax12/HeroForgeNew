@@ -1,5 +1,5 @@
 // CACHE BUSTER - TIMESTAMP: 2024-12-19-19:52
-import { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { HeroCreationData, HeroRace, HeroClass, Alignment, Element, HeroAttributes } from '../types/hero';
 import { useHeroStore } from '../store/heroStore';
@@ -32,6 +32,16 @@ import {
   getElementAdvantageInfo
 } from '../utils/elementSystem';
 import { getClassSkills } from '../utils/skillSystem';
+import { medievalTheme, seasonalThemes, getSeasonalButtonGradient, getSeasonalButtonColors } from '../styles/medievalTheme';
+import { useMonetizationStore } from '../store/monetizationStore';
+import TalentTreePreview from './TalentTreePreview';
+import { CLASS_METADATA } from '../utils/classRegistry';
+import { getRaceCompatibility, getRecommendedAttributePlan } from '../utils/compatibility';
+import { getElementSuggestionReason } from '../utils/synergyExplain';
+import { getPrefs, setPrefs } from '../utils/userPreferences';
+import { getRecommendedTalentPlan } from '../utils/talentRecommendations';
+import { getClassPreset } from '../utils/buildPresets';
+import { saveDraft, loadDraft, clearDraft } from '../utils/creationDraft';
 
 const HeroForm = () => {
   const [formData, setFormData] = useState<HeroCreationData>({
@@ -61,7 +71,12 @@ const HeroForm = () => {
   const [showElementTooltip, setShowElementTooltip] = useState(false);
   const [limitWarning, setLimitWarning] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [creationLog, setCreationLog] = useState<string[]>([]);
+  const [decisionHistory, setDecisionHistory] = useState<Array<{ field: 'class'|'race'|'element'; prev: string; next: string; timestamp: string }>>([]);
+  const [redoHistory, setRedoHistory] = useState<Array<{ field: 'class'|'race'|'element'; prev: string; next: string; timestamp: string }>>([]);
   const { createHero, acceptReferralInvite } = useHeroStore();
+  const { activeSeasonalTheme } = useMonetizationStore();
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
@@ -69,6 +84,18 @@ const HeroForm = () => {
 
   const remainingPoints = calculateRemainingPoints(formData.attributes);
   const classSkills = getClassSkills(formData.class);
+
+  useEffect(() => {
+    const adv = getElementAdvantageInfo(formData.element);
+    console.log('[hero-form] element-adv', { element: formData.element, adv });
+    console.log('[hero-form] class-meta', CLASS_METADATA[formData.class]);
+    const prefs = getPrefs();
+    if (typeof prefs.autoSuggestDisabled === 'boolean') setDisableAutoSuggestion(prefs.autoSuggestDisabled);
+  }, [formData.element, formData.class]);
+
+  useEffect(() => {
+    saveDraft(formData);
+  }, [formData]);
 
   const handleGenerateName = async () => {
     setLoadingName(true);
@@ -122,12 +149,53 @@ const HeroForm = () => {
     setFormData(prev => ({ ...prev, attributes: newAttributes }));
   };
 
+  const handleAutoDistributeRecommended = () => {
+    const plan = getRecommendedAttributePlan(formData.class);
+    const rc = getRaceCompatibility(formData.class, formData.race as any);
+    const weights: Record<string, number> = { alta: rc.ok ? 3 : 2, media: 1, baixa: 0.5 } as any;
+    const elemBonus: Record<string, number> = {
+      forca: formData.element === 'fire' ? 1 : 0,
+      destreza: formData.element === 'thunder' || formData.element === 'ice' ? 1 : 0,
+      constituicao: formData.element === 'earth' ? 1 : 0,
+      inteligencia: formData.element === 'dark' || formData.element === 'ice' ? 1 : 0,
+      sabedoria: formData.element === 'light' ? 1 : 0,
+      carisma: 0
+    } as any;
+    let remaining = calculateRemainingPoints(formData.attributes);
+    let attrs = { ...formData.attributes } as any;
+    const order = plan.sort((a,b) => ((weights[a.priority] + (elemBonus[a.attribute] || 0)) > (weights[b.priority] + (elemBonus[b.attribute] || 0)) ? -1 : 1));
+    while (remaining > 0) {
+      let progressed = false;
+      for (const p of order) {
+        if (remaining <= 0) break;
+        const attrKey = p.attribute as any;
+        if (canIncreaseAttribute(attrs, attrKey)) {
+          attrs = increaseAttribute(attrs, attrKey);
+          remaining = calculateRemainingPoints(attrs);
+          progressed = true;
+        }
+      }
+      if (!progressed) break;
+    }
+    setFormData(prev => ({ ...prev, attributes: attrs }));
+  };
+
+  const [elementAutoSuggested, setElementAutoSuggested] = useState(false);
+  const [prevElement, setPrevElement] = useState<Element | null>(null);
+  const [disableAutoSuggestion, setDisableAutoSuggestion] = useState(false);
+  const [showSuggestionInfo, setShowSuggestionInfo] = useState(true);
+
   const handleElementChange = (element: Element) => {
     setFormData(prev => ({ 
       ...prev, 
       element,
       skills: getClassSkills(prev.class)
     }));
+    setElementAutoSuggested(false);
+    setPrevElement(null);
+    setCreationLog(prev => [...prev, `Elemento alterado para ${element}`]);
+    setDecisionHistory(prev => [...prev, { field: 'element', prev: String(formData.element), next: String(element), timestamp: new Date().toISOString() }]);
+    setRedoHistory([]);
   };
 
   const handleGenerateRandomElement = () => {
@@ -136,15 +204,61 @@ const HeroForm = () => {
   };
 
   const handleClassChange = (newClass: HeroClass) => {
+    const meta = CLASS_METADATA[newClass];
+    if (meta?.requirements) {
+      const check = meta.requirements({ alignment: formData.alignment as any, attributes: formData.attributes, race: formData.race });
+      if (!check.ok) { setLimitWarning(check.message || 'Requisitos da classe não atendidos.'); return; }
+    }
     const newSkills = getClassSkills(newClass);
     const newBattleQuote = getBattleQuote(newClass);
+    const recEls = getRecommendedElements(newClass, formData.race);
+    const nextElement = disableAutoSuggestion ? formData.element : ((formData.element === 'physical' || !recEls.includes(formData.element)) && recEls.length ? (recEls[0] as Element) : formData.element);
     
     setFormData(prev => ({ 
       ...prev, 
       class: newClass,
       skills: newSkills,
-      battleQuote: newBattleQuote
+      battleQuote: newBattleQuote,
+      element: nextElement,
+      plannedTalents: []
     }));
+    if (!disableAutoSuggestion && nextElement !== formData.element) { setPrevElement(formData.element); setElementAutoSuggested(true); setShowSuggestionInfo(true); }
+    setCreationLog(prev => [...prev, `Classe alterada para ${newClass}`]);
+    setDecisionHistory(prev => [...prev, { field: 'class', prev: String(formData.class), next: String(newClass), timestamp: new Date().toISOString() }]);
+    setRedoHistory([]);
+  };
+
+  
+
+  const handleRaceChange = (race: HeroRace) => {
+    const recEls = getRecommendedElements(formData.class, race);
+    const nextElement = disableAutoSuggestion ? formData.element : ((formData.element === 'physical' || !recEls.includes(formData.element)) && recEls.length ? (recEls[0] as Element) : formData.element);
+    setFormData(prev => ({ ...prev, race, element: nextElement }));
+    if (!disableAutoSuggestion && nextElement !== formData.element) { setPrevElement(formData.element); setElementAutoSuggested(true); setShowSuggestionInfo(true); }
+    setCreationLog(prev => [...prev, `Raça alterada para ${race}`]);
+    setDecisionHistory(prev => [...prev, { field: 'race', prev: String(formData.race), next: String(race), timestamp: new Date().toISOString() }]);
+    setRedoHistory([]);
+  };
+
+  const applyClassBaseAttributes = () => {
+    const meta = CLASS_METADATA[formData.class];
+    if (meta) {
+      setFormData(prev => ({ ...prev, attributes: { ...meta.baseAttributes } }));
+    }
+  };
+
+  const finalizeCreation = () => {
+    try {
+      const created = createHero(formData);
+      if (referralCode) {
+        acceptReferralInvite(referralCode, created.id);
+      }
+      setConfirmOpen(false);
+      navigate('/');
+    } catch (error) {
+      console.error('Erro ao criar herói:', error);
+      setLimitWarning('Erro ao criar herói. Tente novamente.');
+    }
   };
 
   const handleGenerateBattleQuote = () => {
@@ -267,6 +381,14 @@ const HeroForm = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const meta = CLASS_METADATA[formData.class];
+    if (meta?.requirements) {
+      const check = meta.requirements({ alignment: formData.alignment as Alignment, attributes: formData.attributes, race: formData.race });
+      if (!check.ok) {
+        setLimitWarning(check.message || 'Requisitos da classe não atendidos.');
+        return;
+      }
+    }
     
     const validation = validateAttributes(formData.attributes);
     if (!validation.valid) {
@@ -285,21 +407,95 @@ const HeroForm = () => {
       return;
     }
     
-    try {
-      const created = createHero(formData);
-      if (referralCode) {
-        acceptReferralInvite(referralCode, created.id);
-      }
-      navigate('/');
-    } catch (error) {
-      console.error('Erro ao criar herói:', error);
-      setLimitWarning('Erro ao criar herói. Tente novamente.');
+    setConfirmOpen(true);
+  };
+  const handleUndoLastDecision = () => {
+    const last = decisionHistory.slice(-1)[0];
+    if (!last) return;
+    setDecisionHistory(prev => prev.slice(0, -1));
+    setRedoHistory(prev => [...prev, last]);
+    if (last.field === 'class') {
+      const prevClass = last.prev as HeroClass;
+      const newSkills = getClassSkills(prevClass);
+      const newQuote = getBattleQuote(prevClass);
+      setFormData(prev => ({ ...prev, class: prevClass, skills: newSkills, battleQuote: newQuote }));
+      setCreationLog(prev => [...prev, `Desfeito: classe voltou para ${prevClass}`]);
+    } else if (last.field === 'race') {
+      const prevRace = last.prev as HeroRace;
+      setFormData(prev => ({ ...prev, race: prevRace }));
+      setCreationLog(prev => [...prev, `Desfeito: raça voltou para ${prevRace}`]);
+    } else if (last.field === 'element') {
+      const prevEl = last.prev as Element;
+      setFormData(prev => ({ ...prev, element: prevEl, skills: getClassSkills(prev.class) }));
+      setCreationLog(prev => [...prev, `Desfeito: elemento voltou para ${prevEl}`]);
+    }
+  };
+
+  const handleRedoLastDecision = () => {
+    const last = redoHistory.slice(-1)[0];
+    if (!last) return;
+    setRedoHistory(prev => prev.slice(0, -1));
+    setDecisionHistory(prev => [...prev, last]);
+    if (last.field === 'class') {
+      const nextClass = last.next as HeroClass;
+      const newSkills = getClassSkills(nextClass);
+      const newQuote = getBattleQuote(nextClass);
+      setFormData(prev => ({ ...prev, class: nextClass, skills: newSkills, battleQuote: newQuote }));
+      setCreationLog(prev => [...prev, `Refeito: classe alterada para ${nextClass}`]);
+    } else if (last.field === 'race') {
+      const nextRace = last.next as HeroRace;
+      setFormData(prev => ({ ...prev, race: nextRace }));
+      setCreationLog(prev => [...prev, `Refeito: raça alterada para ${nextRace}`]);
+    } else if (last.field === 'element') {
+      const nextEl = last.next as Element;
+      setFormData(prev => ({ ...prev, element: nextEl, skills: getClassSkills(prev.class) }));
+      setCreationLog(prev => [...prev, `Refeito: elemento alterado para ${nextEl}`]);
     }
   };
   
   return (
     <div className="max-w-4xl mx-auto p-6 bg-gray-800 rounded-lg shadow-lg">
       <h2 className="text-3xl font-bold text-amber-400 mb-6 text-center">Forjar Novo Herói - Versão 3.0</h2>
+      <div className="mb-4 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify({ name: formData.name, race: formData.race, class: formData.class, alignment: formData.alignment, attributes: formData.attributes, element: formData.element, plannedTalents: formData.plannedTalents || [] })); } catch {} }}
+          className="px-3 py-1 rounded bg-indigo-600 text-white text-xs hover:bg-indigo-700"
+        >
+          Exportar build
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const raw = window.prompt('Cole o JSON do build') || ''
+            try {
+              const b = JSON.parse(raw)
+              if (b && typeof b === 'object') {
+                setFormData(prev => ({ ...prev, name: b.name || prev.name, race: b.race || prev.race, class: b.class || prev.class, alignment: b.alignment || prev.alignment, attributes: b.attributes || prev.attributes, element: b.element || prev.element, plannedTalents: Array.isArray(b.plannedTalents) ? b.plannedTalents : (prev.plannedTalents || []) }))
+              }
+            } catch {}
+          }}
+          className="px-3 py-1 rounded bg-blue-600 text-white text-xs hover:bg-blue-700"
+        >
+          Importar build
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const d = loadDraft(); if (d) setFormData(prev => ({ ...prev, ...d as any }))
+          }}
+          className="px-3 py-1 rounded bg-gray-600 text-white text-xs hover:bg-gray-700"
+        >
+          Carregar rascunho
+        </button>
+        <button
+          type="button"
+          onClick={() => { clearDraft(); }}
+          className="px-3 py-1 rounded bg-gray-600 text-white text-xs hover:bg-gray-700"
+        >
+          Limpar rascunho
+        </button>
+      </div>
       
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Seção 1: Raça e Nome */}
@@ -310,7 +506,7 @@ const HeroForm = () => {
               <label className="block text-sm font-medium text-gray-300">Raça</label>
               <select
                 value={formData.race}
-                onChange={(e) => setFormData({...formData, race: e.target.value as HeroRace})}
+                onChange={(e) => handleRaceChange(e.target.value as HeroRace)}
                 className="mt-1 block w-full rounded-md bg-gray-600 border-gray-500 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="humano">Humano</option>
@@ -377,17 +573,126 @@ const HeroForm = () => {
           <h3 className="text-xl font-semibold text-amber-400 mb-4">2. Classe e Habilidades</h3>
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-300">Classe</label>
-            <select
-              value={formData.class}
-              onChange={(e) => handleClassChange(e.target.value as HeroClass)}
-              className="mt-1 block w-full rounded-md bg-gray-600 border-gray-500 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            >
-              <option value="guerreiro">Guerreiro</option>
-              <option value="mago">Mago</option>
-              <option value="arqueiro">Arqueiro</option>
-              <option value="clerigo">Clérigo</option>
-              <option value="ladino">Ladino</option>
-            </select>
+            <div role="radiogroup" aria-label="Seleção de classe" className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Object.values(CLASS_METADATA).map((meta, idx, arr) => (
+                <button
+                  key={meta.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={formData.class === meta.id}
+                  onClick={() => handleClassChange(meta.id)}
+                  onKeyDown={(e) => {
+                    const ids = arr.map(m => m.id as HeroClass);
+                    const curIdx = ids.indexOf(formData.class);
+                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                      const next = ids[(curIdx + 1) % ids.length];
+                      handleClassChange(next);
+                    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                      const prev = ids[(curIdx - 1 + ids.length) % ids.length];
+                      handleClassChange(prev);
+                    }
+                  }}
+                  className={`text-left p-3 rounded border ${formData.class === meta.id ? 'border-amber-500 bg-amber-500/20' : 'border-gray-600 bg-gray-700'} hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                  tabIndex={0}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="text-white font-semibold">{meta.icon} {meta.name}</div>
+                    {formData.class === meta.id && <span className="text-xs text-amber-300">Selecionado</span>}
+                  </div>
+                  <p className="text-xs text-gray-300 mt-1">{meta.description}</p>
+                  <div className="mt-2 text-xs text-gray-400">Atributos base: {Object.entries(meta.baseAttributes).map(([k,v]) => `${k}:${v}`).join(' • ')}</div>
+                  <div className="mt-2 text-xs text-emerald-300">Vantagens: {meta.advantages.join(', ')}</div>
+                  {meta.disadvantages.length > 0 && <div className="mt-1 text-xs text-red-300">Desvantagens: {meta.disadvantages.join(', ')}</div>}
+                </button>
+              ))}
+            </div>
+          <div className="mt-2 flex gap-2">
+            <button type="button" onClick={applyClassBaseAttributes} className={`px-3 py-1 rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110`}>Aplicar atributos base da classe</button>
+            <button type="button" onClick={handleGenerateBattleQuote} className={`px-3 py-1 rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}>
+              {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+              <span>Gerar Frase de Batalha</span>
+            </button>
+          </div>
+          <div className="mt-3 p-3 rounded bg-gray-700">
+            <div className="text-white font-semibold">Sinergias</div>
+            <div className="mt-2 flex items-center gap-2">
+              <label className="text-xs text-gray-300 flex items-center gap-1">
+                <input type="checkbox" checked={disableAutoSuggestion} onChange={(e) => { setDisableAutoSuggestion(e.target.checked); setPrefs({ autoSuggestDisabled: e.target.checked }); }} />
+                Não sugerir automaticamente
+              </label>
+              <button type="button" onClick={handleUndoLastDecision} className="px-2 py-1 rounded bg-gray-600 text-white text-xs">Desfazer última decisão</button>
+              <button type="button" onClick={handleRedoLastDecision} className="px-2 py-1 rounded bg-gray-600 text-white text-xs">Refazer</button>
+              <button type="button" onClick={() => { const p = getClassPreset(formData.class, formData.race); setFormData(prev => ({ ...prev, attributes: p.attributes, element: p.element, plannedTalents: p.plannedTalents })); }} className="px-2 py-1 rounded bg-emerald-600 text-white text-xs">Aplicar preset de classe</button>
+            </div>
+            <div className="text-xs text-gray-300 mt-1">Elementos recomendados: {getRecommendedElements(formData.class, formData.race).join(', ')}</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {getRecommendedElements(formData.class, formData.race).map(el => (
+                  <button
+                    key={el}
+                    type="button"
+                    onClick={() => handleElementChange(el as Element)}
+                    className={`px-2 py-1 rounded text-xs ${formData.element === el ? 'bg-amber-600 text-white' : 'bg-gray-600 text-gray-200 hover:bg-gray-500'}`}
+                  >
+                    {el}
+                  </button>
+                ))}
+              </div>
+              {CLASS_METADATA[formData.class]?.suggestedRaces?.length && (
+                <div className="mt-2">
+                  <div className="text-xs text-amber-300">Raças sugeridas:</div>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {CLASS_METADATA[formData.class]?.suggestedRaces?.map(r => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => handleRaceChange(r as HeroRace)}
+                        className={`px-2 py-1 rounded text-xs ${formData.race === r ? 'bg-amber-600 text-white' : 'bg-gray-600 text-gray-200 hover:bg-gray-500'}`}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {elementAutoSuggested && (
+                <div className="mt-2 p-2 rounded bg-gray-800 text-xs text-amber-300">
+                  <div className="flex items-center gap-2">
+                    <span>Elemento sugerido automaticamente: {formData.element}</span>
+                    {prevElement && (
+                      <button type="button" onClick={() => handleElementChange(prevElement)} className="px-2 py-0.5 rounded bg-gray-600 text-white">Reverter</button>
+                    )}
+                    {showSuggestionInfo && (
+                      <button type="button" onClick={() => setShowSuggestionInfo(false)} className="px-2 py-0.5 rounded bg-gray-600 text-white">Entendi</button>
+                    )}
+                  </div>
+                  {showSuggestionInfo && (
+                    <div className="mt-1 text-gray-300">{getElementSuggestionReason(formData.class, formData.race, formData.element)}</div>
+                  )}
+                </div>
+              )}
+            {(() => {
+              const advObj: any = getElementAdvantageInfo(formData.element);
+              const strong = Array.isArray(advObj?.strong) ? advObj.strong.join(', ') : String(advObj?.strong || '');
+              const weak = Array.isArray(advObj?.weak) ? advObj.weak.join(', ') : String(advObj?.weak || '');
+              const neutral = Array.isArray(advObj?.neutral) ? advObj.neutral.join(', ') : String(advObj?.neutral || '');
+              return (
+                <div className="text-xs text-gray-400">Vantagens do elemento atual ({formData.element}): Forte contra {strong} • Fraco contra {weak} • Neutro {neutral}</div>
+              );
+            })()}
+            {CLASS_METADATA[formData.class]?.suggestedRaces?.length && (
+              <div className="text-xs text-amber-300 mt-1">Raças sugeridas: {CLASS_METADATA[formData.class]?.suggestedRaces?.join(', ')}</div>
+            )}
+            {(() => {
+              const rc = getRaceCompatibility(formData.class, formData.race as any)
+              return <div className={`text-xs mt-1 ${rc.ok ? 'text-emerald-300' : 'text-yellow-300'}`}>Compatibilidade da raça atual: {rc.message}</div>
+            })()}
+            <div className="mt-2 text-xs text-gray-300">Distribuição recomendada de atributos:</div>
+            <ul className="mt-1 text-xs text-gray-400 list-disc pl-5">
+              {getRecommendedAttributePlan(formData.class).map((p) => (
+                <li key={p.attribute}>{p.attribute}: prioridade {p.priority} — {p.hint}</li>
+              ))}
+            </ul>
+          </div>
           </div>
 
           <div>
@@ -398,7 +703,7 @@ const HeroForm = () => {
                   <div className="flex justify-between items-start">
                     <div>
                       <h5 className="font-medium text-white">{skill.name}</h5>
-                      <p className="text-xs text-gray-300">{skill.type} • {skill.element}</p>
+                      <p className="text-xs text-gray-300">{skill.type}{skill.element ? ` • ${skill.element}` : ''}</p>
                       <p className="text-xs text-amber-300">Custo: {skill.cost}</p>
                     </div>
                     <button
@@ -422,6 +727,48 @@ const HeroForm = () => {
               ))}
             </div>
           </div>
+
+          <div className="mt-4 p-4 rounded bg-gray-700">
+            <div className="flex items-center gap-3">
+              <div className="text-3xl">{(medievalTheme.icons.classes as any)[formData.class?.[0].toUpperCase() + formData.class?.slice(1)] || '🧝'}</div>
+              <div>
+                <div className="text-white font-semibold">Prévia: {formData.name || '—'} • {formData.class}</div>
+                <div className="text-xs text-gray-300">Alinhamento: {formData.alignment} • Raça: {formData.race}</div>
+              </div>
+            </div>
+          </div>
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-white font-semibold">Árvore de Talentos</div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify(formData.plannedTalents || [])); } catch {} }}
+                  className="px-3 py-1 rounded bg-indigo-600 text-white text-xs hover:bg-indigo-700"
+                >
+                  Exportar plano
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const raw = window.prompt('Cole o JSON do plano de talentos') || ''
+                    try { const arr = JSON.parse(raw); if (Array.isArray(arr)) setFormData(prev => ({ ...prev, plannedTalents: arr })) } catch {}
+                  }}
+                  className="px-3 py-1 rounded bg-blue-600 text-white text-xs hover:bg-blue-700"
+                >
+                  Importar plano
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, plannedTalents: getRecommendedTalentPlan(prev.class) }))}
+                  className="px-3 py-1 rounded bg-emerald-600 text-white text-xs hover:bg-emerald-700"
+                >
+                  Aplicar plano sugerido
+                </button>
+              </div>
+            </div>
+            <TalentTreePreview heroClass={formData.class} plannedTalents={formData.plannedTalents || []} currentLevel={1} onToggle={(id) => setFormData(prev => ({ ...prev, plannedTalents: (prev.plannedTalents || []).includes(id) ? (prev.plannedTalents || []).filter(x => x !== id) : [...(prev.plannedTalents || []), id] }))} />
+          </div>
         </div>
 
         {/* Seção 3: Atributos */}
@@ -437,6 +784,13 @@ const HeroForm = () => {
               className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors"
             >
               Auto-Distribuir
+            </button>
+            <button
+              type="button"
+              onClick={handleAutoDistributeRecommended}
+              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 rounded text-sm transition-colors"
+            >
+              Auto-distribuir recomendações
             </button>
           </div>
           
@@ -484,9 +838,10 @@ const HeroForm = () => {
             <button
               type="button"
               onClick={handleGenerateRandomElement}
-              className="px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-md text-sm font-medium transition-colors"
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}
             >
-              🎲 Gerar Aleatório
+              {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+              <span>🎲 Gerar Aleatório</span>
             </button>
             <button
               type="button"
@@ -559,9 +914,10 @@ const HeroForm = () => {
                 type="button"
                 onClick={handleGenerateImageAI}
                 disabled={loadingImageAI}
-                className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-md font-medium transition-colors disabled:opacity-60"
+                className={`w-full px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-60 bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}
               >
-                {loadingImageAI ? 'Gerando...' : '🤖 Gerar Avatar IA'}
+                {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+                <span>{loadingImageAI ? 'Gerando...' : '🤖 Gerar Avatar IA'}</span>
               </button>
               <p className="text-xs text-gray-400 mt-1">
                 Usa raça, classe e atributos para criar a imagem.
@@ -571,7 +927,11 @@ const HeroForm = () => {
             {formData.image && (
               <div className="w-24 h-24 bg-gray-600 rounded-md overflow-hidden">
                 <img
-                  src={formData.image}
+                  src={formData.image.includes('image.pollinations.ai/prompt/')
+                    ? formData.image
+                        .replace('https://image.pollinations.ai/prompt/', '/api/pollinations-image?prompt=')
+                        .replace('?n=1&', '&')
+                    : formData.image}
                   alt="Preview do herói"
                   className="w-full h-full object-cover"
                 />
@@ -587,17 +947,19 @@ const HeroForm = () => {
             <button
               type="button"
               onClick={handleGenerateBattleQuote}
-              className="px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-md text-sm font-medium transition-colors"
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}
             >
-              🎲 Gerar Aleatória
+              {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+              <span>🎲 Gerar Aleatória</span>
             </button>
             <button
               type="button"
               onClick={handleGenerateBattleQuoteAI}
               disabled={loadingQuoteAI}
-              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-sm font-medium transition-colors disabled:opacity-60"
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-60 bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}
             >
-              {loadingQuoteAI ? 'Gerando...' : '🤖 Gerar com IA'}
+              {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+              <span>{loadingQuoteAI ? 'Gerando...' : '🤖 Gerar com IA'}</span>
             </button>
           </div>
           <textarea
@@ -662,10 +1024,11 @@ const HeroForm = () => {
                   setLoadingStory(false);
                 }, 600);
               }}
-              className="px-3 py-2 bg-amber-600 hover:bg-amber-700 rounded-md text-sm font-medium transition-colors disabled:opacity-60"
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-60 bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}
               disabled={loadingStory || !formData.name.trim()}
             >
-              {loadingStory ? 'Gerando...' : 'Gerar história'}
+              {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+              <span>{loadingStory ? 'Gerando...' : 'Gerar história'}</span>
             </button>
             <button
               type="button"
@@ -721,6 +1084,35 @@ const HeroForm = () => {
           </button>
         </div>
       </form>
+
+      {confirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="confirm-create-title">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setConfirmOpen(false)}></div>
+          <div className="relative z-10 w-full max-w-lg rounded-lg border border-gray-700 bg-gray-800 p-4 shadow-xl">
+            <h2 id="confirm-create-title" className="text-lg font-bold text-white">Confirmar Criação</h2>
+            <p className="text-sm text-gray-300 mt-1">Você está prestes a criar {formData.name || 'um herói'} da classe {formData.class}. Deseja concluir?</p>
+            <div className="mt-3 text-xs text-gray-400">Atributos: {Object.entries(formData.attributes).map(([k,v]) => `${k}:${v}`).join(' • ')}</div>
+            {formData.plannedTalents && formData.plannedTalents.length > 0 && (
+              <div className="mt-1 text-xs text-amber-300">Talentos planejados: {formData.plannedTalents.length}</div>
+            )}
+            {creationLog.length > 0 && (
+              <div className="mt-2">
+                <div className="text-xs text-gray-300">Histórico de decisões:</div>
+                <ul className="mt-1 text-xs text-gray-400 list-disc pl-5">
+                  {creationLog.slice(-6).map((e, i) => (<li key={`log-${i}`}>{e}</li>))}
+                </ul>
+                <div className="mt-2 flex gap-2 justify-end">
+                  <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify(creationLog)); } catch {} }} className="px-2 py-1 rounded bg-gray-600 text-white text-xs">Exportar histórico</button>
+                </div>
+              </div>
+            )}
+            <div className="mt-4 flex gap-2 justify-end">
+              <button type="button" onClick={() => setConfirmOpen(false)} className="px-3 py-2 rounded bg-gray-600 text-white hover:bg-gray-700">Voltar</button>
+              <button type="button" onClick={finalizeCreation} className="px-3 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700">Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -378,13 +378,13 @@ class AIService {
       } catch {
         // Ignorar e manter placeholder
       }
-      // Fallback gratuito adicional: Pollinations
+      // Fallback gratuito adicional: Pollinations via proxy local para evitar ORB/CORS
       if (!imageUrl || (typeof imageUrl === 'string' && imageUrl.startsWith('data:image/svg+xml'))) {
         // Prefer width/height params for Pollinations for broader compatibility
         const size = (request.size || '512x512').split('x');
         const width = encodeURIComponent(size[0] || '512');
         const height = encodeURIComponent(size[1] || '512');
-        imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(request.prompt)}?n=1&width=${width}&height=${height}`;
+        imageUrl = `/api/pollinations-image?prompt=${encodeURIComponent(request.prompt)}&width=${width}&height=${height}`;
       }
     }
 

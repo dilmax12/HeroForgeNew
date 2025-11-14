@@ -154,7 +154,11 @@ export const medievalTheme = {
       'Paladino': '🛡️',
       'Bárbaro': '🪓',
       'Druida': '🌿',
-      'Feiticeiro': '✨'
+      'Feiticeiro': '✨',
+      'Bardo': '🎻',
+      'Monge': '🥋',
+      'Assassino': '🗡️',
+      'Lanceiro': '🐉'
     },
     
     activities: {
@@ -274,4 +278,66 @@ export const getClassIcon = (heroClass: string) => {
 
 export const getActivityIcon = (activityType: string) => {
   return medievalTheme.icons.activities[activityType as keyof typeof medievalTheme.icons.activities] || '🎮';
+};
+export const seasonalThemes = {
+  natal: {
+    banner: 'from-emerald-900/40 via-emerald-700/30 to-transparent',
+    accents: ['🎁','🕯️','🌿'],
+    border: 'border-emerald-500/40',
+    buttonGradient: 'from-emerald-600 to-emerald-700',
+    messages: [
+      'As velas do inverno iluminam as tavernas do reino.',
+      'Guirlandas de azevinho adornam os salões do castelo.',
+      'Presentes embrulhados em couro aguardam sob o pinheiro encantado.'
+    ]
+  },
+  pascoa: {
+    banner: 'from-purple-900/30 via-purple-700/20 to-transparent',
+    accents: ['🥚','🐇','🔮'],
+    border: 'border-purple-500/40',
+    buttonGradient: 'from-purple-600 to-purple-700',
+    messages: [
+      'Ovos gravados com runas reaparecem nos bosques antigos.',
+      'Coelhos mágicos guiam heróis por trilhas de renascimento.',
+      'Os bardos cantam lendas de retorno e esperança.'
+    ]
+  },
+  ano_novo: {
+    banner: 'from-amber-900/30 via-amber-700/20 to-transparent',
+    accents: ['🎆','🍗','📜'],
+    border: 'border-amber-500/40',
+    buttonGradient: 'from-amber-600 to-yellow-600',
+    messages: [
+      'Fogos encantados riscam o céu sobre muralhas antigas.',
+      'Banquetes reais celebram pactos e bons presságios.',
+      'Profetas desenham novas rotas nos mapas do destino.'
+    ]
+  },
+  carnaval: {
+    banner: 'from-rose-900/30 via-violet-800/20 to-transparent',
+    accents: ['🎭','🎶','🛡️'],
+    border: 'border-rose-500/40',
+    buttonGradient: 'from-rose-600 to-violet-600',
+    messages: [
+      'Máscaras de criaturas místicas enfeitam as praças.',
+      'Festivais de bardos ecoam pelos becos da capital.',
+      'Torneios de disfarces premiam astúcia e coragem.'
+    ]
+  }
+};
+
+export const getSeasonalButtonGradient = (season?: 'natal'|'pascoa'|'ano_novo'|'carnaval') => {
+  const s = season ? (seasonalThemes as any)[season] : undefined;
+  const g: string | undefined = s?.buttonGradient;
+  return g || 'from-amber-600 to-yellow-600';
+};
+
+export const getSeasonalButtonColors = (season?: 'natal'|'pascoa'|'ano_novo'|'carnaval') => {
+  switch (season) {
+    case 'natal': return { from: '#10b981', to: '#059669' }; // emerald
+    case 'pascoa': return { from: '#9333ea', to: '#7e22ce' }; // purple
+    case 'ano_novo': return { from: '#f59e0b', to: '#d97706' }; // amber
+    case 'carnaval': return { from: '#e11d48', to: '#7c3aed' }; // rose->violet
+    default: return { from: '#f59e0b', to: '#d97706' };
+  }
 };

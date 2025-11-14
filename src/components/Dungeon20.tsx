@@ -8,6 +8,7 @@ import { generateChestLoot } from '../utils/chestLoot';
 import { SHOP_ITEMS } from '../utils/shop';
 import BattleModal from './BattleModal';
 import { RankLevel } from '../types/ranks';
+import { useHeroStore as useStoreRef } from '../store/heroStore';
 
 type FloorResult = {
   floor: number;
@@ -31,6 +32,7 @@ export default function Dungeon20() {
   const addItemToInventory = useHeroStore(s => s.addItemToInventory);
   const equipItem = useHeroStore(s => s.equipItem);
   const unequipItem = useHeroStore(s => s.unequipItem);
+  const generateEggForSelected = useStoreRef(s => s.generateEggForSelected);
 
   const [floorIndex, setFloorIndex] = useState(0);
   const [running, setRunning] = useState(false);
@@ -365,6 +367,10 @@ export default function Dungeon20() {
             items.forEach(it => {
               addItemToInventory(hero.id, it.id, 1);
             });
+          }
+          // Chance de Ovo Misterioso em baús épicos/lendários
+          if ((tier === 'epico' || tier === 'lendario') && Math.random() < 0.2) {
+            generateEggForSelected();
           }
           const itemNames = items.map(i => i.name);
           const itemIds = items.map(i => i.id);
@@ -779,7 +785,7 @@ export default function Dungeon20() {
             const currentFloor = floorIndex + 1;
             const boss = isBossFloor(currentFloor);
             const mult = computeRewardMultiplier(streak);
-            const bossRewardMult = boss ? 1.5 : 1;
+          const bossRewardMult = boss ? 1.5 : 1;
             const xp = Math.round((res.xpGained || 0) * mult * bossRewardMult);
             const gold = Math.round((res.goldGained || 0) * mult * bossRewardMult);
 
@@ -810,6 +816,12 @@ export default function Dungeon20() {
               });
             }
 
+            // Drops especiais de boss: Essência Bestial e Pergaminho de Montaria
+            if (victory && boss) {
+              if (Math.random() < 0.3) addItemToInventory(hero.id, 'essencia-bestial', 1);
+              if (Math.random() < 0.25) addItemToInventory(hero.id, 'pergaminho-montaria', 1);
+            }
+
             if (victory) {
               logActivity.combatVictory({ heroId: hero.id, heroName: hero.name, heroClass: hero.class, enemiesDefeated: boss ? ['Boss da faixa'] : battleEnemies.map(e => e.type) });
               setAwaitingDecision(true);
@@ -828,6 +840,16 @@ export default function Dungeon20() {
 
             setShowBattle(false);
             setBattleEnemies([]);
+
+            if (victory && boss) {
+              const rank = (hero.rankData?.currentRank || 'F') as RankLevel;
+              const rankBonusMap: Record<RankLevel, number> = { F: 0, E: 0.02, D: 0.04, C: 0.06, B: 0.08, A: 0.1, S: 0.12 };
+              const rb = rankBonusMap[rank] || 0;
+              const essenceChance = Math.min(0.6, 0.3 + rb);
+              const scrollChance = Math.min(0.5, 0.25 + rb * 0.5);
+              if (Math.random() < essenceChance) addItemToInventory(hero.id, 'essencia-bestial', 1);
+              if (Math.random() < scrollChance) addItemToInventory(hero.id, 'pergaminho-montaria', 1);
+            }
           }}
         />
       )}

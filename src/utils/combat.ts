@@ -225,6 +225,21 @@ function generateLoot(enemyType: string): Item[] {
       loot.push(item);
     }
   });
+  const extra: { id: string; chance: number }[] = [
+    { id: 'pedra-alma', chance: 0.05 },
+    { id: 'essencia-calor', chance: 0.02 },
+    { id: 'brasas-magicas', chance: 0.01 }
+  ];
+  if (enemyType === 'Troll') {
+    extra.push({ id: 'essencia-bestial', chance: 0.03 });
+    extra.push({ id: 'pergaminho-montaria', chance: 0.02 });
+  }
+  extra.forEach(({ id, chance }) => {
+    if (Math.random() < chance) {
+      const it = SHOP_ITEMS.find(i => i.id === id);
+      if (it) loot.push(it);
+    }
+  });
   
   return loot;
 }
@@ -311,6 +326,17 @@ export function resolveSkillUse(user: Hero, target: Hero | CombatEntity, skill: 
     if (e.debuff?.attribute) effectTexts.push(`debuff ${String(e.debuff.attribute)}`);
     effects.push(...effectTexts);
     console.debug('[combat] effects parsed', effectTexts);
+
+    // Ajustes funcionais principais
+    if (e.special === 'double_strike' && finalDamage > 0) {
+      finalDamage = Math.floor(finalDamage * 2);
+    }
+    if (e.special === 'lifesteal_small' && finalDamage > 0) {
+      healing += Math.floor(finalDamage * 0.2);
+    }
+    if (e.special === 'heal_over_time') {
+      healing += e.heal ? e.heal : Math.floor(basePower * 0.5);
+    }
   }
   
   // Determinar sucesso (pode falhar em casos específicos)
@@ -370,6 +396,16 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
   combatLog.push(`${heroEntity.name} entra em combate!`);
 
   const heroElement: Element = hero.element || 'physical';
+  const activePet = (hero.pets || []).find(p => p.id === (hero as any).activePetId);
+  let petEnergy = activePet?.energy ?? 0;
+  let petEnergyUsed = 0;
+  let petCooldownLeft = 0;
+  let petDamageTotal = 0;
+  let petHealingTotal = 0;
+  let petStunCount = 0;
+  let heroElementOverride: Element | null = null;
+  let heroElementOverrideTurns = 0;
+  const petElementSet = new Set<Element>();
   
   // Processar cada inimigo
   for (const questEnemy of enemies) {
@@ -392,22 +428,84 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
           // Herói ataca primeiro
           // Chance de usar habilidade ofensiva
           const useSkill = (hero.skills && hero.skills.length > 0) && Math.random() < 0.35;
+          let stunned = false;
           if (useSkill) {
             const atkSkill = hero.skills.find(s => (s as any).type === 'attack') || hero.skills[0];
             const skillRes = resolveSkillUse(hero, enemy, atkSkill as any);
             enemy.hp = Math.max(0, enemy.hp - Math.floor(skillRes.damage * ramp));
             combatLog.push(`Turno ${turn}: ${skillRes.message}`);
+            if (skillRes.healing && skillRes.healing > 0) {
+              heroEntity.hp = Math.min(heroEntity.maxHp, heroEntity.hp + skillRes.healing);
+            }
+            stunned = (skillRes.effects || []).some(e => e.includes('freeze_stun') || e.includes('stun_1'));
           } else {
-            const heroAttack = resolveAttack(heroEntity, enemy, { ramp, attackElement: heroElement, defendElement: enemyElement });
+            const atkElem = heroElementOverride && heroElementOverrideTurns > 0 ? heroElementOverride : heroElement;
+            const heroAttack = resolveAttack(heroEntity, enemy, { ramp, attackElement: atkElem, defendElement: enemyElement });
             enemy.hp = Math.max(0, enemy.hp - heroAttack.damage);
             combatLog.push(`Turno ${turn}: ${heroAttack.message}`);
           }
+          if (activePet?.exclusiveSkill && petEnergy >= 6 && petCooldownLeft <= 0) {
+            let extraD = 0;
+            let extraH = 0;
+            let petStun = false;
+            const skill = activePet.exclusiveSkill;
+            let cost = 8;
+            if (skill === 'Instinto Feral') {
+              extraD = Math.floor(2 + Math.random() * 4);
+              cost = 8;
+            } else if (skill === 'Pulso Arcano') {
+              extraD = Math.floor(3 + (hero.attributes.inteligencia || 0) * 0.1);
+              cost = 10;
+            } else if (skill === 'Aura Sagrada') {
+              extraH = Math.floor(2 + Math.random() * 4);
+              cost = 9;
+            } else if (skill === 'Sussurro Sombrio') {
+              petStun = Math.random() < 0.1;
+              cost = 12;
+            }
+            if (petEnergy >= cost) {
+              petEnergy -= cost;
+              petEnergyUsed += cost;
+            } else {
+              extraD = 0;
+              extraH = 0;
+              petStun = false;
+            }
+            if (extraD > 0 && enemy.hp > 0) {
+              enemy.hp = Math.max(0, enemy.hp - extraD);
+              const icon = skill === 'Instinto Feral' ? '🐾' : skill === 'Pulso Arcano' ? '🔮' : skill === 'Aura Sagrada' ? '✨' : '🌑';
+              combatLog.push(`${icon} Companheiro (${skill}) causa ${extraD} dano extra`);
+              petDamageTotal += extraD;
+            }
+            if (extraH > 0) {
+              heroEntity.hp = Math.min(heroEntity.maxHp, heroEntity.hp + extraH);
+              combatLog.push(`✨ Companheiro restaura ${extraH} HP`);
+              petHealingTotal += extraH;
+            }
+            if (petStun) {
+              stunned = true;
+              combatLog.push(`🌑 Companheiro impede a ação do inimigo`);
+              petStunCount += 1;
+            }
+            const cooldownMap: Record<string, number> = { 'Instinto Feral': 1, 'Pulso Arcano': 2, 'Aura Sagrada': 2, 'Sussurro Sombrio': 3 };
+            petCooldownLeft = cooldownMap[skill] || 1;
+            const elemMap: Record<string, Element> = { 'Instinto Feral': 'earth', 'Pulso Arcano': 'light', 'Aura Sagrada': 'light', 'Sussurro Sombrio': 'dark' };
+            const ov = elemMap[skill];
+            if (ov) { heroElementOverride = ov; heroElementOverrideTurns = 1; }
+            if (ov) {
+              petElementSet.add(ov);
+              const icon = ov === 'earth' ? '⛰️' : ov === 'light' ? '✨' : ov === 'dark' ? '🌑' : '🌀';
+              combatLog.push(`${icon} Elemento do herói aplicado: ${ov}`);
+            }
+          }
           
-          if (enemy.hp > 0) {
+          const enemyStunned = stunned;
+          if (enemy.hp > 0 && !enemyStunned) {
             const enemyAttack = resolveAttack(enemy, heroEntity, { ramp, attackElement: enemyElement, defendElement: heroElement });
             heroEntity.hp = Math.max(0, heroEntity.hp - enemyAttack.damage);
             combatLog.push(`${enemyAttack.message}`);
           }
+          if (heroElementOverrideTurns > 0) heroElementOverrideTurns = Math.max(0, heroElementOverrideTurns - 1);
         } else {
           // Inimigo ataca primeiro
           const enemyAttack = resolveAttack(enemy, heroEntity, { ramp, attackElement: enemyElement, defendElement: heroElement });
@@ -416,17 +514,80 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
           
           if (heroEntity.hp > 0) {
             const useSkill = (hero.skills && hero.skills.length > 0) && Math.random() < 0.35;
+            let stunned = false;
             if (useSkill) {
               const atkSkill = hero.skills.find(s => (s as any).type === 'attack') || hero.skills[0];
               const skillRes = resolveSkillUse(hero, enemy, atkSkill as any);
               enemy.hp = Math.max(0, enemy.hp - Math.floor(skillRes.damage * ramp));
               combatLog.push(`${skillRes.message}`);
+              if (skillRes.healing && skillRes.healing > 0) {
+                heroEntity.hp = Math.min(heroEntity.maxHp, heroEntity.hp + skillRes.healing);
+              }
+              stunned = (skillRes.effects || []).some(e => e.includes('freeze_stun') || e.includes('stun_1'));
             } else {
-              const heroAttack = resolveAttack(heroEntity, enemy, { ramp, attackElement: heroElement, defendElement: enemyElement });
+              const atkElem = heroElementOverride && heroElementOverrideTurns > 0 ? heroElementOverride : heroElement;
+              const heroAttack = resolveAttack(heroEntity, enemy, { ramp, attackElement: atkElem, defendElement: enemyElement });
               enemy.hp = Math.max(0, enemy.hp - heroAttack.damage);
               combatLog.push(`${heroAttack.message}`);
             }
+            if (activePet?.exclusiveSkill && petEnergy >= 6 && petCooldownLeft <= 0) {
+              let extraD = 0;
+              let extraH = 0;
+              let petStun = false;
+              const skill = activePet.exclusiveSkill;
+              let cost = 8;
+              if (skill === 'Instinto Feral') {
+                extraD = Math.floor(2 + Math.random() * 4);
+                cost = 8;
+              } else if (skill === 'Pulso Arcano') {
+                extraD = Math.floor(3 + (hero.attributes.inteligencia || 0) * 0.1);
+                cost = 10;
+              } else if (skill === 'Aura Sagrada') {
+                extraH = Math.floor(2 + Math.random() * 4);
+                cost = 9;
+              } else if (skill === 'Sussurro Sombrio') {
+                petStun = Math.random() < 0.1;
+                cost = 12;
+              }
+              if (petEnergy >= cost) {
+                petEnergy -= cost;
+                petEnergyUsed += cost;
+              } else {
+                extraD = 0;
+                extraH = 0;
+                petStun = false;
+              }
+              if (extraD > 0 && enemy.hp > 0) {
+                enemy.hp = Math.max(0, enemy.hp - extraD);
+                const icon = skill === 'Instinto Feral' ? '🐾' : skill === 'Pulso Arcano' ? '🔮' : skill === 'Aura Sagrada' ? '✨' : '🌑';
+                combatLog.push(`${icon} Companheiro (${skill}) causa ${extraD} dano extra`);
+                petDamageTotal += extraD;
+              }
+              if (extraH > 0) {
+                heroEntity.hp = Math.min(heroEntity.maxHp, heroEntity.hp + extraH);
+                combatLog.push(`✨ Companheiro restaura ${extraH} HP`);
+                petHealingTotal += extraH;
+              }
+              if (petStun) {
+                stunned = true;
+                combatLog.push(`🌑 Companheiro impede a ação do inimigo`);
+                petStunCount += 1;
+              }
+              const cooldownMap: Record<string, number> = { 'Instinto Feral': 1, 'Pulso Arcano': 2, 'Aura Sagrada': 2, 'Sussurro Sombrio': 3 };
+              petCooldownLeft = cooldownMap[skill] || 1;
+              const elemMap: Record<string, Element> = { 'Instinto Feral': 'earth', 'Pulso Arcano': 'light', 'Aura Sagrada': 'light', 'Sussurro Sombrio': 'dark' };
+              const ov = elemMap[skill];
+              if (ov) { heroElementOverride = ov; heroElementOverrideTurns = 1; }
+              if (ov) {
+                petElementSet.add(ov);
+                const icon = ov === 'earth' ? '⛰️' : ov === 'light' ? '✨' : ov === 'dark' ? '🌑' : '🌀';
+                combatLog.push(`${icon} Elemento do herói aplicado: ${ov}`);
+              }
+            }
           }
+
+        if (petCooldownLeft > 0) petCooldownLeft = Math.max(0, petCooldownLeft - 1);
+        if (heroElementOverrideTurns > 0) heroElementOverrideTurns = Math.max(0, heroElementOverrideTurns - 1);
         }
         
         // Lógica de fuga do inimigo quando em desvantagem
@@ -529,6 +690,9 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
   
   combatLog.push(`\n=== VITÓRIA! ===`);
   combatLog.push(`Total: +${totalXp} XP, +${totalGold} ouro`);
+  if (activePet && (petDamageTotal > 0 || petHealingTotal > 0 || petStunCount > 0)) {
+    combatLog.push(`🐾 Contribuição do Companheiro: +${petDamageTotal} dano, +${petHealingTotal} cura, ${petStunCount} controle(s)`);
+  }
   
   return {
     victory: true,
@@ -536,7 +700,12 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
     xpGained: totalXp,
     goldGained: totalGold,
     itemsGained: allLoot,
-    log: combatLog
+    log: combatLog,
+    petEnergyUsed,
+    petDamage: petDamageTotal,
+    petHealing: petHealingTotal,
+    petStuns: petStunCount,
+    petElementHighlights: Array.from(petElementSet)
   };
 }
 
@@ -545,6 +714,8 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
 export function autoResolveCombat(hero: Hero, enemies: QuestEnemy[], isGuildQuest: boolean = false): CombatResult {
   const heroEntity = heroToCombatEntity(hero);
   let totalPower = heroEntity.forca + heroEntity.destreza + heroEntity.constituicao;
+  const activePet = (hero.pets || []).find(p => p.id === (hero as any).activePetId);
+  let petEnergyUsed = 0;
   
   let enemyPower = 0;
   enemies.forEach(questEnemy => {
@@ -563,7 +734,11 @@ export function autoResolveCombat(hero: Hero, enemies: QuestEnemy[], isGuildQues
   // Calcular chance de vitória (50% base + diferença de poder + bônus de guilda)
   const powerDiff = (totalPower + guildBonus) - enemyPower;
   const baseWinChance = isGuildQuest ? 75 : 50; // Chance base muito maior para missões de guilda
-  const winChance = Math.max(25, Math.min(95, baseWinChance + powerDiff * 2));
+  let winChance = Math.max(25, Math.min(95, baseWinChance + powerDiff * 2));
+  if (activePet?.exclusiveSkill && (activePet.energy || 0) >= 12) {
+    winChance = Math.min(95, winChance + 7);
+    petEnergyUsed += 12;
+  }
   
   console.log(`⚔️ Poder do herói: ${totalPower} + ${guildBonus} = ${totalPower + guildBonus}`);
   console.log(`👹 Poder dos inimigos: ${enemyPower}`);
@@ -670,7 +845,11 @@ export function autoResolveCombat(hero: Hero, enemies: QuestEnemy[], isGuildQues
       xpGained: totalXp,
       goldGained: totalGold,
       itemsGained: allLoot,
-      log: combatLog
+      log: combatLog,
+      petEnergyUsed,
+      petDamage: 0,
+      petHealing: 0,
+      petStuns: 0
     };
   } else {
     const damage = Math.floor(heroEntity.maxHp * 0.3);
@@ -682,7 +861,11 @@ export function autoResolveCombat(hero: Hero, enemies: QuestEnemy[], isGuildQues
       xpGained: 0,
       goldGained: 0,
       itemsGained: [],
-      log: combatLog
+      log: combatLog,
+      petEnergyUsed,
+      petDamage: 0,
+      petHealing: 0,
+      petStuns: 0
     };
   }
 }

@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { useHeroStore } from '../store/heroStore';
 import { SHOP_ITEMS } from '../utils/shop';
+import { useMonetizationStore } from '../store/monetizationStore';
+import { seasonalThemes } from '../styles/medievalTheme';
 
 type ItemType = 'todos' | 'consumable' | 'weapon' | 'armor' | 'accessory' | 'material';
 type ItemRarity = 'todas' | 'comum' | 'incomum' | 'raro' | 'epico' | 'lendario';
@@ -8,6 +10,8 @@ type ItemRarity = 'todas' | 'comum' | 'incomum' | 'raro' | 'epico' | 'lendario';
 const Inventory: React.FC = () => {
   const { getSelectedHero, equipItem, sellItem, useItem, unequipItem, upgradeItem } = useHeroStore();
   const hero = getSelectedHero();
+  const { activeSeasonalTheme } = useMonetizationStore();
+  const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-gray-200' : 'border-gray-200';
 
   const [selectedType, setSelectedType] = useState<ItemType>('todos');
   const [selectedRarity, setSelectedRarity] = useState<ItemRarity>('todas');
@@ -54,7 +58,7 @@ const Inventory: React.FC = () => {
   return (
     <div className="max-w-5xl mx-auto p-6">
       {/* Header */}
-      <div className="bg-white p-6 rounded-lg border border-gray-200 mb-6 text-gray-800">
+      <div className={`bg-white p-6 rounded-lg border ${seasonalBorder} mb-6 text-gray-800`}>
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-3xl font-bold">🎒 Inventário</h1>
@@ -82,7 +86,7 @@ const Inventory: React.FC = () => {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200 text-gray-800">
+      <div className={`bg-white p-4 rounded-lg border ${seasonalBorder} text-gray-800`}>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
             <label className="text-sm text-gray-700">Tipo</label>
@@ -119,7 +123,7 @@ const Inventory: React.FC = () => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por nome"
-            className="flex-1 min-w-[200px] px-3 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="flex-1 min-w-0 sm:min-w-[200px] px-3 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <button
             onClick={() => { setSelectedType('todos'); setSelectedRarity('todas'); setSearch(''); }}
@@ -131,7 +135,7 @@ const Inventory: React.FC = () => {
       </div>
 
       {/* Lista de Itens */}
-      <div className="bg-white p-6 rounded-lg border border-gray-200 mt-6 text-gray-800">
+      <div className={`bg-white p-6 rounded-lg border ${seasonalBorder} mt-6 text-gray-800`}>
         {filtered.length > 0 ? (
           <div className="space-y-3">
             {filtered.map(([itemId, qty]) => {
@@ -240,7 +244,7 @@ const Inventory: React.FC = () => {
                       max={qty}
                       value={sellQty}
                       onChange={(e) => handleQtyChange(itemId, Number(e.target.value), qty)}
-                      className="w-20 px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-16 sm:w-20 px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       aria-label={`Quantidade para vender ${item.name}`}
                     />
                     <div className="text-sm text-gray-700">Total: {unitSell * Math.max(1, Math.min(qty, sellQty))} ouro</div>
@@ -269,7 +273,7 @@ const Inventory: React.FC = () => {
           </div>
         ) : (
           <div className="text-center py-10 text-gray-500">
-            <div className="text-5xl mb-2">📦</div>
+            <div className="text-3xl sm:text-5xl mb-2">📦</div>
             <p>Nenhum item corresponde aos filtros.</p>
           </div>
         )}

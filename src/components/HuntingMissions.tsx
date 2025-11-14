@@ -6,6 +6,7 @@ import { computeRewardMultiplier } from '../utils/dungeonConfig'
 import { rankSystem } from '../utils/rankSystem'
 import { generateChestLoot } from '../utils/chestLoot'
 import { SHOP_ITEMS } from '../utils/shop'
+import { useHeroStore as useStoreRef } from '../store/heroStore'
 
 type PhaseResult = { phase: number; success: boolean; xp: number; gold: number; narrative: string; itemsAwarded?: { id: string; name?: string }[] }
 
@@ -16,6 +17,7 @@ export default function HuntingMissions() {
   const addItemToInventory = useHeroStore(s => s.addItemToInventory)
   const updateHero = useHeroStore(s => s.updateHero)
   const updateDailyGoalProgress = useHeroStore(s => s.updateDailyGoalProgress)
+  const generateEggForSelected = useStoreRef(s => s.generateEggForSelected)
 
   const [biome, setBiome] = useState<Biome>('Colinas de Boravon')
   const [mission, setMission] = useState<HuntingMission | null>(null)
@@ -134,6 +136,28 @@ export default function HuntingMissions() {
       }
     }
     const mapName = (id: string) => SHOP_ITEMS.find(i => i.id === id)?.name || id
+    // Emboscadas por bioma
+    const ENEMIES_BY_BIOME: Record<string, string[]> = {
+      'Colinas de Boravon': ['Lobo Sombrio','Bandido'],
+      'Rio Marfim': ['Slime Ácido','Serpente do Rio'],
+      'Floresta Nebulosa': ['Morcego Vampiro','Bruxa da Névoa'],
+      'Ruínas Antigas': ['Golem Rachado','Esqueleto'],
+      'Floresta Umbral': ['Bruxa da Névoa','Lobo Sombrio'],
+      'Caverna Antiga': ['Troll de Pedra','Slime Ácido']
+    }
+    const baseAmbush = mission.category === 'escolta' ? 0.25 : 0.15
+    const ambush = Math.random() < (baseAmbush + (mission.difficulty === 'dificil' ? 0.05 : mission.difficulty === 'epica' ? 0.1 : 0))
+    let ambushText = ''
+    if (ambush) {
+      const enemies = ENEMIES_BY_BIOME[mission.biome] || ['Inimigos']
+      const foe = enemies[Math.floor(Math.random() * enemies.length)]
+      const ambushDamage = Math.round((hero.derivedAttributes.hp || 20) * 0.1)
+      const curHp2 = hero.derivedAttributes.currentHp ?? (hero.derivedAttributes.hp || 0)
+      const newHp2 = Math.max(0, curHp2 - ambushDamage)
+      updateHero(hero.id, { derivedAttributes: { ...hero.derivedAttributes, currentHp: newHp2 } })
+      ambushText = ` • Emboscada: ${foe} causa dano durante a fase.`
+      if (npcIntegrity !== null) setNpcIntegrity(Math.max(0, npcIntegrity - 10))
+    }
     // Penalidades por falha (dano/fadiga e integridade do NPC)
     if (!success) {
       const maxHp = hero.derivedAttributes.hp || 1
@@ -147,7 +171,24 @@ export default function HuntingMissions() {
         setNpcIntegrity(next)
       }
     }
-    const result: PhaseResult = { phase: phaseIndex + 1, success, xp, gold, narrative: (success ? `Progresso na fase ${phaseIndex + 1}.` : `Revés na fase ${phaseIndex + 1}.`) + ambushText, itemsAwarded: [...itemsEquip.map(i => ({ id: i.id, name: i.name })), ...extraIds.map(id => ({ id, name: mapName(id) }))] }
+    let narrativeExtra = ''
+    const hour2 = new Date().getHours()
+    const night2 = hour2 < 6 || hour2 >= 18
+    const rank = (hero.rankData?.currentRank || 'F') as 'F'|'E'|'D'|'C'|'B'|'A'|'S'
+    const rankBonusMap: Record<'F'|'E'|'D'|'C'|'B'|'A'|'S', number> = { F: 0, E: 0.01, D: 0.02, C: 0.03, B: 0.04, A: 0.05, S: 0.06 }
+    const rb = rankBonusMap[rank] || 0
+    const eggBase = mission.biome === 'Floresta Nebulosa' || mission.biome === 'Floresta Umbral' ? (night2 ? 0.15 + rb : 0.07 + rb) : mission.biome === 'Caverna Antiga' ? (boss ? 0.2 + rb : 0.06 + rb) : 0.05 + rb
+    if (Math.random() < eggBase) {
+      generateEggForSelected()
+      narrativeExtra = ' 🥚 Ovo misterioso encontrado.'
+    }
+    if (boss && (mission.biome === 'Caverna Antiga' || mission.biome === 'Ruínas Antigas')) {
+      if (Math.random() < 0.25) {
+        addItemToInventory(hero.id, 'essencia-bestial', 1)
+        extraIds.push('essencia-bestial')
+      }
+    }
+    const result: PhaseResult = { phase: phaseIndex + 1, success, xp, gold, narrative: (success ? `Progresso na fase ${phaseIndex + 1}.` : `Revés na fase ${phaseIndex + 1}.`) + ambushText + narrativeExtra, itemsAwarded: [...itemsEquip.map(i => ({ id: i.id, name: i.name })), ...extraIds.map(id => ({ id, name: mapName(id) }))] }
     const newLog = [...log, result]
     setLog(newLog)
     setStreak(s => s + (success ? 1 : 0))
@@ -238,25 +279,3 @@ export default function HuntingMissions() {
     </div>
   )
 }
-    // Emboscadas por bioma
-    const ENEMIES_BY_BIOME: Record<string, string[]> = {
-      'Colinas de Boravon': ['Lobo Sombrio','Bandido'],
-      'Rio Marfim': ['Slime Ácido','Serpente do Rio'],
-      'Floresta Nebulosa': ['Morcego Vampiro','Bruxa da Névoa'],
-      'Ruínas Antigas': ['Golem Rachado','Esqueleto'],
-      'Floresta Umbral': ['Bruxa da Névoa','Lobo Sombrio'],
-      'Caverna Antiga': ['Troll de Pedra','Slime Ácido']
-    }
-    const baseAmbush = mission.category === 'escolta' ? 0.25 : 0.15
-    const ambush = Math.random() < (baseAmbush + (mission.difficulty === 'dificil' ? 0.05 : mission.difficulty === 'epica' ? 0.1 : 0))
-    let ambushText = ''
-    if (ambush) {
-      const enemies = ENEMIES_BY_BIOME[mission.biome] || ['Inimigos']
-      const foe = enemies[Math.floor(Math.random() * enemies.length)]
-      const ambushDamage = Math.round((hero.derivedAttributes.hp || 20) * 0.1)
-      const curHp2 = hero.derivedAttributes.currentHp ?? (hero.derivedAttributes.hp || 0)
-      const newHp2 = Math.max(0, curHp2 - ambushDamage)
-      updateHero(hero.id, { derivedAttributes: { ...hero.derivedAttributes, currentHp: newHp2 } })
-      ambushText = ` • Emboscada: ${foe} causa dano durante a fase.`
-      if (npcIntegrity !== null) setNpcIntegrity(Math.max(0, npcIntegrity - 10))
-    }

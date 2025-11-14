@@ -78,3 +78,19 @@ export function resumeAudioContextIfNeeded() {
     ctx.resume().catch(() => {});
   }
 }
+export function playHammer() {
+  if (!rateLimit(200)) return;
+  playSequence([
+    { f: 420, d: 40, t: 'square', v: 0.1 },
+    { f: 360, d: 30, t: 'square', v: 0.09 },
+    { f: 520, d: 50, t: 'triangle', v: 0.11 },
+  ], 12);
+}
+export function playPolish() {
+  if (!rateLimit(250)) return;
+  playSequence([
+    { f: 1200, d: 60, t: 'sine', v: 0.08 },
+    { f: 1350, d: 60, t: 'sine', v: 0.08 },
+    { f: 1500, d: 80, t: 'sine', v: 0.08 },
+  ], 20);
+}

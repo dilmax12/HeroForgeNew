@@ -4,10 +4,13 @@ import { supabase } from '../lib/supabaseClient';
 import SupabaseAuthPanel from './SupabaseAuthPanel';
 import { useHeroStore } from '../store/heroStore';
 import type { HeroCreationData, Quest } from '../types/hero';
-import { ensurePlayerProfile } from '../services/playersService';
+import { isUsernameAvailable } from '../services/playersService';
+import { upsertUserProfile } from '../services/userService';
 import { saveHero } from '../services/heroesService';
 import { saveQuest } from '../services/questsService';
 import { SHOP_ITEMS } from '../utils/shop';
+import { logActivity } from '../services/loggerService';
+import { getUserProgress } from '../services/userService';
 
 const PlayerRegistration: React.FC = () => {
   const { createHero, addItemToInventory, getSelectedHero, selectHero } = useHeroStore();
@@ -17,6 +20,12 @@ const PlayerRegistration: React.FC = () => {
   const [sbEmail, setSbEmail] = useState<string | null>(null);
 
   const [username, setUsername] = useState('');
+  const [usernameAvailable, setUsernameAvailable] = useState<null | boolean>(null);
+  const [checkingUsername, setCheckingUsername] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [useEmailPassword, setUseEmailPassword] = useState(false);
+  const [cloudSync, setCloudSync] = useState(true);
   const [heroName, setHeroName] = useState('');
   const [heroRace, setHeroRace] = useState<'humano'|'elfo'|'anao'|'orc'|'halfling'>('humano');
   const [heroClass, setHeroClass] = useState<'guerreiro'|'mago'|'ladino'|'clerigo'|'patrulheiro'|'paladino'|'arqueiro'>('guerreiro');
@@ -47,7 +56,31 @@ const PlayerRegistration: React.FC = () => {
     return () => { mounted = false; sub?.subscription.unsubscribe(); };
   }, []);
 
-  const availableItems = useMemo(() => SHOP_ITEMS.map(i => ({ id: i.id, name: i.name })), []);
+  const availableItems = useMemo(() => {
+    const seen = new Set<string>();
+    const list: Array<{ id: string; name: string }> = [];
+    for (const i of SHOP_ITEMS) {
+      if (seen.has(i.id)) continue;
+      seen.add(i.id);
+      list.push({ id: i.id, name: i.name });
+    }
+    return list;
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      if (!username) { setUsernameAvailable(null); return; }
+      setCheckingUsername(true);
+      try {
+        const ok = await isUsernameAvailable(username.trim().toLowerCase());
+        setUsernameAvailable(ok);
+      } catch {
+        setUsernameAvailable(null);
+      }
+      setCheckingUsername(false);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [username]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -55,14 +88,42 @@ const PlayerRegistration: React.FC = () => {
     setMessage(null);
     setError(null);
     try {
+      // Fluxo opcional: criar conta via email/senha
+      let userId = sbUserId;
+      if (useEmailPassword) {
+        if (!emailInput || !passwordInput || passwordInput.length < 6) {
+          setError('Informe email válido e senha (mín. 6 caracteres).');
+          return;
+        }
+        const { data, error: signUpErr } = await supabase.auth.signUp({ email: emailInput, password: passwordInput, options: { emailRedirectTo: window.location.origin } });
+        if (signUpErr) {
+          setError(signUpErr.message || 'Falha ao criar conta');
+          return;
+        }
+        userId = data?.user?.id || null;
+        setSbUserId(userId);
+        setSbEmail(data?.user?.email || null);
+      }
+
       // Valida sessão do Supabase
-      if (!sbUserId) {
-        setError('Você precisa estar logado no Supabase para salvar seus dados.');
+      if (!userId && cloudSync) {
+        setError('Você precisa estar logado no Supabase (OTP, Google ou Email/Senha).');
         return;
       }
 
-      // Garante o perfil do jogador
-      await ensurePlayerProfile(sbUserId, username || null);
+      // Validar unicidade de username (cliente) antes de persistir
+      if (username && cloudSync) {
+        const available = await isUsernameAvailable(username.trim().toLowerCase());
+        if (!available) {
+          setError('Nome de usuário já está em uso. Escolha outro.');
+          return;
+        }
+      }
+
+      // Upsert de perfil no servidor (evita bloqueios RLS no cliente)
+      if (cloudSync && userId) {
+        await upsertUserProfile({ id: userId, username: username ? username.trim().toLowerCase() : undefined, email: (sbEmail || emailInput) || null });
+      }
 
       // Cria herói localmente usando o store (preenche o objeto completo)
       const creationData: HeroCreationData = {
@@ -85,10 +146,12 @@ const PlayerRegistration: React.FC = () => {
       initialItems.forEach(itemId => addItemToInventory(hero.id, itemId, 1));
 
       // Persiste herói no Supabase
-      const stored = await saveHero(sbUserId, hero);
-      if (!stored) {
-        setError('Falha ao salvar o herói no Supabase.');
-        return;
+      if (cloudSync && userId) {
+        const stored = await saveHero(userId, hero);
+        if (!stored) {
+          setError('Falha ao salvar o herói no Supabase.');
+          return;
+        }
       }
 
       // Cria missão simples se preenchida e persiste
@@ -104,10 +167,19 @@ const PlayerRegistration: React.FC = () => {
           repeatable: false,
           narrative: { intro: missionDescription, situation: 'Cadastre sua primeira missão.', outcome: '' }
         };
-        await saveQuest(sbUserId, hero.id, quest, 'active');
+        if (cloudSync && userId) {
+          await saveQuest(userId, hero.id, quest, 'active');
+        }
       }
 
-      setMessage('Cadastro salvo com sucesso! Seu herói, itens e missão foram registrados.');
+      setMessage('Cadastro salvo com sucesso! Conta e dados registrados com segurança.');
+      try {
+        const progress = await getUserProgress(userId);
+        setMessage(`Cadastro salvo! Missões: ${progress.missionsCompleted}, Conquistas: ${progress.achievementsUnlocked}, Tempo: ${progress.playtimeMinutes}m.`);
+      } catch {}
+      if (cloudSync && userId) {
+        try { await logActivity({ type: 'registration', userId, username: username || null, email: sbEmail || emailInput || null }); } catch {}
+      }
     } catch (err: any) {
       setError(err?.message || String(err));
     } finally {
@@ -129,6 +201,40 @@ const PlayerRegistration: React.FC = () => {
         <div>
           <label className="block text-sm text-gray-600 mb-1">Nome de usuário</label>
           <input type="text" value={username} onChange={e => setUsername(e.target.value)} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="ex: aventureiro123" />
+          <div className="mt-1 text-xs">
+            {checkingUsername && <span className="text-gray-500">Verificando...</span>}
+            {!checkingUsername && username && usernameAvailable === true && <span className="text-green-700">Disponível</span>}
+            {!checkingUsername && username && usernameAvailable === false && <span className="text-red-700">Indisponível</span>}
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-lg border border-gray-200">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={cloudSync} onChange={e => setCloudSync(e.target.checked)} />
+            <span>Salvar na nuvem (Supabase)</span>
+          </label>
+        </div>
+
+        <div className="bg-white p-4 rounded-lg border border-gray-200">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={useEmailPassword} onChange={e => setUseEmailPassword(e.target.checked)} />
+            <span>Criar/usar conta com email e senha</span>
+          </label>
+          {useEmailPassword && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Email (opcional)</label>
+                <input type="email" value={emailInput} onChange={e => setEmailInput(e.target.value)} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="seu@email.com" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Senha</label>
+                <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="mínimo 6 caracteres" />
+              </div>
+            </div>
+          )}
+          {!useEmailPassword && (
+            <div className="text-xs text-gray-500 mt-2">Dica: você pode usar login por link (OTP) no painel acima ou Google. Email é opcional.</div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

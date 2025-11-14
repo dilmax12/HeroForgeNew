@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { RankLevel, RankProgress, RANK_CONFIG } from '../types/ranks';
-import { medievalTheme, getRankGradient, getRankIcon } from '../styles/medievalTheme';
+import { medievalTheme, getRankGradient, getRankIcon, seasonalThemes } from '../styles/medievalTheme';
+import { useMonetizationStore } from '../store/monetizationStore';
 
 interface RankCardProps {
   rank: RankLevel;
@@ -21,6 +22,7 @@ export const RankCard: React.FC<RankCardProps> = ({
   animated = true,
   onClick
 }) => {
+  const { activeSeasonalTheme } = useMonetizationStore();
   const [isGlowing, setIsGlowing] = useState(false);
   const rankInfo = RANK_CONFIG[rank];
 
@@ -45,6 +47,7 @@ export const RankCard: React.FC<RankCardProps> = ({
   };
 
   const getRankStyles = () => {
+    const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || medievalTheme.effects.borders.gold : medievalTheme.effects.borders.gold;
     const baseStyles = `
       inline-flex items-center justify-center
       border-2 rounded-lg font-bold transition-all duration-300
@@ -52,7 +55,7 @@ export const RankCard: React.FC<RankCardProps> = ({
         size === 'medium' ? 'w-16 h-16 text-base' : 
         'w-20 h-20 text-lg'}
       ${animated ? 'hover:scale-110 cursor-pointer' : ''}
-      bg-gradient-to-br ${getRankGradient(rank)} ${medievalTheme.effects.borders.gold} text-white ${medievalTheme.effects.shadows.glow}
+      bg-gradient-to-br ${getRankGradient(rank)} ${seasonalBorder} text-white ${medievalTheme.effects.shadows.glow}
     `;
     
     return baseStyles;

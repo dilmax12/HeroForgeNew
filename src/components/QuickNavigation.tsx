@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useHeroStore } from '../store/heroStore';
+import { useMonetizationStore } from '../store/monetizationStore';
+import { getSeasonalButtonGradient } from '../styles/medievalTheme';
 
 const QuickNavigation: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const location = useLocation();
   const { getSelectedHero } = useHeroStore();
   const selectedHero = getSelectedHero();
+  const { activeSeasonalTheme } = useMonetizationStore();
+  const g = getSeasonalButtonGradient(activeSeasonalTheme as any);
   
   if (!selectedHero) return null;
 
@@ -18,6 +22,18 @@ const QuickNavigation: React.FC = () => {
       path: '/quests',
       color: 'bg-blue-600 hover:bg-blue-700',
       badge: selectedHero.activeQuests.length > 0 ? selectedHero.activeQuests.length : null
+    },
+    {
+      id: 'pets',
+      label: 'Mascotes',
+      icon: '🐾',
+      path: '/pets',
+      color: 'bg-teal-600 hover:bg-teal-700',
+      badge: (() => {
+        const eggs = selectedHero.eggs || [];
+        const ready = eggs.filter(e => e.status === 'pronto_para_chocar').length;
+        return ready > 0 ? String(ready) : null;
+      })()
     },
     {
       id: 'guild-hub',
@@ -73,7 +89,7 @@ const QuickNavigation: React.FC = () => {
       {/* Main Toggle Button */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className={`w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-lg transition-all duration-300 flex items-center justify-center ${
+        className={`w-14 h-14 rounded-full bg-gradient-to-r ${g} hover:brightness-110 text-white shadow-lg transition-all duration-300 flex items-center justify-center ${
           isExpanded ? 'rotate-45' : ''
         }`}
       >
@@ -90,8 +106,8 @@ const QuickNavigation: React.FC = () => {
               data-testid={`quick-nav-${action.id}`}
               onClick={() => setIsExpanded(false)}
               className={`
-                flex items-center space-x-3 px-4 py-3 rounded-lg text-white shadow-lg transition-all duration-300 min-w-40
-                ${action.color}
+                flex items-center space-x-3 px-3 sm:px-4 py-2 sm:py-3 rounded-lg text-white shadow-lg transition-all duration-300 min-w-0 sm:min-w-40 max-w-[80vw] text-sm sm:text-base break-words
+                bg-gradient-to-r ${g}
                 ${isCurrentPath(action.path) ? 'ring-2 ring-white ring-opacity-50' : ''}
                 transform hover:scale-105
               `}

@@ -80,6 +80,39 @@ const QUEST_TEMPLATES: QuestTemplate[] = [
   }
 ];
 
+// === TEMPLATES DE MISSÕES DE COMPANHEIROS (GUILDA) ===
+const COMPANION_GUILD_TEMPLATES: QuestTemplate[] = [
+  {
+    id: 'guild-treinar-mascote',
+    titleTemplate: 'Treinar o Mascote com {npc}',
+    descriptionTemplate: 'Participe de treinos supervisionados em {location} com {npc}. Aumente a experiência do seu mascote.',
+    type: 'caca',
+    baseReward: { gold: 40, xp: 35, items: [{ id: 'racao-basica', qty: 2 }, { id: 'pedra-alma', qty: 1 }] }
+  },
+  {
+    id: 'guild-capturar-criatura',
+    titleTemplate: 'Capturar uma Criatura Jovem em {location}',
+    descriptionTemplate: 'Localize e capture uma criatura jovem com a ajuda de {npc}. Traga o espécime para estudo.',
+    type: 'exploracao',
+    baseReward: { gold: 60, xp: 50, items: [{ id: 'essencia-vinculo', qty: 1 }] }
+  },
+  {
+    id: 'guild-acalmar-fera',
+    titleTemplate: 'Acalmar uma Fera Selvagem perto de {location}',
+    descriptionTemplate: 'Aproxime-se com cuidado e acalme a fera sob orientação de {npc}. Evite confrontos desnecessários.',
+    type: 'caca',
+    baseReward: { gold: 70, xp: 55, items: [{ id: 'racao-deluxe', qty: 1 }] },
+    enemies: [{ type: 'Lobo', count: 1 }]
+  },
+  {
+    id: 'guild-essencia-bestial',
+    titleTemplate: 'Encontrar a Essência Bestial em {location}',
+    descriptionTemplate: 'Explore ruínas e cavernas antigas com {npc} para recuperar a Essência Bestial.',
+    type: 'exploracao',
+    baseReward: { gold: 90, xp: 70, items: [{ id: 'essencia-bestial', qty: 1 }] }
+  }
+];
+
 // === DADOS PARA GERAÇÃO PROCEDURAL ===
 
 const LOCATIONS = [
@@ -171,7 +204,7 @@ export function generateQuest(
   heroLevel: number = 1,
   isGuildQuest: boolean = false
 ): Quest {
-  const template = getRandomElement(QUEST_TEMPLATES);
+  const template = isGuildQuest ? getRandomElement(COMPANION_GUILD_TEMPLATES) : getRandomElement(QUEST_TEMPLATES);
   const modifier = DIFFICULTY_MODIFIERS[difficulty];
   
   // Variáveis para interpolação
@@ -291,5 +324,27 @@ export const QUEST_ACHIEVEMENTS = [
     description: 'Complete uma missão épica',
     icon: '⚔️',
     maxProgress: 1
+  }
+  ,
+  {
+    id: 'amigo-dos-animais',
+    title: 'Amigo dos Animais',
+    description: 'Complete 5 missões de companheiros da guilda',
+    icon: '🐾',
+    maxProgress: 5
+  },
+  {
+    id: 'domador-de-feras',
+    title: 'Domador de Feras',
+    description: 'Coletar 3 Essências Bestiais',
+    icon: '🧬',
+    maxProgress: 3
+  },
+  {
+    id: 'cavaleiro-mitico',
+    title: 'Cavaleiro Mítico',
+    description: 'Encontrar 2 Pergaminhos de Montaria',
+    icon: '📜',
+    maxProgress: 2
   }
 ];

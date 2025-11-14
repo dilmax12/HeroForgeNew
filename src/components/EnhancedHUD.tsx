@@ -1,18 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { notificationBus } from './NotificationSystem';
 import { useHeroStore } from '../store/heroStore';
 import { Hero } from '../types/hero';
 import { getOrRunDailyResult } from '../services/idleBattleService';
-import { notificationBus } from './NotificationSystem';
 import { calculateXPForLevel, LEVEL_CAP } from '../utils/progression';
 import { worldStateManager } from '../utils/worldState';
 import { trackMetric } from '../utils/metricsSystem';
+import { useMonetizationStore } from '../store/monetizationStore';
+import { seasonalThemes } from '../styles/medievalTheme';
 
 interface EnhancedHUDProps {
   hero: Hero;
 }
 
 const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
+  const { activeSeasonalTheme } = useMonetizationStore();
   const [daily, setDaily] = useState<any | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
@@ -109,6 +112,20 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
 
   // Contagem regressiva local para próxima recuperação (HP/Mana e Stamina)
   const getSelectedHero = useHeroStore(s => s.getSelectedHero);
+  const setActiveMount = useHeroStore(s => s.setActiveMount);
+  const evolveMountForSelected = useHeroStore(s => s.evolveMountForSelected);
+  const refineCompanion = useHeroStore(s => s.refineCompanion);
+  const bestMountId = React.useMemo(() => {
+    const mounts = hero.mounts || [];
+    if (!mounts.length) return undefined as string | undefined;
+    const stageOrder: Record<string, number> = { comum: 0, encantada: 1, lendaria: 2 };
+    const rarityOrder: Record<string, number> = { comum: 0, incomum: 1, raro: 2, epico: 3, lendario: 4, mistico: 5 } as any;
+    const score = (m: any) => {
+      const attrSum = Object.values(m.attributes || {}).reduce((s: number, v: any) => s + (typeof v === 'number' ? v : 0), 0);
+      return (m.speedBonus || 0) * 3 + attrSum + (stageOrder[m.stage] || 0) * 2 + (rarityOrder[m.rarity] || 0);
+    };
+    return mounts.slice().sort((a,b) => score(b) - score(a))[0]?.id as string | undefined;
+  }, [hero.mounts]);
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
@@ -150,15 +167,17 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
 
   const submitDaily = async () => {
     if (!hero || submitting) return;
+    const apiBase = (import.meta as any)?.env?.VITE_API_BASE;
+    if (!apiBase) return; // modo offline: não chama API
     setSubmitting(true);
     try {
       const payload = { hero };
-      await fetch('/api/daily-submit', {
+      await fetch(`${apiBase}/daily-submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const resLb = await fetch('/api/daily-leaderboard');
+      const resLb = await fetch(`${apiBase}/daily-leaderboard`);
       const dataLb = await resLb.json();
       setLeaderboard(Array.isArray(dataLb.entries) ? dataLb.entries.slice(0, 3) : []);
       notificationBus.emit({
@@ -187,13 +206,31 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
     (async () => {
       if (!hero) return;
       if (submitting) return;
+      const apiBase = (import.meta as any)?.env?.VITE_API_BASE;
+      if (!apiBase) return; // não enviar em dev offline
       await submitDaily();
     })();
-    // executar ao montar e quando herói mudar
   }, [hero?.id]);
 
+  const prevAchCount = useRef<number>(hero.progression.achievements.length);
+  useEffect(() => {
+    const current = hero.progression.achievements.length;
+    if (current > prevAchCount.current) {
+      const newly = hero.progression.achievements.slice(prevAchCount.current);
+      newly.forEach(a => {
+        notificationBus.emit({ type: 'quest', title: 'Conquista Desbloqueada', message: `${a.title}`, icon: '🏆', duration: 3000 });
+      });
+      prevAchCount.current = current;
+    }
+  }, [hero.progression.achievements.length]);
+
+  const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-gray-700' : 'border-gray-700';
+  const activePet = (hero.pets || []).find(p => p.id === hero.activePetId);
+  const costMap: Record<string, number> = { 'Instinto Feral': 8, 'Pulso Arcano': 10, 'Aura Sagrada': 9, 'Sussurro Sombrio': 12 };
+  const petSkillReady = activePet?.exclusiveSkill ? ((activePet.energy || 0) >= (costMap[activePet.exclusiveSkill] || 8)) : false;
+  const glowClass = petSkillReady ? 'shadow-2xl shadow-amber-500/20 border-amber-500/40' : seasonalBorder;
   return (
-    <div className="fixed top-2 right-2 md:top-4 md:right-4 z-50 bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-lg p-3 md:p-4 min-w-64 md:min-w-80 shadow-xl">
+    <div className={`fixed top-2 right-2 md:top-4 md:right-4 z-50 bg-gray-900/95 backdrop-blur-sm border ${glowClass} rounded-lg p-2 md:p-4 min-w-56 sm:min-w-64 md:min-w-80 max-w-[90vw] shadow-xl`}>
       {/* Hero Level and Name */}
       <div className="flex items-center justify-between mb-2 md:mb-3">
         <div className="flex items-center space-x-2">
@@ -207,6 +244,110 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
         </div>
         <div className="text-amber-400 text-base md:text-lg">⚡</div>
       </div>
+
+      {/* Mascote Ativo */}
+      {(hero.pets || []).find(p => p.id === hero.activePetId) && (
+        <div className="mb-2 md:mb-3">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-amber-300 text-[11px] md:text-xs font-medium">Mascote Ativo</span>
+            <span className="text-gray-300 text-[11px] md:text-xs">Skill: {activePet?.exclusiveSkill || '—'}</span>
+          </div>
+          <div className="w-full bg-gray-800 rounded p-2">
+            <div className="flex items-center justify-between">
+              <div className="text-white text-xs md:text-sm font-medium">{(hero.pets || []).find(p => p.id === hero.activePetId)?.name}</div>
+              <div className="text-gray-400 text-[10px] md:text-xs">Nv. {(hero.pets || []).find(p => p.id === hero.activePetId)?.level}</div>
+            </div>
+            <div className="mt-2">
+              <div className="flex justify-between items-center">
+                <span className="text-amber-300 text-[10px]">Energia</span>
+                <span className="text-gray-300 text-[10px]">{Math.max(0, Math.min(100, (hero.pets || []).find(p => p.id === hero.activePetId)?.energy || 0))}%</span>
+              </div>
+              <div className="w-full bg-gray-700 rounded-full h-1.5">
+                <div className="h-1.5 rounded-full bg-amber-500" style={{ width: `${Math.max(0, Math.min(100, (hero.pets || []).find(p => p.id === hero.activePetId)?.energy || 0))}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Montaria Ativa */}
+      {(hero.mounts || []).find(m => m.id === hero.activeMountId) && (
+        <div className="mb-2 md:mb-3">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-amber-300 text-[11px] md:text-xs font-medium">Montaria Ativa</span>
+            <span className="text-gray-300 text-[11px] md:text-xs">Velocidade +{(hero.mounts || []).find(m => m.id === hero.activeMountId)?.speedBonus || 0}</span>
+          </div>
+          <div className="w-full bg-gray-800 rounded p-2">
+            <div className="flex items-center justify-between">
+              <div className="text-white text-xs md:text-sm font-medium">{(hero.mounts || []).find(m => m.id === hero.activeMountId)?.name}</div>
+              <div className="text-xs">
+                {(() => {
+                  const m = (hero.mounts || []).find(mm => mm.id === hero.activeMountId);
+                  if (!m) return null;
+                  return (
+                    <span className="text-amber-300">
+                      {m.stage}
+                      {typeof m.refineLevel === 'number' && m.refineLevel > 0 ? ` • +${m.refineLevel}` : ''}
+                    </span>
+                  );
+                })()}
+              </div>
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <button onClick={() => setActiveMount(undefined)} className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-white text-[11px]">Desativar</button>
+              {bestMountId && bestMountId !== hero.activeMountId && (
+                <button onClick={() => setActiveMount(bestMountId)} className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-[11px]">Ativar melhor</button>
+              )}
+              {(() => {
+                const m = (hero.mounts || []).find(mm => mm.id === hero.activeMountId);
+                if (!m) return null;
+                const needsEssence = m.stage === 'encantada';
+                const hasScroll = (hero.inventory.items['pergaminho-montaria'] || 0) > 0;
+                const hasEssence = (hero.inventory.items['essencia-bestial'] || 0) > 0;
+                const enoughGold = (hero.progression.gold || 0) >= (m.stage === 'comum' ? 200 : 700);
+                const canEvolve = hasScroll && enoughGold && (!needsEssence || hasEssence);
+                const isMaxRefine = (m.refineLevel || 0) >= 10;
+                return (
+                  <>
+                    <button
+                      disabled={!canEvolve}
+                      title={canEvolve?`Consome 📜 x1${needsEssence?' + 🧬 x1':''}`:''}
+                      onClick={() => {
+                        if (canEvolve) {
+                          const ok = window.confirm(`Evoluir ${m.name}? Custos: 📜 x1${needsEssence?' + 🧬 x1':''} e ${(m.stage==='comum')?200:700} ouro.`);
+                          if (ok) evolveMountForSelected(m.id);
+                        }
+                      }}
+                      className={`px-2 py-1 rounded ${canEvolve?'bg-purple-600 hover:bg-purple-700':'bg-gray-700'} text-white text-[11px]`}
+                    >Evoluir</button>
+                    <button
+                      disabled={isMaxRefine || !((hero.inventory.items['pedra-magica']||0) > 0 || (hero.inventory.items['essencia-vinculo']||0) > 0)}
+                      title={isMaxRefine?'Refino máximo atingido':''}
+                      onClick={() => {
+                        const ok = window.confirm(`Refinar ${m.name}? Consome 1 material e pode falhar.`);
+                        if (ok) refineCompanion(hero.id, 'mount', m.id);
+                      }}
+                      className={`px-2 py-1 rounded ${isMaxRefine?'bg-gray-700':'bg-violet-600 hover:bg-violet-700'} text-white text-[11px]`}
+                    >{isMaxRefine?'Refino Máx.':'Refinar'}</button>
+                  </>
+                );
+              })()}
+            </div>
+            {(() => {
+              const active = (hero.mounts || []).find(mm => mm.id === hero.activeMountId)
+              const best = (hero.mounts || []).find(mm => mm.id === bestMountId)
+              if (!active || !best || active.id === best.id) return null
+              const baseInit = Math.max(0, (hero.derivedAttributes.initiative || 0) - (active.speedBonus || 0))
+              const nextInit = Math.max(0, baseInit + (best.speedBonus || 0))
+              return (
+                <div className="mt-2 text-[11px] text-amber-300">
+                  Melhor opção: {best.name} • Velocidade +{best.speedBonus} • Iniciativa se ativar: {nextInit}
+                </div>
+              )
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* XP Progress */}
       <div className="mb-2 md:mb-3">
@@ -248,6 +389,104 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
           </div>
         </div>
       )}
+
+      <div className="mb-2 md:mb-3">
+        <div className="flex justify-between items-center mb-1">
+          <span className="text-emerald-300 text-xs font-medium">Companheiros</span>
+          <Link to="/mounts" className="text-[11px] text-emerald-300 hover:text-emerald-200">Abrir</Link>
+        </div>
+        <div className="w-full bg-gray-700 rounded p-2 grid grid-cols-3 gap-2">
+          <div className="text-center">
+            <div className="text-white text-xs md:text-sm font-medium">Missões</div>
+            <div className="text-emerald-300 text-[11px] md:text-xs">{hero.stats?.companionQuestsCompleted || 0}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-white text-xs md:text-sm font-medium">Essência</div>
+            <div className="text-amber-300 text-[11px] md:text-xs">{hero.inventory.items['essencia-bestial'] || 0}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-white text-xs md:text-sm font-medium">Pergaminhos</div>
+            <div className="text-purple-300 text-[11px] md:text-xs">{hero.inventory.items['pergaminho-montaria'] || 0}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-2 md:mb-3">
+        <div className="flex justify-between items-center mb-1">
+          <span className="text-yellow-300 text-xs font-medium">Conquistas</span>
+          <Link to="/leaderboards#achievements" className="text-[11px] text-yellow-300 hover:text-yellow-200">Ver</Link>
+        </div>
+        <div className="w-full bg-gray-700 rounded p-2 flex flex-wrap gap-2">
+          {(hero.progression.achievements || []).slice(Math.max(0, (hero.progression.achievements || []).length - 3)).map((a, idx) => (
+            <span key={idx} className="inline-flex items-center px-2 py-1 rounded text-[11px] bg-yellow-800/40 text-yellow-200 border border-yellow-600/40">
+              <span className="mr-1">{a.icon || '🏆'}</span>{a.title}
+            </span>
+          ))}
+          {(hero.progression.achievements || []).length === 0 && (
+            <span className="text-[11px] text-gray-300">Sem conquistas recentes</span>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-2 md:mb-3">
+        <div className="flex justify-between items-center mb-1">
+          <span className="text-indigo-300 text-xs font-medium">Roadmap de Companheiros</span>
+          <div className="flex items-center gap-2">
+            <Link to="/hunting" className="text-[11px] text-indigo-300 hover:text-indigo-200">Caça</Link>
+            <Link to="/dungeon-infinita" className="text-[11px] text-indigo-300 hover:text-indigo-200">Dungeon</Link>
+            <Link to="/shop" className="text-[11px] text-indigo-300 hover:text-indigo-200">Loja</Link>
+          </div>
+        </div>
+        {(() => {
+          const inv = hero.inventory.items || {} as Record<string, number>;
+          const pet = (hero.pets || []).find(p => p.id === hero.activePetId);
+          const mount = (hero.mounts || []).find(m => m.id === hero.activeMountId);
+          const rows: Array<{ label: string; need: Array<{ id: string; qty: number }>; gold?: number; ready: boolean }> = [];
+          if (pet) {
+            const refine = Math.max(0, pet.refineLevel || 0);
+            if (refine < 10) {
+              const hasMagic = (inv['pedra-magica'] || 0) > 0;
+              const hasBond = (inv['essencia-vinculo'] || 0) > 0;
+              rows.push({ label: `Refinar Mascote (+${refine+1}%)`, need: [{ id: hasMagic ? 'pedra-magica' : 'essencia-vinculo', qty: 1 }], ready: hasMagic || hasBond });
+            }
+          }
+          if (mount) {
+            if (mount.stage === 'comum') {
+              const needScroll = 1;
+              const needGold = 200;
+              rows.push({ label: 'Evoluir Montaria para Encantada', need: [{ id: 'pergaminho-montaria', qty: needScroll }], gold: needGold, ready: (inv['pergaminho-montaria']||0)>=needScroll && (hero.progression.gold||0)>=needGold });
+            } else if (mount.stage === 'encantada') {
+              const needScroll = 1;
+              const needEssence = 1;
+              const needGold = 700;
+              rows.push({ label: 'Evoluir Montaria para Lendária', need: [{ id: 'pergaminho-montaria', qty: needScroll }, { id: 'essencia-bestial', qty: needEssence }], gold: needGold, ready: (inv['pergaminho-montaria']||0)>=needScroll && (inv['essencia-bestial']||0)>=needEssence && (hero.progression.gold||0)>=needGold });
+            }
+          }
+          if (rows.length === 0) {
+            return (<div className="w-full bg-gray-700 rounded p-2 text-[11px] text-gray-300">Nenhum objetivo de companheiro pendente</div>);
+          }
+          return (
+            <div className="w-full bg-gray-700 rounded p-2 space-y-2">
+              {rows.map((r, idx) => (
+                <div key={idx} className="flex items-center justify-between">
+                  <div className="text-[11px] text-white">{r.label}</div>
+                  <div className="flex items-center gap-2">
+                    {r.need.map((n, i) => (
+                      <span key={i} className={`inline-flex items-center px-2 py-1 rounded text-[11px] ${((inv[n.id]||0)>=n.qty)?'bg-emerald-800/40 text-emerald-200 border border-emerald-600/40':'bg-gray-800/40 text-gray-200 border border-gray-600/40'}`}>
+                        {n.id} {inv[n.id]||0}/{n.qty}
+                      </span>
+                    ))}
+                    {typeof r.gold === 'number' && (
+                      <span className={`inline-flex items-center px-2 py-1 rounded text-[11px] ${((hero.progression.gold||0)>=r.gold)?'bg-amber-800/40 text-amber-200 border border-amber-600/40':'bg-gray-800/40 text-gray-200 border border-gray-600/40'}`}>ouro {(hero.progression.gold||0)}/{r.gold}</span>
+                    )}
+                    <span className={`inline-flex items-center px-2 py-1 rounded text-[11px] ${r.ready?'bg-indigo-800/40 text-indigo-200 border border-indigo-600/40':'bg-gray-800/40 text-gray-200 border border-gray-600/40'}`}>{r.ready?'Pronto':'Falta'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </div>
 
       {/* HP */}
       <div className="mb-2">

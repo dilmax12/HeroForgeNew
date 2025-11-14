@@ -2,6 +2,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import { InferenceClient } from '@huggingface/inference';
+import { createClient as createSbClient } from '@supabase/supabase-js';
 
 dotenv.config();
 
@@ -403,11 +404,9 @@ app.post('/api/hero-create', async (req, res) => {
     let frase = 'Por glória e aventura!';
     let image = null;
 
-    // 1) Texto via Hugging Face Inference (se houver token)
     if (HF_TOKEN) {
       try {
         const promptText = `Você é um narrador épico. Gere:\n- Nome (1-3 palavras) + epíteto,\n- História de origem 4-6 linhas,\n- Frase de impacto 1 linha.\nContexto: raça: ${race}, classe: ${klass}, atributos: ${JSON.stringify(attrs)}.\nSeja conciso e épico. Saída em texto puro.`;
-
         const chat = await hfClient.chatCompletion({
           model: MODEL_ID,
           messages: [
@@ -417,7 +416,6 @@ app.post('/api/hero-create', async (req, res) => {
           max_tokens: 180,
           temperature: 0.7
         });
-
         const content = chat?.choices?.[0]?.message?.content || chat?.generated_text || '';
         const lines = content.split('\n').filter(Boolean);
         nameLine = lines[0] || nameLine;
@@ -428,38 +426,63 @@ app.post('/api/hero-create', async (req, res) => {
       }
     }
 
-    // 2) Imagem via Lexica (gratuito)
-    const q = encodeURIComponent(`${nameLine}, ${race} ${klass}, fantasy portrait, detailed`);
-    try {
-      const resp = await fetch(`https://lexica.art/api/v1/search?q=${q}`);
-      const data = await resp.json();
-      image = data?.images?.[0]?.src || null;
-    } catch (err) {
-      console.warn('Lexica fetch failed:', err?.message || String(err));
-      image = null;
-    }
+    const promptImage = `${nameLine}, ${race} ${klass}, epic fantasy portrait, detailed, studio lighting`;
 
-    // 3) Fallback imagem via HF text-to-image
-    if (!image && HF_TOKEN) {
-      try {
-        const img = await hfClient.textToImage({
-          inputs: `${nameLine}, ${race} ${klass}, epic fantasy portrait, detailed, studio lighting`,
-          model: HF_IMAGE_MODEL
-        });
-        image = img ? `data:image/png;base64,${Buffer.from(img).toString('base64')}` : null;
-      } catch (err) {
-        console.warn('HF image generation fallback:', err?.message || String(err));
+  if (!image) {
+      if (HF_TOKEN) {
+        const models = [
+          'ByteDance/Hyper-SD',
+          process.env.HF_IMAGE_MODEL || 'ByteDance/Hyper-SD',
+          'ByteDance/Hyper-SD-Lite',
+          'stabilityai/sd-turbo',
+          'stabilityai/stable-diffusion-2-1',
+          'runwayml/stable-diffusion-v1-5'
+        ];
+        for (const model of models) {
+          try {
+            const blob = await hfClient.textToImage({ model, inputs: promptImage, provider: 'hf-inference' });
+            const arrayBuffer = await blob.arrayBuffer();
+            const base64 = Buffer.from(arrayBuffer).toString('base64');
+            image = `data:image/png;base64,${base64}`;
+            break;
+          } catch (err) {
+            try {
+              const base64 = await hfRouterTextToImage(model, promptImage);
+              image = `data:image/png;base64,${base64}`;
+              break;
+            } catch {}
+            try {
+              const base64 = await hfRouterImageGenerations(model, promptImage, '512x512');
+              image = `data:image/png;base64,${base64}`;
+              break;
+            } catch {}
+          }
+        }
+        if (!image && process.env.HF_IMAGE_ENDPOINT_URL) {
+          try {
+            const base64 = await hfPaidEndpointImage(process.env.HF_IMAGE_ENDPOINT_URL, promptImage);
+            image = `data:image/png;base64,${base64}`;
+          } catch {}
+        }
+      }
+      if (!image) {
+        try {
+          const url = await lexicaSearchImage(`${nameLine}, ${race} ${klass}, fantasy portrait, detailed`);
+          image = url;
+        } catch {}
+      }
+      if (!image) {
+        image = `/api/pollinations-image?prompt=${encodeURIComponent(promptImage)}&width=512&height=512`;
       }
     }
 
-    // 4) Placeholder final
     if (!image) {
       image = generatePlaceholderImage(`${nameLine} • ${race} ${klass}`);
     }
 
     return res.json({ name: nameLine, story: historia, phrase: frase, image });
   } catch (err) {
-    console.error('hero-create error:', err);
+    console.error('hero-create error:', err?.message || String(err));
     return res.status(500).json({ error: 'Erro IA' });
   }
 });
@@ -900,6 +923,44 @@ app.get('/api/hero-image', async (req, res) => {
   }
 });
 
+// Proxy seguro para imagens do Pollinations (evita ORB/CORB no browser)
+app.get('/api/pollinations-image', async (req, res) => {
+  try {
+    const prompt = (req.query?.prompt || '').toString();
+    const width = (req.query?.width || '512').toString();
+    const height = (req.query?.height || '512').toString();
+    if (!prompt) {
+      return res.status(400).json({ error: 'Campo "prompt" é obrigatório' });
+    }
+
+    const remoteUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?n=1&width=${encodeURIComponent(width)}&height=${encodeURIComponent(height)}`;
+    const resp = await fetch(remoteUrl, { method: 'GET' });
+    if (!resp.ok) {
+      throw new Error(`Pollinations: ${resp.status} ${resp.statusText}`);
+    }
+    const contentType = resp.headers.get('content-type') || 'image/jpeg';
+    const ab = await resp.arrayBuffer();
+    const buf = Buffer.from(ab);
+    res.set('Content-Type', contentType);
+    res.set('Cache-Control', 'public, max-age=604800');
+    return res.status(200).send(buf);
+  } catch (err) {
+    try {
+      const dataUrl = generatePlaceholderImage((req.query?.prompt || '').toString());
+      const match = /^data:(.+);base64,(.*)$/.exec(dataUrl || '');
+      if (match) {
+        const ct = match[1] || 'image/svg+xml';
+        const b64 = match[2] || '';
+        const buf = Buffer.from(b64, 'base64');
+        res.set('Content-Type', ct);
+        res.set('Cache-Control', 'no-cache');
+        return res.status(200).send(buf);
+      }
+    } catch {}
+    return res.status(502).json({ error: 'Falha ao obter imagem do Pollinations' });
+  }
+});
+
 // Login com Google: valida ID token via endpoint tokeninfo
 app.post('/api/login-google', async (req, res) => {
   const { credential } = req.body || {};
@@ -933,6 +994,16 @@ app.post('/api/login-google', async (req, res) => {
       email_verified: payload.email_verified
     };
 
+    try {
+      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        const now = new Date().toISOString();
+        await supabase.from('players').upsert({ id: user.sub, email: user.email || null, last_login: now }, { onConflict: 'id' });
+      }
+    } catch {}
+
     return res.json({ user });
   } catch (err) {
     console.error(err);
@@ -945,11 +1016,41 @@ app.get('/api/monetization/config', async (_req, res) => {
   const stripePublic = process.env.STRIPE_PUBLIC_KEY || '';
   const stripeEnabled = !!process.env.STRIPE_SECRET_KEY;
   const storeEnabled = true; // Loja já existe no app
+  const adsenseClientId = process.env.ADSENSE_CLIENT_ID || '';
+  const adSlotBannerTop = process.env.ADSENSE_SLOT_BANNER_TOP || '';
+  const adSlotInterstitial = process.env.ADSENSE_SLOT_INTERSTITIAL || '';
   return res.json({
     stripeEnabled,
     stripePublicKey: stripePublic,
-    storeEnabled
+    storeEnabled,
+    adsenseClientId,
+    adSlotBannerTop,
+    adSlotInterstitial
   });
+});
+
+// === Pagamentos (stub dev): criar sessão e verificar ===
+app.post('/api/payments/create-checkout-session', (req, res) => {
+  try {
+    const { productId } = req.body || {};
+    // Em dev, retornamos uma sessão fake
+    const sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+    return res.json({ ok: true, sessionId });
+  } catch (err) {
+    console.error('create-checkout-session error:', err);
+    return res.status(500).json({ ok: false });
+  }
+});
+
+app.post('/api/payments/verify', (req, res) => {
+  try {
+    const { sessionId } = req.body || {};
+    if (!sessionId) return res.status(400).json({ ok: false, error: 'sessionId requerido' });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('payments verify error:', err);
+    return res.status(500).json({ ok: false });
+  }
 });
 
 // --------------------------
@@ -1049,6 +1150,51 @@ app.post('/api/mission/resolve', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
+
+// Backup manual em dev: /api/backup
+app.get('/api/backup', async (_req, res) => {
+  const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    return res.status(500).json({ error: 'Supabase env ausente (SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY)' });
+  }
+  const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  try {
+    const [playersRes, heroesRes, questsRes] = await Promise.all([
+      supabase.from('players').select('*'),
+      supabase.from('heroes').select('*'),
+      supabase.from('quests').select('*')
+    ]);
+    if (playersRes.error) throw playersRes.error;
+    if (heroesRes.error) throw heroesRes.error;
+    if (questsRes.error) throw questsRes.error;
+    const payload = {
+      timestamp: new Date().toISOString(),
+      players: playersRes.data || [],
+      heroes: heroesRes.data || [],
+      quests: questsRes.data || []
+    };
+    try { await supabase.storage.createBucket('backups', { public: false }); } catch {}
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const HH = String(d.getHours()).padStart(2, '0');
+    const MM = String(d.getMinutes()).padStart(2, '0');
+    const fileName = `backup-${yyyy}${mm}${dd}-${HH}${MM}.json`;
+    const { error: uploadError } = await supabase.storage.from('backups').upload(fileName, Buffer.from(JSON.stringify(payload)), { contentType: 'application/json', upsert: true });
+    if (uploadError) return res.status(500).json({ error: uploadError.message || 'Falha ao enviar backup' });
+    try {
+      try { await supabase.storage.createBucket('logs', { public: false }); } catch {}
+      const log = { type: 'backup', file: fileName, ts: new Date().toISOString(), counts: { players: payload.players.length, heroes: payload.heroes.length, quests: payload.quests.length } };
+      await supabase.storage.from('logs').upload(`backup-${yyyy}${mm}${dd}-${HH}${MM}.json`, Buffer.from(JSON.stringify(log)), { contentType: 'application/json', upsert: true });
+    } catch {}
+    return res.json({ ok: true, file: fileName, size: JSON.stringify(payload).length });
+  } catch (err) {
+    console.error('dev backup error', err);
+    return res.status(500).json({ error: err?.message || 'Erro ao executar backup' });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Servidor IA rodando na porta ${PORT}`);
 });

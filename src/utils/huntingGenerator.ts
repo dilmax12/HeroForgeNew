@@ -103,7 +103,12 @@ export function generateHuntingMission(hero: Hero, preferredBiome?: Biome): Hunt
   const objective = category === 'coleta' ? `Coletar ${amount} ${chosen.target === 'Bruxa da Névoa' ? 'Essências Umbral' : 'Ervas/Recursos'}` : `${chosen.objectivePrefix} ${category === 'controle' ? amount : chosen.target}`
   const narrative = category === 'controle' ? `A população de ${chosen.target} ameaça caravanas em ${biome}. Reduza sua presença.` : category === 'coleta' ? `Recursos raros foram avistados em ${biome}. Obtenha-os sob risco controlado.` : category === 'escolta' ? `Um NPC precisa alcançar ${biome} em segurança. O caminho é perigoso.` : `Um alvo único foi identificado em ${biome}. Derrube-o para obter recompensas.`
   const staminaPerPhase = diff === 'epica' ? 5 : diff === 'dificil' ? 4 : diff === 'medio' ? 3 : 2
-  const timeHint: 'dia'|'noite' | undefined = (category === 'coleta' && Math.random() < 0.5) ? (Math.random() < 0.5 ? 'noite' : 'dia') : undefined
+  const timeHint: 'dia'|'noite' | undefined = (() => {
+    if (biome === 'Floresta Nebulosa' || biome === 'Floresta Umbral') return Math.random() < 0.7 ? 'noite' : undefined
+    if (biome === 'Rio Marfim') return Math.random() < 0.6 ? 'dia' : undefined
+    if (category === 'coleta' && Math.random() < 0.5) return Math.random() < 0.5 ? 'noite' : 'dia'
+    return undefined
+  })()
   const classHint = bias.length ? `Classe favorecida em ${category}` : undefined
   return {
     id: `hunt_${Date.now()}_${Math.random().toString(36).slice(2)}`,

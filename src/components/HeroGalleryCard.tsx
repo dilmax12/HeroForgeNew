@@ -65,9 +65,9 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
   const elementInfo = getElementInfoSafe(hero.element);
   // Tamanhos baseados na prop size
   const sizeClasses = {
-    small: 'w-48 h-64',
-    medium: 'w-56 h-72',
-    large: 'w-64 h-80'
+    small: 'w-full max-w-[12rem] sm:max-w-[12rem] md:max-w-[14rem] aspect-[4/5]',
+    medium: 'w-full max-w-[14rem] md:max-w-[16rem] aspect-[4/5]',
+    large: 'w-full max-w-[16rem] lg:max-w-[18rem] aspect-[4/5]'
   };
 
   const handleCardClick = () => {
@@ -107,6 +107,7 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
         transform transition-all duration-300 ease-out
         ${isHovered ? 'scale-105 -translate-y-2' : ''}
         ${isSelected ? 'ring-2 ring-yellow-400 ring-opacity-60' : ''}
+        ${(() => { const mount = (hero.mounts||[]).find(m=>m.id===hero.activeMountId); return mount?.stage==='lendaria' ? 'shadow-[0_0_15px_#F59E0B] ring-2 ring-amber-400' : mount?.stage==='encantada' ? 'shadow-[0_0_10px_#8B5CF6] ring-2 ring-purple-400/60' : '' })()}
       `}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -152,7 +153,11 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
           {/* Placeholder ou Imagem do Herói */}
           {hero.image && !imageError ? (
             <img
-              src={hero.image}
+              src={hero.image.includes('image.pollinations.ai/prompt/')
+                ? hero.image
+                    .replace('https://image.pollinations.ai/prompt/', '/api/pollinations-image?prompt=')
+                    .replace('?n=1&', '&')
+                : hero.image}
               alt={hero.name}
               className="w-full h-full object-cover"
               onError={() => setImageError(true)}
@@ -161,7 +166,7 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
             <div className={`
               w-full h-full flex items-center justify-center
               bg-gradient-to-br ${ELEMENT_GRADIENTS[hero.element]}
-              text-6xl
+              text-4xl sm:text-6xl
             `}>
               {CLASS_ICONS[hero.class] || '🦸'}
             </div>
@@ -213,6 +218,20 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
                 <span className="text-base">{elementInfo?.icon || '⚡'}</span>
               </div>
             </div>
+
+            {/* Companheiros Ativos */}
+            {(hero.activePetId || hero.activeMountId) && (
+              <div className="flex items-center justify-between text-xs text-gray-300">
+                <div className="flex items-center gap-2">
+                  {hero.activePetId && (
+                    <span className="px-2 py-0.5 rounded bg-emerald-700/40 border border-emerald-600/50 text-emerald-200">🐾 {(hero.pets||[]).find(p=>p.id===hero.activePetId)?.name || 'Mascote'}</span>
+                  )}
+                  {hero.activeMountId && (
+                    <span className="px-2 py-0.5 rounded bg-purple-700/40 border border-purple-600/50 text-purple-200">🏇 {(hero.mounts||[]).find(m=>m.id===hero.activeMountId)?.stage || 'Montaria'} {(() => { const mount=(hero.mounts||[]).find(m=>m.id===hero.activeMountId); const r=mount?.rarity; return r==='lendario'?'👑':r==='epico'?'✨':r==='raro'?'🔷':r==='incomum'?'🟩':r==='comum'?'⚪':''; })()}</span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Raça e XP */}
             <div className="flex items-center justify-between text-sm text-gray-400">

@@ -4,15 +4,20 @@ import { useHeroStore } from '../store/heroStore';
 import EnhancedHUD from './EnhancedHUD';
 import NotificationSystem, { useNotifications, notificationBus } from './NotificationSystem';
 import QuickNavigation from './QuickNavigation';
-import { medievalTheme, getClassIcon } from '../styles/medievalTheme';
+import { medievalTheme, getClassIcon, seasonalThemes, getSeasonalButtonGradient } from '../styles/medievalTheme';
 import GoogleLoginButton from './GoogleLoginButton';
 import { FlowProgress } from './FlowProgress';
 import { FlowControls } from './FlowControls';
 import DMNarrator from './DMNarrator';
+import AdBanner from './AdBanner';
+import InterstitialAd from './InterstitialAd';
+import SeasonalDecor from './SeasonalDecor';
 import { FLOW_STEPS, getStepIndex } from '../utils/flow';
 import { worldStateManager } from '../utils/worldState';
 import { supabase, supabaseConfigured } from '../lib/supabaseClient';
 import { ensurePlayerProfile } from '../services/playersService';
+import { getMonetizationConfig } from '../services/monetizationService';
+import { useMonetizationStore } from '../store/monetizationStore';
 import { listHeroesByUser, saveHero, sanitizeStoredHeroData } from '../services/heroesService';
 import { listQuestsByHero, saveQuest } from '../services/questsService';
 
@@ -27,6 +32,10 @@ const Layout = () => {
   const [sbUserId, setSbUserId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncedFor, setLastSyncedFor] = useState<string | null>(null);
+  const { setConfig, activeThemeId } = useMonetizationStore();
+  const [progressLoading, setProgressLoading] = useState(false);
+  const [progressError, setProgressError] = useState<string | null>(null);
+  const [playerProgress, setPlayerProgress] = useState<{ missions_completed: number; achievements_unlocked: number; playtime_minutes: number; last_login?: string | null } | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -35,6 +44,12 @@ const Layout = () => {
       if (!mounted) return;
       setSbEmail(data?.user?.email || null);
       setSbUserId(data?.user?.id || null);
+      try {
+        const id = data?.user?.id;
+        if (id) {
+          await fetch(`/api/users?action=touch-login&id=${encodeURIComponent(id)}`);
+        }
+      } catch {}
     }
     loadUser();
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -42,6 +57,30 @@ const Layout = () => {
       setSbUserId(session?.user?.id || null);
     });
     return () => { mounted = false; sub?.subscription.unsubscribe(); };
+  }, []);
+
+  // Carregar configuração de monetização (AdSense/Stripe) no boot
+  useEffect(() => {
+    (async () => {
+      try {
+        const cfg = await getMonetizationConfig();
+        setConfig({
+          adSenseClientId: cfg.adsenseClientId,
+          adSlotBannerTop: cfg.adSlotBannerTop,
+          adSlotInterstitial: cfg.adSlotInterstitial
+        });
+      } catch {}
+    })();
+  }, []);
+
+  // Auto-aplicar tema sazonal por data
+  useEffect(() => {
+    try {
+      const s = useMonetizationStore.getState();
+      if (s.seasonalAutoEnabled && !s.activeSeasonalTheme) {
+        s.autoApplySeasonal();
+      }
+    } catch {}
   }, []);
 
   // Auto-sync de heróis: visitante joga offline, ao logar sincroniza tudo com o Supabase
@@ -147,6 +186,45 @@ const Layout = () => {
     }
   }, [sbUserId]);
 
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    if (sbUserId) {
+      fetchPlayerProgressHeader();
+    }
+  }, [sbUserId]);
+
+  async function fetchPlayerProgressHeader() {
+    setProgressLoading(true);
+    setProgressError(null);
+    try {
+      const { data } = await supabase.auth.getUser();
+      const userId = data?.user?.id || null;
+      if (!userId) {
+        setProgressError('Faça login para ver seu progresso.');
+        setPlayerProgress(null);
+      } else {
+        const res = await fetch(`/api/player-progress?action=get&id=${encodeURIComponent(userId)}`);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error || 'Falha ao carregar progresso');
+        setPlayerProgress(json?.progress || null);
+      }
+    } catch (e: any) {
+      setProgressError(e?.message || String(e));
+      setPlayerProgress(null);
+    } finally {
+      setProgressLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    let timer: any = null;
+    if (sbUserId) {
+      timer = setInterval(() => { fetchPlayerProgressHeader(); }, 5 * 60 * 1000);
+    }
+    return () => { if (timer) clearInterval(timer); };
+  }, [sbUserId]);
+
   // Assinar barramento global de notificações para exibir toasts
   useEffect(() => {
     const unsubscribe = notificationBus.subscribe((n) => {
@@ -168,6 +246,21 @@ const Layout = () => {
         } as any;
         try { (worldStateManager as any).updateVitals?.(h); } catch {}
         try { worldStateManager.updateStamina(h); } catch {}
+        try {
+          if (h.activePetId && Array.isArray(h.pets)) {
+            const idx = h.pets.findIndex((p: any) => p.id === h.activePetId);
+            if (idx >= 0) {
+              const p = { ...h.pets[idx] };
+              const nextEnergy = Math.min(100, Math.max(0, (p.energy || 0) + 5));
+              if (nextEnergy !== (p.energy || 0)) {
+                p.energy = nextEnergy;
+                const nextPets = [...h.pets];
+                nextPets[idx] = p;
+                updateHero(h.id, { pets: nextPets });
+              }
+            }
+          }
+        } catch {}
         updateHero(h.id, { derivedAttributes: h.derivedAttributes, stamina: h.stamina, stats: h.stats });
       } catch {}
     }, 60_000);
@@ -179,13 +272,20 @@ const Layout = () => {
   };
 
   const navLinkClass = (path: string) => {
-    return `hover:text-amber-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded ${
-      isActive(path) ? 'text-amber-400 font-semibold' : ''
-    }`;
+    const active = isActive(path);
+    const g = getSeasonalButtonGradient(useMonetizationStore.getState().activeSeasonalTheme as any);
+    return active
+      ? `px-2 py-1 rounded bg-gradient-to-r ${g} text-white font-semibold hover:brightness-110 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500`
+      : `hover:text-amber-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded`;
   };
 
+  const themeBg = activeThemeId === 'futurista'
+    ? 'bg-gradient-to-br from-gray-900 via-cyan-900 to-black'
+    : activeThemeId === 'noir'
+      ? 'bg-gradient-to-br from-black via-slate-900 to-black'
+      : 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900';
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+    <div className={`min-h-screen ${themeBg} text-white`}>
       <header className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 shadow-2xl shadow-amber-500/20">
         <div className="container mx-auto px-3 md:px-4 py-3 md:py-4">
           <div className="flex justify-between items-center">
@@ -201,6 +301,22 @@ const Layout = () => {
               )}
               {syncing && (
                 <span className="ml-2 text-xs text-amber-300">Sincronizando...</span>
+              )}
+              {playerProgress?.last_login && (
+                <span className="ml-2 text-xs text-gray-300">Último login: {new Date(playerProgress.last_login).toLocaleString()}</span>
+              )}
+              {supabaseConfigured && (
+                <div className="hidden md:flex items-center gap-3 ml-3 bg-slate-800 border border-slate-600 px-3 py-2 rounded">
+                  <button onClick={fetchPlayerProgressHeader} disabled={progressLoading} className={`px-2 py-1 rounded text-xs border ${progressLoading ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed' : 'bg-white text-gray-800 border-gray-300'}`}>{progressLoading ? (<span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></span><span>Progresso</span></span>) : 'Progresso'}</button>
+                  {progressError && <span className="text-xs text-red-400">{progressError}</span>}
+                  {playerProgress && (
+                    <div className="flex items-center gap-3 text-xs text-gray-200">
+                      <span>📋 {playerProgress.missions_completed}</span>
+                      <span>🏆 {playerProgress.achievements_unlocked}</span>
+                      <span>⏱️ {playerProgress.playtime_minutes}m</span>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
             
@@ -236,7 +352,7 @@ const Layout = () => {
           <nav className="mt-3 md:mt-4">
             <div className="flex w-full justify-between items-center">
               {/* Fluxo principal da jornada */}
-              <ul className="flex flex-wrap gap-3 md:space-x-6">
+              <ul className="flex gap-3 md:space-x-6 overflow-x-auto -mx-1 px-1 snap-x snap-mandatory flex-nowrap sm:flex-wrap">
                 <li>
                   <Link to="/journey" className={`${navLinkClass('/journey')} text-sm md:text-base`}>
                     🏠 Início
@@ -255,6 +371,11 @@ const Layout = () => {
                 <li>
                   <Link to="/guild-hub" className={`${navLinkClass('/guild-hub')} text-sm md:text-base`}>
                     🏰 Guilda dos Aventureiros
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/pets" className={`${navLinkClass('/pets')} text-sm md:text-base`}>
+                    🐾 Mascotes
                   </Link>
                 </li>
                 <li>
@@ -277,6 +398,11 @@ const Layout = () => {
                     🎒 Inventário
                   </Link>
                 </li>
+                <li>
+                  <Link to="/hero-forge" className={`${navLinkClass('/hero-forge')} text-sm md:text-base`}>
+                    ⚒️ Forja
+                  </Link>
+                </li>
                 {import.meta.env.DEV && (
                   <li>
                     <Link to="/admin" className={`${navLinkClass('/admin')} text-sm md:text-base`}>
@@ -288,7 +414,7 @@ const Layout = () => {
 
               {/* Grupo final: Ranking | Loja | Comunidade (Futuro) - oculto até Evolução */}
               {currentIdx >= FLOW_STEPS.length - 1 && (
-                <ul className="flex flex-wrap gap-3 md:space-x-4 text-sm">
+                <ul className="flex gap-3 md:space-x-4 text-sm overflow-x-auto -mx-1 px-1 snap-x snap-mandatory flex-nowrap sm:flex-wrap">
                   <li>
                     <Link to="/leaderboards" className={navLinkClass('/leaderboards')}>
                       {medievalTheme.icons.ui.leaderboard} Ranking
@@ -308,6 +434,7 @@ const Layout = () => {
               )}
             </div>
           </nav>
+          <SeasonalDecor />
           {/* Minibarra de progresso e controles do fluxo - mostrar apenas em Início sem herói criado */}
           {location.pathname === '/journey' && heroes.length === 0 && (
             <div className="mt-2">
@@ -321,6 +448,10 @@ const Layout = () => {
       </header>
       
       <main className="container mx-auto py-6 md:py-8 px-3 md:px-4">
+        {/* Banner Ad Top */}
+        <div className="mb-4">
+          <AdBanner style={{ display: 'block', minHeight: 60 }} />
+        </div>
         {/* Banner global de convite quando houver código na URL */}
         {new URLSearchParams(location.search).get('ref') && (
           <div className="mb-4 rounded-lg p-3 bg-emerald-800/30 border border-emerald-500/30">
@@ -328,9 +459,10 @@ const Layout = () => {
               <div className="text-sm text-emerald-200">Você tem um convite ativo. A criação de um herói com esse convite concede bônus ao convidador.</div>
               <Link
                 to={`/create?ref=${new URLSearchParams(location.search).get('ref')}`}
-                className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                className={`px-3 py-1 rounded bg-gradient-to-r ${((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.buttonGradient) || 'from-emerald-600 to-emerald-700'} text-white text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 hover:brightness-110 flex items-center gap-2`}
               >
-                Criar com convite
+                {((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.accents?.[0]) || ''}
+                <span>Criar com convite</span>
               </Link>
             </div>
           </div>
@@ -347,7 +479,7 @@ const Layout = () => {
           aria-label={hudVisible ? 'Ocultar HUD' : 'Mostrar HUD'}
           title={hudVisible ? 'Ocultar HUD' : 'Mostrar HUD'}
           onClick={() => setHudVisible(v => !v)}
-          className={`fixed bottom-[calc(1rem+var(--safe-bottom))] right-4 z-50 px-3 py-2 rounded-full shadow-lg transition-colors text-sm md:text-base whitespace-nowrap max-w-[80vw]
+          className={`fixed bottom-[calc(1rem+var(--safe-bottom))] right-4 z-50 px-3 py-2 rounded-full shadow-lg transition-colors text-xs sm:text-sm md:text-base max-w-[80vw]
             ${hudVisible ? 'bg-gray-800 text-gray-200 hover:bg-gray-700' : 'bg-amber-600 text-white hover:bg-amber-700'} focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500`}
         >
           {hudVisible ? 'Ocultar Painel' : 'Mostrar Painel'}
@@ -368,6 +500,8 @@ const Layout = () => {
           <p>&copy; {new Date().getFullYear()} Forjador de Heróis - Criado com React, TypeScript e Zustand</p>
         </div>
       </footer>
+      {/* Interstitial Ad mount */}
+      <InterstitialAd />
     </div>
   );
 };

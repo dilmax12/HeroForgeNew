@@ -80,6 +80,70 @@ export const SHOP_ITEMS: Item[] = [
     icon: '📜',
     effects: { duration: 0 } // Efeito instantâneo
   },
+  // === Mascotes: Itens de Câmara de Eclosão ===
+  {
+    id: 'essencia-calor',
+    name: 'Essência de Calor',
+    description: 'Acelera a incubação de ovos em 15 minutos.',
+    type: 'consumable',
+    rarity: 'comum',
+    price: 35,
+    icon: '🔥'
+  },
+  {
+    id: 'brasas-magicas',
+    name: 'Brasas Mágicas',
+    description: 'Acelera a incubação de ovos em 1 hora.',
+    type: 'consumable',
+    rarity: 'raro',
+    price: 120,
+    icon: '♨️'
+  },
+  {
+    id: 'pedra-alma',
+    name: 'Pedra de Alma',
+    description: 'Canaliza energia para evolução de mascotes (+300 XP).',
+    type: 'consumable',
+    rarity: 'epico',
+    price: 200,
+    icon: '🪨'
+  },
+  {
+    id: 'racao-basica',
+    name: 'Ração Básica de Mascote',
+    description: '+50 XP para mascotes ao alimentar.',
+    type: 'consumable',
+    rarity: 'comum',
+    price: 30,
+    icon: '🍖'
+  },
+  {
+    id: 'racao-deluxe',
+    name: 'Ração Deluxe de Mascote',
+    description: '+150 XP para mascotes ao alimentar.',
+    type: 'consumable',
+    rarity: 'raro',
+    price: 90,
+    icon: '🍗'
+  },
+  {
+    id: 'essencia-vinculo',
+    name: 'Essência de Vínculo',
+    description: 'Aprimora o vínculo com o mascote, aumentando seus bônus em 1%.',
+    type: 'consumable',
+    rarity: 'raro',
+    price: 140,
+    icon: '🔗'
+  },
+  {
+    id: 'tonico-companheiro',
+    name: 'Tônico do Companheiro',
+    description: 'Restaura 50 de energia do mascote ativo.',
+    type: 'consumable',
+    rarity: 'raro',
+    price: 120,
+    icon: '⚡'
+  },
   {
     id: 'tonico-descanso',
     name: 'Tônico de Descanso',
@@ -1493,6 +1557,116 @@ export const SHOP_ITEMS: Item[] = [
     price: 640,
     icon: '🛡️',
     bonus: { constituicao: 6 }
+  }
+  ,
+  {
+    id: 'pedra-alma',
+    name: 'Pedra de Alma',
+    description: 'Canaliza energia para evolução de mascotes.',
+    type: 'material',
+    rarity: 'raro',
+    price: 180,
+    icon: '🪨'
+  },
+  {
+    id: 'pedra-magica',
+    name: 'Pedra Mágica',
+    description: 'Usada para refinar mascotes e montarias (+1% por nível).',
+    type: 'material',
+    rarity: 'raro',
+    price: 220,
+    icon: '🔷'
+  },
+  {
+    id: 'pergaminho-montaria',
+    name: 'Pergaminho de Montaria',
+    description: 'Permite evoluir a montaria para o próximo estágio.',
+    type: 'material',
+    rarity: 'epico',
+    price: 400,
+    icon: '📜'
+  },
+  {
+    id: 'essencia-bestial',
+    name: 'Essência Bestial',
+    description: 'Essência rara necessária para montarias lendárias.',
+    type: 'material',
+    rarity: 'lendario',
+    price: 800,
+    icon: '🧬'
+  },
+  {
+    id: 'carne-selvagem',
+    name: 'Carne Selvagem',
+    description: 'Comida para treinar mascotes (+50 XP).',
+    type: 'consumable',
+    rarity: 'comum',
+    price: 30,
+    icon: '🍖'
+  },
+  {
+    id: 'peixe-mistico',
+    name: 'Peixe Místico',
+    description: 'Comida rara para mascotes (+120 XP).',
+    type: 'consumable',
+    rarity: 'raro',
+    price: 90,
+    icon: '🐟'
+  },
+  {
+    id: 'frutas-rubras',
+    name: 'Frutas Rubras',
+    description: 'Comida doce para mascotes (+80 XP).',
+    type: 'consumable',
+    rarity: 'incomum',
+    price: 50,
+    icon: '🍎'
+  },
+  {
+    id: 'essencia-calor',
+    name: 'Essência de Calor',
+    description: 'Acelera incubação de ovos (-15min).',
+    type: 'material',
+    rarity: 'raro',
+    price: 100,
+    icon: '🔥'
+  },
+  {
+    id: 'brasas-magicas',
+    name: 'Brasas Mágicas',
+    description: 'Acelera incubação de ovos (-1h).',
+    type: 'material',
+    rarity: 'epico',
+    price: 160,
+    icon: '♨️'
+  }
+  ,
+  {
+    id: 'racao-basica',
+    name: 'Ração Básica',
+    description: 'Comida comum para mascotes (+50 XP).',
+    type: 'consumable',
+    rarity: 'comum',
+    price: 25,
+    icon: '🍖'
+  },
+  {
+    id: 'racao-deluxe',
+    name: 'Ração Deluxe',
+    description: 'Comida premium para mascotes (+150 XP).',
+    type: 'consumable',
+    rarity: 'raro',
+    price: 120,
+    icon: '🍗'
+  },
+  {
+    id: 'essencia-vinculo',
+    name: 'Essência de Vínculo',
+    description: 'Refina o vínculo com mascotes/montarias (+1%).',
+    type: 'material',
+    rarity: 'raro',
+    price: 220,
+    icon: '🌀'
   }
 ];
 
