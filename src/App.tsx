@@ -183,8 +183,9 @@ function AIAvatarGeneratorWrapper() {
   }
   
   const handleAvatarGenerated = (url: string) => {
-    // Salva a imagem gerada no herói selecionado
-    updateHero(selectedHero.id, { image: url });
+    const ok = typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://') || /^data:image\/(png|jpeg);base64,/.test(url));
+    const safe = ok ? url : 'https://placehold.co/512x512?text=Avatar';
+    updateHero(selectedHero.id, { image: safe });
   };
 
   return (
@@ -368,7 +369,7 @@ function App() {
         `frame-src 'self' https://vercel.live https://*.vercel.live ${adsOrigins.join(' ')}`,
         `connect-src ${connectSrc} ${adsOrigins.join(' ')}`,
         "style-src 'self' 'unsafe-inline'",
-        `script-src 'self' ${adsOrigins.join(' ')}`,
+        `script-src 'self' ${adsOrigins.join(' ')} https://vercel.live https://*.vercel.live`,
         "img-src 'self' data: blob: https:"
       ].join('; ') + ';';
       document.head.appendChild(cspMeta);

@@ -32,7 +32,7 @@ export const MountsPanel: React.FC = () => {
   const [detailId, setDetailId] = useState<string | undefined>(undefined)
   const [tick, setTick] = useState(0)
   useEffect(() => { const id = setInterval(() => setTick(t => t + 1), 1000); return () => clearInterval(id) }, [])
-  useEffect(() => { const onKey = (e: KeyboardEvent) => { const favs = hero.favoriteMountIds || []; if (e.key === '1' && favs[0]) setActiveMount(favs[0]); if (e.key === '2' && favs[1]) setActiveMount(favs[1]); if (e.key === '3' && favs[2]) setActiveMount(favs[2]); }; window.addEventListener('keydown', onKey as any); return () => window.removeEventListener('keydown', onKey as any); }, [hero.favoriteMountIds])
+  useEffect(() => { const onKey = (e: KeyboardEvent) => { const favs = hero?.favoriteMountIds || []; if (e.key === '1' && favs[0]) setActiveMount(favs[0]); if (e.key === '2' && favs[1]) setActiveMount(favs[1]); if (e.key === '3' && favs[2]) setActiveMount(favs[2]); }; window.addEventListener('keydown', onKey as any); return () => window.removeEventListener('keydown', onKey as any); }, [hero?.favoriteMountIds])
 
   if (!hero) {
     return (
