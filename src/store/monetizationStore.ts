@@ -73,7 +73,23 @@ export const useMonetizationStore = create<MonetizationState>()(
         const currentReceipts = { ...(get().receipts) };
         currentOwned[productId] = { purchasedAt: new Date().toISOString() };
         currentReceipts[productId] = { id: receipt.id, purchasedAt: new Date().toISOString(), payload: receipt.payload };
-        set({ ownedProducts: currentOwned, receipts: currentReceipts });
+        const next: Partial<MonetizationState> = { ownedProducts: currentOwned, receipts: currentReceipts };
+        if (productId.startsWith('frame-')) {
+          const frameId = productId.replace('frame-', '');
+          const frames = new Set([...(get().ownedFrames || [])]);
+          frames.add(frameId);
+          next.ownedFrames = Array.from(frames);
+        } else if (productId.startsWith('theme-')) {
+          const themeId = productId.replace('theme-', '');
+          const themes = new Set([...(get().ownedThemes || [])]);
+          themes.add(themeId);
+          next.ownedThemes = Array.from(themes);
+        } else if (productId === 'remove-ads') {
+          next.adsRemoved = true; next.adsEnabled = false; next.interstitialVisible = false;
+        } else if (productId === 'season-pass') {
+          next.seasonPassActive = { active: true };
+        }
+        set(next as any);
       },
       removeAdsForever: () => set({ adsRemoved: true, adsEnabled: false, interstitialVisible: false }),
       setActiveFrame: (frameId) => set({ activeFrameId: frameId })

@@ -26,6 +26,8 @@ export const DynamicMissionsPanel: React.FC<DynamicMissionsPanelProps> = ({
   const [isLoadingDialogue, setIsLoadingDialogue] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'available' | 'active' | 'completed'>('available');
+  const { activeSeasonalTheme } = useMonetizationStore();
+  const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-white/20' : 'border-white/20';
 
   const generateMissions = useCallback(async () => {
     setIsGenerating(true);
@@ -123,7 +125,7 @@ export const DynamicMissionsPanel: React.FC<DynamicMissionsPanelProps> = ({
 
   return (
     <div className={className}>
-      <div className={`dynamic-missions-panel rounded-xl border ${(useMonetizationStore().activeSeasonalTheme ? (seasonalThemes as any)[useMonetizationStore().activeSeasonalTheme]?.border || 'border-white/20' : 'border-white/20')}`}>
+      <div className={`dynamic-missions-panel rounded-xl border ${seasonalBorder}`}>
       <style>{`
         .dynamic-missions-panel {
           background: ${medievalTheme.colors.background.secondary};
@@ -432,8 +434,7 @@ export const DynamicMissionsPanel: React.FC<DynamicMissionsPanelProps> = ({
           onClick={generateMissions}
           disabled={isGenerating}
           style={{
-            backgroundImage: ((): string => {
-              const { activeSeasonalTheme } = useMonetizationStore();
+            backgroundImage: (() => {
               const { from, to } = getSeasonalButtonColors(activeSeasonalTheme as any);
               return `linear-gradient(135deg, ${from}, ${to})`;
             })()

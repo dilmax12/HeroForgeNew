@@ -75,7 +75,7 @@ function rankRequirement(cat: HuntingCategory): RankLevel {
   return 'F'
 }
 
-export function generateHuntingMission(hero: Hero, preferredBiome?: Biome): HuntingMission {
+export function generateHuntingMission(hero: Hero, preferredBiome?: Biome, preferredCategory?: HuntingCategory): HuntingMission {
   const rank = hero.rankData?.currentRank as RankLevel | undefined
   const allowed = gatingByRank(rank)
   // Viés por classe
@@ -90,7 +90,7 @@ export function generateHuntingMission(hero: Hero, preferredBiome?: Biome): Hunt
   }
   const bias = Object.entries(classBias).find(([k]) => cls.includes(k))?.[1] || []
   const pickPool = (rank === 'F') ? allowed : (bias.length ? [...bias, ...allowed] : allowed)
-  const category = pickPool[Math.floor(Math.random() * pickPool.length)]
+  const category = (preferredCategory && allowed.includes(preferredCategory)) ? preferredCategory : pickPool[Math.floor(Math.random() * pickPool.length)]
   const biome = preferredBiome || chooseBiome(hero)
   const pool = BIOME_TARGETS[biome]
   const chosen = pool[Math.floor(Math.random() * pool.length)]
@@ -102,7 +102,8 @@ export function generateHuntingMission(hero: Hero, preferredBiome?: Biome): Hunt
   if (rankReq === 'F' && category === 'coleta') phases = 2
   if (rankReq === 'F' && category === 'escolta') phases = 3
   let baseRewards = { xp: diff === 'epica' ? 120 : diff === 'dificil' ? 90 : diff === 'medio' ? 60 : 40, gold: diff === 'epica' ? 70 : diff === 'dificil' ? 50 : diff === 'medio' ? 35 : 20 }
-  if (rankReq === 'F' && category === 'escolta') baseRewards = { ...baseRewards, gold: baseRewards.gold + 5 }
+  if (rankReq === 'F' && category === 'escolta') baseRewards = { ...baseRewards, xp: baseRewards.xp + 8, gold: baseRewards.gold + 5 }
+  if (rankReq === 'F' && category === 'controle') baseRewards = { ...baseRewards, xp: baseRewards.xp + 5, gold: baseRewards.gold + 3 }
   const title = category === 'controle' ? `Controle da ${chosen.target}` : category === 'coleta' ? `Coleta de Recursos` : category === 'escolta' ? `Escolta Segura` : `Alvo Especial`
   const objective = category === 'coleta' ? `Coletar ${amount} ${chosen.target === 'Bruxa da Névoa' ? 'Essências Umbral' : 'Ervas/Recursos'}` : `${chosen.objectivePrefix} ${category === 'controle' ? amount : chosen.target}`
   const narrative = category === 'controle' ? `A população de ${chosen.target} ameaça caravanas em ${biome}. Reduza sua presença.` : category === 'coleta' ? `Recursos raros foram avistados em ${biome}. Obtenha-os sob risco controlado.` : category === 'escolta' ? `Um NPC precisa alcançar ${biome} em segurança. O caminho é perigoso.` : `Um alvo único foi identificado em ${biome}. Derrube-o para obter recompensas.`

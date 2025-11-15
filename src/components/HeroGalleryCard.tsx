@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Hero, HeroClass, Element } from '../types/hero';
 import { getRankIcon } from '../styles/medievalTheme';
 import { useHeroStore } from '../store/heroStore';
 import { Eye, Star, Shield, Sword, Wand2, Target, Heart, UserX, Crown, Edit, Camera } from 'lucide-react';
 import { getElementInfoSafe } from '../utils/elementSystem';
+import { getCachedImage, setCachedImage } from '../utils/imageCache';
 
 interface HeroGalleryCardProps {
   hero: Hero;
@@ -12,6 +13,8 @@ interface HeroGalleryCardProps {
   size?: 'small' | 'medium' | 'large';
   onEdit?: (hero: Hero) => void;
   onImageChange?: (hero: Hero) => void;
+  onDelete?: () => void;
+  index?: number;
 }
 
 // Mapeamento de classes para ícones
@@ -53,7 +56,9 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
   showDetails = true,
   size = 'medium',
   onEdit,
-  onImageChange
+  onImageChange,
+  onDelete,
+  index
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -73,6 +78,53 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
   const handleCardClick = () => {
     selectHero(hero.id);
     onClick?.();
+  };
+
+  const imageSrc = useMemo(() => {
+    const raw = hero.image || '';
+    const isPoll = raw.includes('image.pollinations.ai/prompt/') || raw.includes('/api/pollinations-image?prompt=');
+    if (!isPoll) return raw;
+    const prompt = (() => {
+      try {
+        if (raw.includes('image.pollinations.ai/prompt/')) {
+          const p = raw.split('image.pollinations.ai/prompt/')[1];
+          return decodeURIComponent(p.split('?')[0] || '');
+        }
+        if (raw.includes('/api/pollinations-image?prompt=')) {
+          const q = new URL(raw, window.location.origin);
+          return decodeURIComponent(q.searchParams.get('prompt') || '');
+        }
+      } catch {}
+      return '';
+    })();
+    if (prompt) {
+      const cached = getCachedImage(prompt);
+      if (cached) return cached;
+      return `/api/pollinations-image?prompt=${encodeURIComponent(prompt)}&width=512&height=512`;
+    }
+    return raw;
+  }, [hero.image]);
+
+  const onImgLoad = () => {
+    try {
+      const raw = hero.image || '';
+      const isPoll = raw.includes('image.pollinations.ai/prompt/') || raw.includes('/api/pollinations-image?prompt=');
+      if (!isPoll) return;
+      const prompt = (() => {
+        try {
+          if (raw.includes('image.pollinations.ai/prompt/')) {
+            const p = raw.split('image.pollinations.ai/prompt/')[1];
+            return decodeURIComponent(p.split('?')[0] || '');
+          }
+          if (raw.includes('/api/pollinations-image?prompt=')) {
+            const q = new URL(raw, window.location.origin);
+            return decodeURIComponent(q.searchParams.get('prompt') || '');
+          }
+        } catch {}
+        return '';
+      })();
+      if (prompt) setCachedImage(prompt, imageSrc, 86_400_000, 'pollinations');
+    } catch {}
   };
 
   const generateAIPrompt = () => {
@@ -109,9 +161,21 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
         ${isSelected ? 'ring-2 ring-yellow-400 ring-opacity-60' : ''}
         ${(() => { const mount = (hero.mounts||[]).find(m=>m.id===hero.activeMountId); return mount?.stage==='lendaria' ? 'shadow-[0_0_15px_#F59E0B] ring-2 ring-amber-400' : mount?.stage==='encantada' ? 'shadow-[0_0_10px_#8B5CF6] ring-2 ring-purple-400/60' : '' })()}
       `}
-      onMouseEnter={() => setIsHovered(true)}
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '320px 400px', willChange: 'transform' } as any}
+      onMouseEnter={() => { setIsHovered(true); try { import('./HeroDetail'); } catch {} }}
+      onFocus={() => { setIsHovered(true); try { import('./HeroDetail'); } catch {} }}
       onMouseLeave={() => setIsHovered(false)}
+      onBlur={() => setIsHovered(false)}
       onClick={handleCardClick}
+      role="button"
+      aria-roledescription="Cartão de herói"
+      aria-label={`Abrir detalhes de ${hero.name}`}
+      aria-selected={isSelected}
+      tabIndex={0}
+      data-hero-card="1"
+      data-hero-id={hero.id}
+      data-index={typeof index==='number'?index:undefined}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCardClick(); } }}
     >
       {/* Moldura Externa com Runas */}
       <div className={`
@@ -153,13 +217,15 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
           {/* Placeholder ou Imagem do Herói */}
           {hero.image && !imageError ? (
             <img
-              src={hero.image.includes('image.pollinations.ai/prompt/')
-                ? hero.image
-                    .replace('https://image.pollinations.ai/prompt/', '/api/pollinations-image?prompt=')
-                    .replace('?n=1&', '&')
-                : hero.image}
-              alt={hero.name}
+              src={imageSrc}
+              alt={`${hero.name} — ${hero.class} • ${hero.race}`}
               className="w-full h-full object-cover"
+              loading="lazy"
+              decoding="async"
+              width={640}
+              height={800}
+              sizes="(min-width: 1280px) 18rem, (min-width: 768px) 16rem, 14rem"
+              onLoad={onImgLoad}
               onError={() => setImageError(true)}
             />
           ) : (
@@ -251,7 +317,8 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
                 e.stopPropagation();
                 onClick?.();
               }}
-              className="bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-2 rounded-md font-bold text-xs transition-colors duration-200 flex items-center space-x-2"
+              className="bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-2 rounded-md font-bold text-xs transition-colors duration-200 flex items-center space-x-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300"
+              aria-label="Ver detalhes"
             >
               <Eye className="w-3 h-3" />
               <span>Ver Detalhes</span>
@@ -263,7 +330,8 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
                   e.stopPropagation();
                   onEdit(hero);
                 }}
-                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-md font-bold text-xs transition-colors duration-200 flex items-center space-x-2"
+                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-md font-bold text-xs transition-colors duration-200 flex items-center space-x-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
+                aria-label="Editar herói"
               >
                 <Edit className="w-3 h-3" />
                 <span>Editar</span>
@@ -276,10 +344,23 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
                   e.stopPropagation();
                   onImageChange(hero);
                 }}
-                className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-md font-bold text-xs transition-colors duration-200 flex items-center space-x-2"
+                className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-md font-bold text-xs transition-colors duration-200 flex items-center space-x-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-300"
+                aria-label="Trocar foto"
               >
                 <Camera className="w-3 h-3" />
                 <span>Trocar Foto</span>
+              </button>
+            )}
+            {onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                className="bg-red-600 hover:bg-red-500 text-white px-3 py-2 rounded-md font-bold text-xs transition-colors duration-200 flex items-center space-x-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+                aria-label="Remover herói"
+              >
+                <span>Remover</span>
               </button>
             )}
           </div>

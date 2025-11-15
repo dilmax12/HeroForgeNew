@@ -21,4 +21,3 @@ export default class ErrorBoundary extends React.Component<{ fallback?: React.Re
     return this.props.children as any
   }
 }
-

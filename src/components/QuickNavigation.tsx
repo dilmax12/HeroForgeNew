@@ -36,6 +36,13 @@ const QuickNavigation: React.FC = () => {
       })()
     },
     {
+      id: 'hatch-next',
+      label: 'Chocar Próximo',
+      icon: '🐣',
+      path: '/pets?hatchNext=1',
+      color: 'bg-amber-600 hover:bg-amber-700'
+    },
+    {
       id: 'guild-hub',
       label: 'Guilda dos Aventureiros',
       icon: '🏰',
@@ -48,6 +55,13 @@ const QuickNavigation: React.FC = () => {
       icon: '🗝️',
       path: '/dungeon-infinita',
       color: 'bg-purple-600 hover:bg-purple-700'
+    },
+    {
+      id: 'duel-arena',
+      label: 'Arena de Duelos',
+      icon: '⚔️',
+      path: '/duel-arena',
+      color: 'bg-indigo-700 hover:bg-indigo-800'
     },
     {
       id: 'party',

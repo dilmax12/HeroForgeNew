@@ -25,6 +25,8 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'general' | 'build' | 'goals' | 'weaknesses'>('general');
   const [expandedRecommendation, setExpandedRecommendation] = useState<string | null>(null);
+  const { activeSeasonalTheme } = useMonetizationStore();
+  const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-white/20' : 'border-white/20';
 
   const generateRecommendations = useCallback(async () => {
     setIsLoading(true);
@@ -115,7 +117,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
 
   return (
     <div className={className}>
-      <div className={`ai-recommendations-panel rounded-xl border ${(useMonetizationStore().activeSeasonalTheme ? (seasonalThemes as any)[useMonetizationStore().activeSeasonalTheme]?.border || 'border-white/20' : 'border-white/20')}`}>
+      <div className={`ai-recommendations-panel rounded-xl border ${seasonalBorder}`}>
       <style>{`
         .ai-recommendations-panel {
           background: ${medievalTheme.colors.background.secondary};
@@ -473,8 +475,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
           onClick={generateRecommendations}
           disabled={isLoading}
           style={{
-            backgroundImage: ((): string => {
-              const { activeSeasonalTheme } = useMonetizationStore();
+            backgroundImage: (() => {
               const { from, to } = getSeasonalButtonColors(activeSeasonalTheme as any);
               return `linear-gradient(135deg, ${from}, ${to})`;
             })()

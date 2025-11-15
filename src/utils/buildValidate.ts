@@ -16,4 +16,3 @@ export function validateBuild(data: HeroCreationData): { ok: boolean; issues: st
   if (!data.class) issues.push('Classe não selecionada')
   return { ok: issues.length === 0, issues }
 }
-

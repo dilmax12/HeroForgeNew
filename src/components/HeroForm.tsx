@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { HeroCreationData, HeroRace, HeroClass, Alignment, Element, HeroAttributes } from '../types/hero';
-import { useHeroStore } from '../store/heroStore';
+import { useHeroStore, calculateDerivedAttributes } from '../store/heroStore';
 import { generateStory } from '../utils/story';
 import { gerarTexto } from '../services/groqTextService';
 import { generateHeroWithAI } from '../services/heroCreateService';
@@ -41,9 +41,12 @@ import { getElementSuggestionReason } from '../utils/synergyExplain';
 import { getPrefs, setPrefs } from '../utils/userPreferences';
 import { getRecommendedTalentPlan } from '../utils/talentRecommendations';
 import { getClassPreset } from '../utils/buildPresets';
+import { getPresetOptions, buildFromPreset } from '../utils/presetLibrary';
 import { saveDraft, loadDraft, clearDraft } from '../utils/creationDraft';
 import ErrorBoundary from './ErrorBoundary';
 import { validateBuild } from '../utils/buildValidate';
+import { buildChecklist, buildReadiness } from '../utils/buildSummary';
+import { getClassTips } from '../utils/classTips';
 
 const HeroForm = () => {
   const [formData, setFormData] = useState<HeroCreationData>({
@@ -83,9 +86,18 @@ const HeroForm = () => {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const referralCode = searchParams.get('ref') || undefined;
+  const inviterBy = searchParams.get('by') || undefined;
 
   const remainingPoints = calculateRemainingPoints(formData.attributes);
   const classSkills = getClassSkills(formData.class);
+
+  const derivedPreview = React.useMemo(() => {
+    try {
+      return calculateDerivedAttributes(formData.attributes as HeroAttributes, formData.class, 1);
+    } catch {
+      return undefined;
+    }
+  }, [formData.attributes, formData.class]);
 
   useEffect(() => {
     const adv = getElementAdvantageInfo(formData.element);
@@ -95,10 +107,34 @@ const HeroForm = () => {
     if (typeof prefs.autoSuggestDisabled === 'boolean') setDisableAutoSuggestion(prefs.autoSuggestDisabled);
   }, [formData.element, formData.class]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key.toLowerCase() === 'v')) {
+        const res = validateBuild(formData as any)
+        if (res.ok) setLimitWarning('Build válido ✅')
+        else setLimitWarning(res.issues.join(' • '))
+      } else if (e.altKey && (e.key.toLowerCase() === 'a')) {
+        const recEls = getRecommendedElements(formData.class, formData.race)
+        if (recEls.length) handleElementChange(recEls[0] as Element)
+        handleAutoDistributeRecommended()
+        setFormData(prev => ({ ...prev, plannedTalents: getRecommendedTalentPlan(prev.class) }))
+        setLimitWarning('Recomendações aplicadas')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [formData])
+
   const draftTimer = useRef<number | null>(null);
   useEffect(() => {
     if (draftTimer.current) window.clearTimeout(draftTimer.current)
     draftTimer.current = window.setTimeout(() => { saveDraft(formData) }, 300)
+  }, [formData]);
+
+  useEffect(() => {
+    const handler = () => { try { saveDraft(formData) } catch {} };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
   }, [formData]);
 
   const handleGenerateName = async () => {
@@ -167,7 +203,7 @@ const HeroForm = () => {
     } as any;
     let remaining = calculateRemainingPoints(formData.attributes);
     let attrs = { ...formData.attributes } as any;
-    const order = plan.sort((a,b) => ((weights[a.priority] + (elemBonus[a.attribute] || 0)) > (weights[b.priority] + (elemBonus[b.attribute] || 0)) ? -1 : 1));
+    const order = plan.sort((a,b) => (((weights[a.priority] + (elemBonus[a.attribute] || 0)) * (advWeights[a.attribute] || 1)) > ((weights[b.priority] + (elemBonus[b.attribute] || 0)) * (advWeights[b.attribute] || 1)) ? -1 : 1));
     while (remaining > 0) {
       let progressed = false;
       for (const p of order) {
@@ -188,6 +224,8 @@ const HeroForm = () => {
   const [prevElement, setPrevElement] = useState<Element | null>(null);
   const [disableAutoSuggestion, setDisableAutoSuggestion] = useState(false);
   const [showSuggestionInfo, setShowSuggestionInfo] = useState(true);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [advWeights, setAdvWeights] = useState<Record<string, number>>({ forca:1, destreza:1, constituicao:1, inteligencia:1, sabedoria:1, carisma:1 });
 
   const handleElementChange = (element: Element) => {
     setFormData(prev => ({ 
@@ -256,6 +294,12 @@ const HeroForm = () => {
       const created = createHero(formData);
       if (referralCode) {
         acceptReferralInvite(referralCode, created.id);
+        try {
+          const inv = useHeroStore.getState().getReferralInviteByCode(referralCode);
+          if (inv?.id) {
+            useHeroStore.getState().logReferralActivity(inv.id, 'accepted', inviterBy ? `by:${inviterBy}` : `new:${created.id}`);
+          }
+        } catch {}
       }
       setConfirmOpen(false);
       navigate('/');
@@ -459,8 +503,22 @@ const HeroForm = () => {
   
   return (
     <div className="max-w-4xl mx-auto p-6 bg-gray-800 rounded-lg shadow-lg">
-      <h2 className="text-3xl font-bold text-amber-400 mb-6 text-center">Forjar Novo Herói - Versão 3.0</h2>
+      <h2 className="text-3xl font-bold text-amber-400 mb-2 text-center">Forjar Novo Herói - Versão 3.0</h2>
+      {(() => { const r = buildReadiness(formData as any); return (
+        <div className={`mb-4 p-2 rounded text-sm text-center ${r.status === 'ok' ? 'bg-emerald-700/30 text-emerald-200' : r.status === 'warn' ? 'bg-amber-700/30 text-amber-200' : 'bg-red-700/30 text-red-200'}`}>Prontidão do build: {r.message}</div>
+      ) })()}
       <div className="mb-4 flex items-center justify-end gap-2">
+        <select
+          onChange={(e) => {
+            const p = getPresetOptions().find(x => x.id === e.target.value)
+            if (p) setFormData(prev => ({ ...prev, ...(buildFromPreset(p) as any) }))
+          }}
+          defaultValue=""
+          className="px-2 py-1 rounded bg-gray-700 text-white text-xs"
+        >
+          <option value="" disabled>Carregar preset...</option>
+          {getPresetOptions().map(o => (<option key={o.id} value={o.id}>{o.name}</option>))}
+        </select>
         <button
           type="button"
           onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify({ name: formData.name, race: formData.race, class: formData.class, alignment: formData.alignment, attributes: formData.attributes, element: formData.element, plannedTalents: formData.plannedTalents || [] })); } catch {} }}
@@ -590,6 +648,14 @@ const HeroForm = () => {
                   </div>
                 </div>
               )}
+              {getClassTips(formData.class).length > 0 && (
+                <div className="mt-2 p-2 rounded bg-gray-800 text-xs text-gray-200">
+                  <div className="font-semibold">Dicas de classe</div>
+                  <ul className="mt-1 list-disc pl-5">
+                    {getClassTips(formData.class).map((t, i) => (<li key={`tip-${i}`}>{t}</li>))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -618,7 +684,7 @@ const HeroForm = () => {
                       handleClassChange(prev);
                     }
                   }}
-                  className={`text-left p-3 rounded border ${formData.class === meta.id ? 'border-amber-500 bg-amber-500/20' : 'border-gray-600 bg-gray-700'} hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                  className={`text-left p-3 rounded border transition-transform duration-200 active:scale-95 focus:scale-105 ${formData.class === meta.id ? 'border-amber-500 bg-amber-500/20' : 'border-gray-600 bg-gray-700'} hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500`}
                   tabIndex={0}
                 >
                   <div className="flex items-center justify-between">
@@ -629,6 +695,7 @@ const HeroForm = () => {
                   <div className="mt-2 text-xs text-gray-400">Atributos base: {Object.entries(meta.baseAttributes).map(([k,v]) => `${k}:${v}`).join(' • ')}</div>
                   <div className="mt-2 text-xs text-emerald-300">Vantagens: {meta.advantages.join(', ')}</div>
                   {meta.disadvantages.length > 0 && <div className="mt-1 text-xs text-red-300">Desvantagens: {meta.disadvantages.join(', ')}</div>}
+                  {meta.requirements && (() => { const c = meta.requirements({ alignment: formData.alignment as any, attributes: formData.attributes, race: formData.race }); return <div className={`mt-1 text-xs ${c.ok ? 'text-emerald-300' : 'text-yellow-300'}`}>{c.ok ? 'Requisitos atendidos' : c.message || 'Requisitos pendentes'}</div>; })()}
                 </button>
               ))}
             </div>
@@ -649,20 +716,33 @@ const HeroForm = () => {
               <button type="button" onClick={handleUndoLastDecision} className="px-2 py-1 rounded bg-gray-600 text-white text-xs">Desfazer última decisão</button>
               <button type="button" onClick={handleRedoLastDecision} className="px-2 py-1 rounded bg-gray-600 text-white text-xs">Refazer</button>
               <button type="button" onClick={() => { const p = getClassPreset(formData.class, formData.race); setFormData(prev => ({ ...prev, attributes: p.attributes, element: p.element, plannedTalents: p.plannedTalents })); }} className="px-2 py-1 rounded bg-emerald-600 text-white text-xs">Aplicar preset de classe</button>
+              <button type="button" onClick={() => { const recEls = getRecommendedElements(formData.class, formData.race); if (recEls.length) handleElementChange(recEls[0] as Element); handleAutoDistributeRecommended(); setFormData(prev => ({ ...prev, plannedTalents: getRecommendedTalentPlan(prev.class) })); setLimitWarning('Recomendações aplicadas'); }} className="px-2 py-1 rounded bg-amber-600 text-white text-xs">Aplicar recomendações</button>
             </div>
             <div className="text-xs text-gray-300 mt-1">Elementos recomendados: {getRecommendedElements(formData.class, formData.race).join(', ')}</div>
               <div className="mt-2 flex flex-wrap gap-2">
-                {getRecommendedElements(formData.class, formData.race).map(el => (
-                  <button
-                    key={el}
-                    type="button"
-                    onClick={() => handleElementChange(el as Element)}
-                    className={`px-2 py-1 rounded text-xs ${formData.element === el ? 'bg-amber-600 text-white' : 'bg-gray-600 text-gray-200 hover:bg-gray-500'}`}
-                  >
-                    {el}
-                  </button>
-                ))}
-              </div>
+              {getRecommendedElements(formData.class, formData.race).map(el => (
+                <button
+                  key={el}
+                  type="button"
+                  onClick={() => handleElementChange(el as Element)}
+                  onKeyDown={(e) => {
+                    const els = getRecommendedElements(formData.class, formData.race)
+                    const idx = els.indexOf(formData.element)
+                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                      const next = els[(idx + 1) % els.length]
+                      handleElementChange(next as Element)
+                    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                      const prev = els[(idx - 1 + els.length) % els.length]
+                      handleElementChange(prev as Element)
+                    }
+                  }}
+                  className={`px-2 py-1 rounded text-xs ${formData.element === el ? 'bg-amber-600 text-white' : 'bg-gray-600 text-gray-200 hover:bg-gray-500'}`}
+                  role="button" aria-selected={formData.element === el} tabIndex={0}
+                >
+                  {el}
+                </button>
+              ))}
+            </div>
               {CLASS_METADATA[formData.class]?.suggestedRaces?.length && (
                 <div className="mt-2">
                   <div className="text-xs text-amber-300">Raças sugeridas:</div>
@@ -672,7 +752,19 @@ const HeroForm = () => {
                         key={r}
                         type="button"
                         onClick={() => handleRaceChange(r as HeroRace)}
+                        onKeyDown={(e) => {
+                          const rs = CLASS_METADATA[formData.class]?.suggestedRaces || []
+                          const idx = rs.indexOf(formData.race)
+                          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                            const next = rs[(idx + 1) % rs.length]
+                            handleRaceChange(next as HeroRace)
+                          } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                            const prev = rs[(idx - 1 + rs.length) % rs.length]
+                            handleRaceChange(prev as HeroRace)
+                          }
+                        }}
                         className={`px-2 py-1 rounded text-xs ${formData.race === r ? 'bg-amber-600 text-white' : 'bg-gray-600 text-gray-200 hover:bg-gray-500'}`}
+                        role="button" aria-selected={formData.race === r} tabIndex={0}
                       >
                         {r}
                       </button>
@@ -705,6 +797,13 @@ const HeroForm = () => {
                 <div className="text-xs text-gray-400">Vantagens do elemento atual ({formData.element}): Forte contra {strong} • Fraco contra {weak} • Neutro {neutral}</div>
               );
             })()}
+            <div className="mt-2 p-2 rounded bg-gray-800 text-xs text-gray-200">
+              <div className="font-semibold">Resumo de recomendações</div>
+              <div className="mt-1">Elemento recomendado: {getRecommendedElements(formData.class, formData.race)[0] || '—'}</div>
+              <div>Raças sugeridas: {(CLASS_METADATA[formData.class]?.suggestedRaces || []).join(', ') || '—'}</div>
+              <div className="mt-1">Plano de atributos recomendado: {getRecommendedAttributePlan(formData.class).map(p => `${p.attribute}:${p.priority}`).join(' • ')}</div>
+              <div className="mt-1 text-gray-400">Atalho: Alt+A aplica recomendações</div>
+            </div>
             {CLASS_METADATA[formData.class]?.suggestedRaces?.length && (
               <div className="text-xs text-amber-300 mt-1">Raças sugeridas: {CLASS_METADATA[formData.class]?.suggestedRaces?.join(', ')}</div>
             )}
@@ -718,6 +817,14 @@ const HeroForm = () => {
                 <li key={p.attribute}>{p.attribute}: prioridade {p.priority} — {p.hint}</li>
               ))}
             </ul>
+          </div>
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+            {derivedPreview && (
+              <div className="p-3 rounded bg-gray-700">
+                <div className="text-white font-semibold">Pré-visualização de atributos derivados</div>
+                <div className="mt-2 text-xs text-gray-300">HP: {derivedPreview.hp} • MP: {derivedPreview.mp} • Iniciativa: {derivedPreview.initiative} • Classe de Armadura: {derivedPreview.armorClass} • Sorte: {derivedPreview.luck}</div>
+              </div>
+            )}
           </div>
           </div>
 
@@ -761,6 +868,14 @@ const HeroForm = () => {
                 <div className="text-white font-semibold">Prévia: {formData.name || '—'} • {formData.class}</div>
                 <div className="text-xs text-gray-300">Alinhamento: {formData.alignment} • Raça: {formData.race}</div>
               </div>
+            </div>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+              {buildChecklist(formData as any).map((c, i) => (
+                <div key={`chk-${i}`} className={`p-2 rounded text-xs ${c.status === 'ok' ? 'bg-emerald-700/30 text-emerald-200' : c.status === 'warn' ? 'bg-amber-700/30 text-amber-200' : 'bg-red-700/30 text-red-200'}`}>
+                  <div className="font-semibold">{c.label}</div>
+                  {c.detail && <div>{c.detail}</div>}
+                </div>
+              ))}
             </div>
           </div>
           <div className="mt-4">
@@ -818,6 +933,13 @@ const HeroForm = () => {
             >
               Auto-distribuir recomendações
             </button>
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen(v => !v)}
+              className="px-3 py-1 bg-gray-600 hover:bg-gray-700 rounded text-sm transition-colors"
+            >
+              {advancedOpen ? 'Ocultar avançado' : 'Personalização avançada'}
+            </button>
           </div>
           
           {limitWarning && (
@@ -855,6 +977,31 @@ const HeroForm = () => {
               </div>
             ))}
           </div>
+          {advancedOpen && (
+            <div className="mt-4 p-3 rounded bg-gray-800">
+              <div className="text-white font-semibold mb-2">Pesos avançados de atributos</div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {Object.keys(advWeights).map((k) => (
+                  <div key={`w-${k}`} className="text-xs text-gray-300">
+                    <div className="flex items-center justify-between">
+                      <span className="capitalize">{k}</span>
+                      <span className="text-amber-300">{advWeights[k].toFixed(2)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0.5}
+                      max={3}
+                      step={0.1}
+                      value={advWeights[k]}
+                      onChange={(e) => setAdvWeights(prev => ({ ...prev, [k]: Number(e.target.value) }))}
+                      className="w-full"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-xs text-gray-400">Os pesos influenciam a auto-distribuição recomendada, permitindo personalização avançada.</div>
+            </div>
+          )}
         </div>
 
         {/* Seção 4: Elemento */}
@@ -872,7 +1019,7 @@ const HeroForm = () => {
             <button
               type="button"
               onClick={() => setShowElementTooltip(!showElementTooltip)}
-              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-sm font-medium transition-colors"
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110`}
             >
               ℹ️ Relações
             </button>
@@ -1133,9 +1280,14 @@ const HeroForm = () => {
                 </div>
               </div>
             )}
+            {(() => { const r = buildReadiness(formData as any); return (
+              <div className={`mt-2 p-2 rounded text-xs text-center ${r.status === 'ok' ? 'bg-emerald-700/30 text-emerald-200' : r.status === 'warn' ? 'bg-amber-700/30 text-amber-200' : 'bg-red-700/30 text-red-200'}`}>Prontidão: {r.message}</div>
+            ) })()}
             <div className="mt-4 flex gap-2 justify-end">
               <button type="button" onClick={() => setConfirmOpen(false)} className="px-3 py-2 rounded bg-gray-600 text-white hover:bg-gray-700">Voltar</button>
-              <button type="button" onClick={finalizeCreation} className="px-3 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700">Confirmar</button>
+              {(() => { const r = buildReadiness(formData as any); const disabled = r.status === 'error'; return (
+                <button type="button" onClick={finalizeCreation} disabled={disabled} className={`px-3 py-2 rounded ${disabled ? 'bg-gray-500 text-gray-300 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>Confirmar</button>
+              ) })()}
             </div>
           </div>
         </div>

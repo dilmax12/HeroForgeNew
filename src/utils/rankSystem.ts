@@ -270,31 +270,38 @@ export class RankSystem {
     
     // Verificar se houve promoção
     if (newRank !== currentRankData.currentRank) {
-      const promotion = this.promoteHero(hero, currentRankData);
-      
-      if (promotion.promoted && promotion.newRank && promotion.celebration) {
-        const newHistory: RankHistory = {
-          rank: promotion.newRank,
-          achievedAt: new Date(),
-          heroLevel: hero.progression.level,
-          notableAchievement: this.getNotableAchievement(hero, promotion.newRank),
-          celebrationViewed: false
-        };
-        
-        return {
-          ...currentRankData,
-          currentRank: promotion.newRank,
-          rankHistory: [...currentRankData.rankHistory, newHistory],
-          totalRankPoints: rankPoints,
-          rankProgress: progress,
-          pendingCelebrations: [...currentRankData.pendingCelebrations, promotion.celebration],
-          rankAchievements: {
-            ...currentRankData.rankAchievements,
-            highestRankReached: promotion.newRank,
-            totalPromotions: currentRankData.rankAchievements.totalPromotions + 1
-          }
-        };
-      }
+      const celebration = this.createCelebration(newRank, hero);
+      const newHistory: RankHistory = {
+        rank: newRank,
+        achievedAt: new Date(),
+        heroLevel: hero.progression.level,
+        notableAchievement: this.getNotableAchievement(hero, newRank),
+        celebrationViewed: false
+      };
+
+      try {
+        logActivity.rankPromotion({
+          heroId: hero.id,
+          heroName: hero.name,
+          heroClass: hero.class,
+          previousRank: currentRankData.currentRank,
+          newRank: newRank
+        });
+      } catch {}
+
+      return {
+        ...currentRankData,
+        currentRank: newRank,
+        rankHistory: [...currentRankData.rankHistory, newHistory],
+        totalRankPoints: rankPoints,
+        rankProgress: progress,
+        pendingCelebrations: [...currentRankData.pendingCelebrations, celebration],
+        rankAchievements: {
+          ...currentRankData.rankAchievements,
+          highestRankReached: newRank,
+          totalPromotions: currentRankData.rankAchievements.totalPromotions + 1
+        }
+      };
     }
     
     return {

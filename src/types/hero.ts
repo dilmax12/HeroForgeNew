@@ -103,6 +103,11 @@ export interface Mount {
   speedBonus: number;
   attributes?: Partial<HeroAttributes>;
   refineLevel?: number;
+  mastery?: number;
+  locked?: boolean;
+  note?: string;
+  rewardTier?: number;
+  history?: { ts: string; action: 'obtain' | 'evolve' | 'refine' | 'train' | 'activate' | 'deactivate' | 'favorite_set' | 'favorite_removed' | 'release' | 'buy_offer'; details?: string }[];
   createdAt: string;
 }
 
@@ -496,6 +501,7 @@ export interface DerivedAttributes {
   currentHp?: number; // HP atual (para combate)
   currentMp?: number; // MP atual
   luck?: number;      // Novo: sorte que afeta rolls, loot e eventos
+  power: number;
 }
 
 export interface HeroProgression {
@@ -594,6 +600,10 @@ export interface Hero {
     companionQuestsCompleted?: number;
     beastEssenceCollected?: number;
     mountScrollsFound?: number;
+    suggestedCompanionMissions?: number;
+    duelsWon?: number;
+    duelsLost?: number;
+    duelsPlayed?: number;
   };
   
   // Advanced Features
@@ -625,6 +635,9 @@ export interface Hero {
   mounts?: Mount[];
   activeMountId?: string;
   favoriteMountId?: string;
+  favoriteMountIds?: string[];
+  mountBuff?: { speedBonus?: number; expiresAt?: string };
+  stableCapacity?: number;
 }
 
 export interface HeroCreationData {
@@ -677,4 +690,8 @@ export interface ReferralInvite {
   acceptedHeroId?: string;
   acceptedAt?: string;
   rewardGranted?: boolean;
+  expiresAt?: string;
+  inviterTag?: string;
+  personalizedSlug?: string;
+  activity?: { ts: string; action: 'created' | 'shared' | 'accepted' | 'expired' | 'revoked' | 'renewed'; details?: string }[];
 }

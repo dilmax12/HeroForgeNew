@@ -4,6 +4,7 @@
  */
 
 import { HeroAttributes } from '../types/hero';
+import { RankLevel, RANK_ORDER } from '../types/ranks';
 
 export const ATTRIBUTE_CONSTRAINTS = {
   MIN_ATTRIBUTE: 1,
@@ -11,6 +12,16 @@ export const ATTRIBUTE_CONSTRAINTS = {
   TOTAL_POINTS: 18,
   STARTING_POINTS_PER_ATTRIBUTE: 1
 };
+
+export function getMaxAttributeForRank(rank: RankLevel): number {
+  const idx = Math.max(0, RANK_ORDER.indexOf(rank));
+  return ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE + idx * 10;
+}
+
+export function getTotalAttributePointsCapForRank(rank: RankLevel): number {
+  const idx = Math.max(0, RANK_ORDER.indexOf(rank));
+  return ATTRIBUTE_CONSTRAINTS.TOTAL_POINTS + idx * 10;
+}
 
 export const ATTRIBUTE_INFO = {
   forca: {

@@ -9,7 +9,7 @@ import { generateQuestBoard, QUEST_ACHIEVEMENTS } from '../utils/quests';
 import { resolveCombat, autoResolveCombat } from '../utils/combat';
 import { purchaseItem, sellItem, equipItem, useConsumable, SHOP_ITEMS, ITEM_SETS, generateProceduralItem } from '../utils/shop';
 import { RECIPES } from '../utils/forging';
-import { updateHeroReputation, generateReputationEvents } from '../utils/reputationSystem';
+import { updateHeroReputation, generateReputationEvents, inferQuestFactionChanges } from '../utils/reputationSystem';
 import { generateAllLeaderboards, getHeroRanking, calculateTotalScore } from '../utils/leaderboardSystem';
 import { generateDailyGoals, updateDailyGoalProgress, checkPerfectDayGoal, removeExpiredGoals, getDailyGoalRewards } from '../utils/dailyGoalsSystem';
 import { getTitleAttributeBonus, AVAILABLE_TITLES, TITLE_ACHIEVEMENTS, updateAchievementProgress as updateTitleAchievementProgress, checkTitleUnlock } from '../utils/titles';
@@ -17,6 +17,9 @@ import { onboardingManager } from '../utils/onboardingSystem';
 import { eventManager } from '../utils/eventSystem';
 import { logActivity } from '../utils/activitySystem';
 import { trackMetric } from '../utils/metricsSystem';
+import { supabase } from '../lib/supabaseClient';
+import { saveHero } from '../services/heroesService';
+import { notificationBus } from '../components/NotificationSystem';
 import { rankSystem } from '../utils/rankSystem';
 import { computeSynergyBonus } from '../utils/synergy';
 import { getNewSkillsForLevel } from '../utils/skillSystem';
@@ -25,7 +28,7 @@ import { worldStateManager } from '../utils/worldState';
 import { getGameSettings, useGameSettingsStore } from './gameSettingsStore';
 import { getMonetization } from './monetizationStore';
 import { generateMysteryEgg, identifyEgg as utilIdentifyEgg, incubateEgg, canHatch, markReadyToHatch, hatchPet, accelerateIncubation, EGG_IDENTIFY_COST, INCUBATION_MS, addPetXP } from '../utils/pets';
-import { ATTRIBUTE_CONSTRAINTS } from '../utils/attributeSystem';
+import { ATTRIBUTE_CONSTRAINTS, getMaxAttributeForRank, getTotalAttributePointsCapForRank } from '../utils/attributeSystem';
 import { ATTRIBUTE_POINTS_PER_LEVEL, checkLevelUp } from '../utils/progression';
 
 interface HeroState {
@@ -44,6 +47,7 @@ interface HeroState {
   hatchEggForSelected: (eggId: string) => boolean;
   consumeInventoryItem: (heroId: string, itemId: string, qty?: number) => boolean;
   addPetXPForSelected: (petId: string, xp: number) => boolean;
+  sellPetForSelected: (petId: string) => boolean;
   
   // === AÇÕES BÁSICAS ===
   createHero: (heroData: HeroCreationData) => Hero;
@@ -70,12 +74,21 @@ interface HeroState {
   setActivePet: (petId?: string) => void;
   setActiveMount: (mountId?: string) => void;
   setFavoriteMount: (mountId?: string) => void;
+  toggleFavoriteMount: (mountId: string) => void;
+  toggleLockMount: (mountId: string) => boolean;
   generateMountForSelected: (type?: import('../types/hero').Mount['type'], rarity?: import('../types/hero').MountRarity) => boolean;
+  renameMountForSelected: (mountId: string, newName: string) => boolean;
+  setMountNoteForSelected: (mountId: string, note: string) => boolean;
+  buyMountOffer: (heroId: string, type: import('../types/hero').Mount['type'], rarity: import('../types/hero').MountRarity, price: number) => boolean;
+  trainMountForSelected: (costGold?: number, bonusSpeed?: number, minutes?: number) => boolean;
+  importMountsForSelected: (json: string) => boolean;
+  releaseCommonMounts: () => boolean;
   addMountToSelected: (mount: import('../types/hero').Mount) => boolean;
   evolveMountForSelected: (mountId: string) => boolean;
   refineCompanion: (heroId: string, kind: 'pet' | 'mount', id: string) => boolean;
   refinePetForSelected: (petId: string) => boolean;
   refineMountForSelected: (mountId: string) => boolean;
+  suggestCompanionQuestForSelected: () => boolean;
   
   // === SISTEMA DE LOJA ===
   buyItem: (heroId: string, itemId: string) => boolean;
@@ -154,6 +167,13 @@ interface HeroState {
   createReferralInvite: (inviterHeroId: string) => ReferralInvite | null;
   getReferralInvitesForHero: (heroId: string) => ReferralInvite[];
   acceptReferralInvite: (code: string, newHeroId: string) => boolean;
+  revokeReferralInvite: (inviteId: string) => boolean;
+  expireOldInvites: () => void;
+  getReferralStatsForHero: (heroId: string) => { total: number; pending: number; accepted: number; expired: number; rewardsGranted: number };
+  logReferralActivity: (inviteId: string, action: 'shared' | 'revoked' | 'expired' | 'accepted', details?: string) => void;
+  updateReferralInvite: (inviteId: string, updates: Partial<Pick<ReferralInvite, 'inviterTag' | 'personalizedSlug' | 'expiresAt'>>) => boolean;
+  renewReferralInvite: (inviteId: string, extraDays?: number) => boolean;
+  getReferralInviteByCode: (code: string) => ReferralInvite | undefined;
 }
 
 // === VALIDAÇÃO E CÁLCULOS ===
@@ -239,7 +259,7 @@ const calculateTotalAttributes = (
   return totalAttributes;
 };
 
-const calculateDerivedAttributes = (
+export const calculateDerivedAttributes = (
   attributes: HeroAttributes,
   heroClass: string,
   level: number,
@@ -247,6 +267,24 @@ const calculateDerivedAttributes = (
   activeTitleId?: string,
   companionBonus?: Partial<HeroAttributes>
 ): DerivedAttributes => {
+  const keyParts = [
+    heroClass,
+    String(level),
+    JSON.stringify(attributes),
+    inventory ? JSON.stringify({
+      ew: inventory.equippedWeapon?.id || '',
+      ea: inventory.equippedArmor?.id || '',
+      ex: inventory.equippedAccessory?.id || '',
+      ic: Object.keys(inventory.items || {}).length
+    }) : 'noinv',
+    activeTitleId || '',
+    companionBonus ? JSON.stringify(companionBonus) : 'nocomp'
+  ];
+  const cacheKey = keyParts.join('|');
+  const selfAny = calculateDerivedAttributes as unknown as { _cache?: Map<string, DerivedAttributes> };
+  if (!selfAny._cache) selfAny._cache = new Map<string, DerivedAttributes>();
+  const cached = selfAny._cache.get(cacheKey);
+  if (cached) return cached;
   // Calcular atributos totais incluindo bônus de equipamentos
   const baseTotal = inventory ? calculateTotalAttributes(attributes, inventory) : attributes;
   const titleBonus = getTitleAttributeBonus(activeTitleId);
@@ -307,22 +345,73 @@ const calculateDerivedAttributes = (
       const hero = get().getSelectedHero();
       if (hero?.activeMountId && Array.isArray(hero.mounts)) {
         const m = hero.mounts.find(mm => mm.id === hero.activeMountId);
-        return Math.max(0, m?.speedBonus || 0);
+        const base = Math.max(0, m?.speedBonus || 0);
+        const buff = (() => {
+          const mb = hero.mountBuff;
+          if (!mb?.speedBonus) return 0;
+          if (mb.expiresAt && Date.now() > new Date(mb.expiresAt).getTime()) return 0;
+          return Math.max(0, mb.speedBonus || 0);
+        })();
+        return base + buff;
       }
     } catch {}
     return 0;
   })();
   const finalInitiative = initiative + mountSpeed;
+  const attackBase = Math.max(0, (totalAttributes.forca || 0) + (totalAttributes.destreza || 0));
+  const magicBase = Math.max(0, (totalAttributes.inteligencia || 0) + Math.floor((totalAttributes.sabedoria || 0) / 2));
+  const defenseBase = Math.max(0, (totalAttributes.constituicao || 0) + Math.floor(armorClass / 2));
+  let wa = 1, wm = 1, wd = 1;
+  switch (heroClass) {
+    case 'guerreiro':
+    case 'barbaro':
+    case 'lanceiro':
+    case 'paladino':
+      wa = 1.4; wm = 0.8; wd = 1.2; break;
+    case 'mago':
+    case 'feiticeiro':
+    case 'druida':
+      wa = 0.8; wm = 1.5; wd = 1.0; break;
+    case 'ladino':
+    case 'assassino':
+    case 'arqueiro':
+    case 'patrulheiro':
+    case 'monge':
+      wa = 1.3; wm = 0.9; wd = 1.0; break;
+    case 'clerigo':
+    case 'bardo':
+      wa = 1.0; wm = 1.2; wd = 1.1; break;
+    default:
+      wa = 1.1; wm = 1.1; wd = 1.0; break;
+  }
+  const power = Math.max(0, Math.round(
+    wa * attackBase +
+    wm * magicBase +
+    wd * defenseBase +
+    hp * 0.2 +
+    mp * 0.2 +
+    finalInitiative * 0.5 +
+    armorClass * 0.5 +
+    (luck || 0) * 0.3 +
+    level * 2
+  ));
   
-  return {
+  const result: DerivedAttributes = {
     hp,
     mp,
     initiative: finalInitiative,
     armorClass,
     currentHp: hp,
     currentMp: mp,
-    luck
+    luck,
+    power
   };
+  selfAny._cache.set(cacheKey, result);
+  if (selfAny._cache.size > 200) {
+    const first = selfAny._cache.keys().next().value as string | undefined;
+    if (first) selfAny._cache.delete(first);
+  }
+  return result;
 };
 
 const computeCompanionBonus = (hero: Hero): Partial<HeroAttributes> => {
@@ -349,6 +438,19 @@ const computeCompanionBonus = (hero: Hero): Partial<HeroAttributes> => {
           bonus[k as keyof HeroAttributes] = (bonus[k as keyof HeroAttributes] || 0) + val;
         }
       });
+      const mastery = Math.max(0, m.mastery || 0);
+      const masteryBonus = Math.floor(mastery / 10);
+      if (masteryBonus > 0) {
+        const agileTypes = ['grifo','hipogrifo','felino','wyvern','cavalo','lagarto','cervo','alce'];
+        const strongTypes = ['lobo','urso','rinoceronte','javali'];
+        if (agileTypes.includes(m.type)) {
+          bonus['destreza'] = (bonus['destreza'] || 0) + masteryBonus;
+        } else if (strongTypes.includes(m.type)) {
+          bonus['forca'] = (bonus['forca'] || 0) + masteryBonus;
+        } else if (m.type === 'draconiano') {
+          bonus['inteligencia'] = (bonus['inteligencia'] || 0) + masteryBonus;
+        }
+      }
     }
   }
   return bonus;
@@ -486,15 +588,14 @@ export const useHeroStore = create<HeroState>()(
         if (!hero) return false;
         const MAX_EGGS = 30;
         if ((hero.eggs || []).length >= MAX_EGGS) {
-          try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Inventário de Ovos Cheio', message: 'Libere espaço antes de obter novos ovos.', duration: 5000 }); } catch {}
+          try { notificationBus.emit({ type: 'item', title: 'Inventário de Ovos Cheio', message: 'Libere espaço antes de obter novos ovos.', duration: 5000 }); } catch {}
           return false;
         }
         const egg = generateMysteryEgg(rarity);
         const eggs = [...(hero.eggs || []), egg];
         get().updateHero(hero.id, { eggs });
         try {
-          const { supabase } = require('../lib/supabaseClient');
-          const { saveHero } = require('../services/heroesService');
+          
           supabase.auth.getUser().then(({ data }: any) => {
             const userId = data?.user?.id;
             if (userId) saveHero(userId, useHeroStore.getState().heroes.find(h => h.id === hero.id));
@@ -522,8 +623,7 @@ export const useHeroStore = create<HeroState>()(
           progression: { ...hero.progression, gold: Math.max(0, (hero.progression.gold || 0) - cost) }
         });
         try {
-          const { supabase } = require('../lib/supabaseClient');
-          const { saveHero } = require('../services/heroesService');
+          
           supabase.auth.getUser().then(({ data }: any) => {
             const userId = data?.user?.id;
             if (userId) saveHero(userId, useHeroStore.getState().heroes.find(h => h.id === hero.id));
@@ -550,8 +650,7 @@ export const useHeroStore = create<HeroState>()(
         nextEggs[idx] = updatedEgg;
         get().updateHero(hero.id, { eggs: nextEggs });
         try {
-          const { supabase } = require('../lib/supabaseClient');
-          const { saveHero } = require('../services/heroesService');
+          
           supabase.auth.getUser().then(({ data }: any) => {
             const userId = data?.user?.id;
             if (userId) saveHero(userId, useHeroStore.getState().heroes.find(h => h.id === hero.id));
@@ -582,8 +681,7 @@ export const useHeroStore = create<HeroState>()(
         nextEggs[idx] = updated;
         get().updateHero(hero.id, { eggs: nextEggs });
         try {
-          const { supabase } = require('../lib/supabaseClient');
-          const { saveHero } = require('../services/heroesService');
+          
           supabase.auth.getUser().then(({ data }: any) => {
             const userId = data?.user?.id;
             if (userId) saveHero(userId, useHeroStore.getState().heroes.find(h => h.id === hero.id));
@@ -605,13 +703,13 @@ export const useHeroStore = create<HeroState>()(
         if (!hero) return false;
         const MAX_PETS = 50;
         if ((hero.pets || []).length >= MAX_PETS) {
-          try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Limite de Mascotes', message: 'Você atingiu o limite de mascotes. Libere espaço antes de chocar.', duration: 5000 }); } catch {}
+          try { notificationBus.emit({ type: 'item', title: 'Limite de Mascotes', message: 'Você atingiu o limite de mascotes. Libere espaço antes de chocar.', duration: 5000 }); } catch {}
           return false;
         }
         if (hero.hatchCooldownEndsAt) {
           const ends = new Date(hero.hatchCooldownEndsAt).getTime();
           if (Date.now() < ends) {
-            try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Cooldown de Chocagem', message: 'Aguarde o fim do cooldown para chocar outro ovo.', duration: 4000 }); } catch {}
+            try { notificationBus.emit({ type: 'item', title: 'Cooldown de Chocagem', message: 'Aguarde o fim do cooldown para chocar outro ovo.', duration: 4000 }); } catch {}
             return false;
           }
         }
@@ -623,7 +721,7 @@ export const useHeroStore = create<HeroState>()(
         const hatchCostByRarity: Record<import('../types/hero').EggRarity, number> = { comum: 5, incomum: 10, raro: 20, epico: 50, lendario: 100, mistico: 200 };
         const hatchCost = hatchCostByRarity[egg.identified?.rarity || egg.baseRarity];
         if ((hero.progression.gold || 0) < hatchCost) {
-          try { require('../components/NotificationSystem').notificationBus.emit({ type: 'gold', title: 'Ouro insuficiente', message: `Chocar este ovo requer ${hatchCost} ouro.`, duration: 4000 }); } catch {}
+          try { notificationBus.emit({ type: 'gold', title: 'Ouro insuficiente', message: `Chocar este ovo requer ${hatchCost} ouro.`, duration: 4000 }); } catch {}
           return false;
         }
         const pet = hatchPet(egg);
@@ -633,8 +731,8 @@ export const useHeroStore = create<HeroState>()(
         const cooldownMs = 30 * 1000;
         const progression = { ...hero.progression, gold: Math.max(0, (hero.progression.gold || 0) - hatchCost) };
         get().updateHero(hero.id, { eggs: nextEggs, pets, hatchHistory, hatchCooldownEndsAt: new Date(Date.now() + cooldownMs).toISOString(), progression });
-        try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Mascote Obtido', message: `Você obteve ${pet.name}!`, duration: 4000, icon: '🐾' }); } catch {}
-        try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Ovo Chocado', message: 'O ovo foi consumido e removido do inventário.', duration: 3000, icon: '🥚' }); } catch {}
+        try { notificationBus.emit({ type: 'item', title: 'Mascote Obtido', message: `Você obteve ${pet.name}!`, duration: 4000, icon: '🐾' }); } catch {}
+        try { notificationBus.emit({ type: 'item', title: 'Ovo Chocado', message: 'O ovo foi consumido e removido do inventário.', duration: 3000, icon: '🥚' }); } catch {}
         try {
           logActivity.petHatched({
             heroId: hero.id,
@@ -648,8 +746,7 @@ export const useHeroStore = create<HeroState>()(
           });
         } catch {}
         try {
-          const { supabase } = require('../lib/supabaseClient');
-          const { saveHero } = require('../services/heroesService');
+          
           supabase.auth.getUser().then(({ data }: any) => {
             const userId = data?.user?.id;
             if (userId) saveHero(userId, useHeroStore.getState().heroes.find(h => h.id === hero.id));
@@ -672,11 +769,10 @@ export const useHeroStore = create<HeroState>()(
         get().updateHero(hero.id, { hatchCooldownEndsAt: new Date(newEnd).toISOString(), progression });
         try {
           const mins = Math.floor(reduceMs / 60000);
-          require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Cooldown reduzido', message: `- ${mins} min no cooldown de chocagem`, duration: 3000, icon: '⏱️' });
+          notificationBus.emit({ type: 'item', title: 'Cooldown reduzido', message: `- ${mins} min no cooldown de chocagem`, duration: 3000, icon: '⏱️' });
         } catch {}
         try {
-          const { supabase } = require('../lib/supabaseClient');
-          const { saveHero } = require('../services/heroesService');
+          
           supabase.auth.getUser().then(({ data }: any) => {
             const userId = data?.user?.id;
             if (userId) saveHero(userId, useHeroStore.getState().heroes.find(h => h.id === hero.id));
@@ -710,6 +806,36 @@ export const useHeroStore = create<HeroState>()(
         return true;
       },
 
+      sellPetForSelected: (petId) => {
+        const hero = get().getSelectedHero();
+        if (!hero) return false;
+        const pets = hero.pets || [];
+        const idx = pets.findIndex(p => p.id === petId);
+        if (idx === -1) return false;
+        const pet = pets[idx];
+        const baseByRarity: Record<import('../types/hero').EggRarity, number> = { comum: 100, incomum: 200, raro: 400, epico: 800, lendario: 1600, mistico: 3000 };
+        const base = baseByRarity[pet.rarity] || 100;
+        const levelBonus = Math.max(0, pet.level || 1) * 20;
+        const refineBonus = Math.max(0, pet.refineLevel || 0) * 50;
+        const mutationBonus = pet.mutation?.variant ? 200 : 0;
+        const sellPrice = base + levelBonus + refineBonus + mutationBonus;
+        const nextPets = pets.filter(p => p.id !== petId);
+        const updates: Partial<Hero> = { pets: nextPets, progression: { ...hero.progression, gold: (hero.progression.gold || 0) + sellPrice } } as any;
+        if (hero.activePetId === petId) (updates as any).activePetId = undefined;
+        const compBonus = computeCompanionBonus({ ...hero, pets: nextPets, activePetId: (updates as any).activePetId } as Hero);
+        const derived = calculateDerivedAttributes(hero.attributes, hero.class, hero.progression.level, hero.inventory, hero.activeTitle, compBonus);
+        (updates as any).derivedAttributes = derived;
+        get().updateHero(hero.id, updates);
+        try { notificationBus.emit({ type: 'gold', title: 'Mascote vendido', message: `Recebido ${sellPrice} ouro por ${pet.name}.`, duration: 3500, icon: '💰' }); } catch {}
+        try {
+          supabase.auth.getUser().then(({ data }: any) => {
+            const userId = data?.user?.id;
+            if (userId) saveHero(userId, useHeroStore.getState().heroes.find(h => h.id === hero.id));
+          });
+        } catch {}
+        return true;
+      },
+
       
 
       setActivePet: (petId) => {
@@ -727,11 +853,22 @@ export const useHeroStore = create<HeroState>()(
         if (!hero) return;
         const exists = (hero.mounts || []).some(m => m.id === mountId);
         const nextId = exists ? mountId : undefined;
+        if (exists) {
+          const mounts = hero.mounts || [];
+          const idx = mounts.findIndex(m => m.id === mountId);
+          if (idx >= 0) {
+            const mm = mounts[idx];
+            const hist = [{ ts: new Date().toISOString(), action: 'activate', details: '' }, ...((mm.history)||[])].slice(0,50);
+            const nextMounts = [...mounts];
+            nextMounts[idx] = { ...mm, history: hist };
+            hero.mounts = nextMounts;
+          }
+        }
         const compBonus = computeCompanionBonus({ ...hero, activeMountId: nextId } as Hero);
         const derived = calculateDerivedAttributes(hero.attributes, hero.class, hero.progression.level, hero.inventory, hero.activeTitle, compBonus);
         get().updateHero(hero.id, { activeMountId: nextId, derivedAttributes: derived });
-        try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: nextId ? 'Montaria Ativada' : 'Montaria Desativada', message: nextId ? 'Sua montaria está ativa e concedendo bônus.' : 'Você desativou sua montaria.', duration: 3000, icon: nextId ? '🏇' : '🛑' }); } catch {}
-        try { require('../utils/metricsSystem').trackMetric.custom?.('mount_activated', { heroId: hero.id, mountId: nextId }); } catch {}
+        try { notificationBus.emit({ type: 'item', title: nextId ? 'Montaria Ativada' : 'Montaria Desativada', message: nextId ? 'Sua montaria está ativa e concedendo bônus.' : 'Você desativou sua montaria.', duration: 3000, icon: nextId ? '🏇' : '🛑' }); } catch {}
+        try { trackMetric.custom?.('mount_activated', { heroId: hero.id, mountId: nextId }); } catch {}
       },
 
       setFavoriteMount: (mountId) => {
@@ -739,50 +876,310 @@ export const useHeroStore = create<HeroState>()(
         if (!hero) return;
         const exists = (hero.mounts || []).some(m => m.id === mountId);
         const nextId = exists ? mountId : undefined;
+        if (exists) {
+          const mounts = hero.mounts || [];
+          const idx = mounts.findIndex(m => m.id === mountId);
+          if (idx >= 0) {
+            const mm = mounts[idx];
+            const hist = [{ ts: new Date().toISOString(), action: nextId ? 'favorite_set' : 'favorite_removed', details: '' }, ...((mm.history)||[])].slice(0,50);
+            const nextMounts = [...mounts];
+            nextMounts[idx] = { ...mm, history: hist };
+            hero.mounts = nextMounts;
+          }
+        }
         get().updateHero(hero.id, { favoriteMountId: nextId });
-        try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: nextId ? 'Favorita definida' : 'Favorita removida', message: nextId ? 'Sua montaria favorita foi definida.' : 'Você removeu a favorita.', duration: 3000, icon: '⭐' }); } catch {}
-        try { require('../utils/metricsSystem').trackMetric.custom?.('mount_favorite_set', { heroId: hero.id, mountId: nextId }); } catch {}
+        try { notificationBus.emit({ type: 'item', title: nextId ? 'Favorita definida' : 'Favorita removida', message: nextId ? 'Sua montaria favorita foi definida.' : 'Você removeu a favorita.', duration: 3000, icon: '⭐' }); } catch {}
+        try { trackMetric.custom?.('mount_favorite_set', { heroId: hero.id, mountId: nextId }); } catch {}
+      },
+
+      setMountNoteForSelected: (mountId, note) => {
+        const hero = get().getSelectedHero();
+        if (!hero) return false;
+        const mounts = hero.mounts || [];
+        const idx = mounts.findIndex(m => m.id === mountId);
+        if (idx === -1) return false;
+        const next = [...mounts];
+        next[idx] = { ...next[idx], note };
+        get().updateHero(hero.id, { mounts: next });
+        try { notificationBus.emit({ type: 'item', title: 'Nota salva', message: 'Sua nota foi atualizada.', duration: 2500, icon: '📝' }); } catch {}
+        return true;
+      },
+
+      toggleFavoriteMount: (mountId) => {
+        const hero = get().getSelectedHero();
+        if (!hero) return;
+        const exists = (hero.mounts || []).some(m => m.id === mountId);
+        if (!exists) return;
+        const current = hero.favoriteMountIds || [];
+        let nextFavs = [...current];
+        if (nextFavs.includes(mountId)) nextFavs = nextFavs.filter(id => id !== mountId);
+        else if (nextFavs.length < 3) nextFavs.push(mountId);
+        const mounts = hero.mounts || [];
+        const idx = mounts.findIndex(m => m.id === mountId);
+        if (idx >= 0) {
+          const mm = mounts[idx];
+          const hist = [{ ts: new Date().toISOString(), action: nextFavs.includes(mountId) ? 'favorite_set' : 'favorite_removed', details: 'multi' }, ...((mm.history)||[])].slice(0,50);
+          const nextMounts = [...mounts];
+          nextMounts[idx] = { ...mm, history: hist };
+          get().updateHero(hero.id, { favoriteMountIds: nextFavs, mounts: nextMounts });
+        } else {
+          get().updateHero(hero.id, { favoriteMountIds: nextFavs });
+        }
+        try { notificationBus.emit({ type: 'item', title: nextFavs.includes(mountId) ? 'Favorito adicionado' : 'Favorito removido', message: `Slots: ${nextFavs.length}/3`, duration: 3000, icon: '⭐' }); } catch {}
+        try { trackMetric.custom?.('mount_favorite_toggle', { heroId: hero.id, mountId, count: nextFavs.length }); } catch {}
+      },
+
+      toggleLockMount: (mountId) => {
+        const hero = get().getSelectedHero();
+        if (!hero) return false;
+        const mounts = hero.mounts || [];
+        const idx = mounts.findIndex(m => m.id === mountId);
+        if (idx === -1) return false;
+        const cur = mounts[idx];
+        const next = [...mounts];
+        next[idx] = { ...cur, locked: !cur.locked };
+        get().updateHero(hero.id, { mounts: next });
+        try { notificationBus.emit({ type: 'item', title: cur.locked ? 'Montaria Destravada' : 'Montaria Travada', message: cur.locked ? 'Agora pode ser liberada.' : 'Protegida contra liberação em lote.', duration: 3000, icon: cur.locked ? '🔓' : '🔒' }); } catch {}
+        return true;
       },
 
       generateMountForSelected: (type, rarity) => {
         const hero = get().getSelectedHero();
         if (!hero) return false;
+        const MAX_MOUNTS = hero.stableCapacity || 50;
+        if ((hero.mounts || []).length >= MAX_MOUNTS) {
+          try { notificationBus.emit({ type: 'item', title: 'Limite de Montarias', message: 'Você atingiu o limite de montarias. Libere espaço antes de recrutar.', duration: 5000 }); } catch {}
+          return false;
+        }
         const now = new Date().toISOString();
         const types: import('../types/hero').Mount['type'][] = ['cavalo','lobo','grifo','javali','lagarto','draconiano','urso','felino','cervo','alce','hipogrifo','rinoceronte','wyvern'];
         const pickType = type && types.includes(type) ? type : types[Math.floor(Math.random() * types.length)];
         const rarities: import('../types/hero').MountRarity[] = ['comum','incomum','raro','epico','lendario','mistico'];
         const pickRarity = rarity && rarities.includes(rarity) ? rarity : (Math.random() > 0.97 ? 'epico' : Math.random() > 0.9 ? 'raro' : 'comum');
-        const base: Record<string, { name: string; speed: number; attrs: Partial<import('../types/hero').HeroAttributes> }> = {
-          cavalo: { name: 'Cavalo Ágil', speed: 1, attrs: { destreza: 1 } },
-          lobo: { name: 'Lobo Feroz', speed: 0, attrs: { forca: 2 } },
-          grifo: { name: 'Grifo Nobre', speed: 1, attrs: { destreza: 1 } },
-          javali: { name: 'Javali Robusto', speed: 0, attrs: { constituicao: 2 } },
-          lagarto: { name: 'Lagarto Rápido', speed: 0, attrs: { destreza: 1 } },
-          draconiano: { name: 'Draconiano Jovem', speed: 1, attrs: { inteligencia: 1 } },
-          urso: { name: 'Urso Montanhês', speed: 0, attrs: { forca: 2 } },
-          felino: { name: 'Felino Ágil', speed: 1, attrs: { destreza: 2 } },
-          cervo: { name: 'Cervo Celeste', speed: 1, attrs: { destreza: 1 } },
-          alce: { name: 'Alce Majestoso', speed: 1, attrs: { constituicao: 2 } },
-          hipogrifo: { name: 'Hipogrifo Jovem', speed: 1, attrs: { destreza: 2 } },
-          rinoceronte: { name: 'Rinoceronte de Guerra', speed: 0, attrs: { forca: 3, constituicao: 1 } },
-          wyvern: { name: 'Wyvern Veloz', speed: 1, attrs: { destreza: 2 } }
+        const namePool: Record<string, string[]> = {
+          cavalo: ['Corcel Ágil','Corcel da Brisa','Cavalo de Estepes'],
+          lobo: ['Alcateiro','Lobo da Neve','Lobo das Sombras'],
+          grifo: ['Grifo Nobre','Asa Solar','Sentinela Alada'],
+          javali: ['Javali Robusto','Dente de Ferro','Batedor da Mata'],
+          lagarto: ['Lagarto Rápido','Corre-Folhas','Cauda Veloz'],
+          draconiano: ['Draconiano Jovem','Escama Rubra','Enguia Arcana'],
+          urso: ['Urso Montanhês','Urso das Rochas','Urso das Neves'],
+          felino: ['Felino Ágil','Garra de Vento','Sombra Silenciosa'],
+          cervo: ['Cervo Celeste','Cervo das Auroras','Cervo Etéreo'],
+          alce: ['Alce Majestoso','Alce do Vale','Chifre Antigo'],
+          hipogrifo: ['Hipogrifo Jovem','Hipogrifo do Crepúsculo','Asa de Prata'],
+          rinoceronte: ['Rinoceronte de Guerra','Casco de Pedra','Chifre Tirano'],
+          wyvern: ['Wyvern Veloz','Wyvern do Trovão','Rasga-Céus']
         };
-        const conf = base[pickType];
+        const speedBase: Record<string, number> = {
+          cavalo: 1, lobo: 0, grifo: 1, javali: 0, lagarto: 0, draconiano: 1, urso: 0, felino: 1, cervo: 1, alce: 1, hipogrifo: 1, rinoceronte: 0, wyvern: 1
+        };
+        const attrBase: Record<string, Partial<import('../types/hero').HeroAttributes>> = {
+          cavalo: { destreza: 1 }, lobo: { forca: 2 }, grifo: { destreza: 1 }, javali: { constituicao: 2 }, lagarto: { destreza: 1 }, draconiano: { inteligencia: 1 }, urso: { forca: 2 }, felino: { destreza: 2 }, cervo: { destreza: 1 }, alce: { constituicao: 2 }, hipogrifo: { destreza: 2 }, rinoceronte: { forca: 3, constituicao: 1 }, wyvern: { destreza: 2 }
+        };
+        const confNameList = namePool[pickType] || [pickType];
+        const confName = confNameList[Math.floor(Math.random() * confNameList.length)];
+        const speedBaseVal = speedBase[pickType] || 0;
+        const attrs = attrBase[pickType] || {};
         const speedBonus = conf.speed + (pickRarity === 'raro' ? 1 : pickRarity === 'epico' ? 2 : pickRarity === 'lendario' ? 2 : 0);
         const mount: import('../types/hero').Mount = {
           id: uuidv4(),
-          name: conf.name,
+          name: confName,
           type: pickType,
           rarity: pickRarity,
           stage: 'comum',
-          speedBonus,
-          attributes: { ...conf.attrs },
+          speedBonus: speedBaseVal + (pickRarity === 'raro' ? 1 : pickRarity === 'epico' ? 2 : pickRarity === 'lendario' ? 2 : 0),
+          attributes: { ...attrs },
           createdAt: now
         };
         const mounts = [...(hero.mounts || []), mount];
         get().updateHero(hero.id, { mounts });
-        try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Montaria Obtida', message: `Você obteve ${mount.name}!`, duration: 4000, icon: '🏇' }); } catch {}
-        try { require('../utils/metricsSystem').trackMetric.custom?.('mount_generated', { heroId: hero.id, type: pickType, rarity: pickRarity }); } catch {}
+        try {
+          const flag = localStorage.getItem('auto_activate_recommended_mount') === '1';
+          if (flag) {
+            const stageOrder: Record<string, number> = { comum: 0, encantada: 1, lendaria: 2 };
+            const rarityOrder: Record<string, number> = { comum: 0, incomum: 1, raro: 2, epico: 3, lendario: 4, mistico: 5 };
+            const score = (mm: import('../types/hero').Mount) => {
+              const attrSum = Object.values(mm.attributes || {}).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0);
+              return (mm.speedBonus || 0) * 3 + attrSum + (stageOrder[mm.stage] || 0) * 2 + (rarityOrder[mm.rarity] || 0);
+            };
+            const best = mounts.slice().sort((a,b)=>score(b)-score(a))[0]?.id;
+            if (best) {
+              const compBonus2 = computeCompanionBonus({ ...hero, activeMountId: best, mounts } as Hero);
+              const derived2 = calculateDerivedAttributes(hero.attributes, hero.class, hero.progression.level, hero.inventory, hero.activeTitle, compBonus2);
+              get().updateHero(hero.id, { activeMountId: best, derivedAttributes: derived2 });
+              notificationBus.emit({ type: 'item', title: 'Recomendada ativada', message: 'Auto ativação da melhor montaria.', duration: 3000, icon: '⭐' });
+            }
+          }
+        } catch {}
+        try { notificationBus.emit({ type: 'item', title: 'Montaria Obtida', message: `Você obteve ${mount.name}!`, duration: 4000, icon: '🏇' }); } catch {}
+        try { trackMetric.custom?.('mount_generated', { heroId: hero.id, type: pickType, rarity: pickRarity }); } catch {}
+        return true;
+      },
+
+      renameMountForSelected: (mountId, newName) => {
+        const hero = get().getSelectedHero();
+        if (!hero) return false;
+        const mounts = hero.mounts || [];
+        const idx = mounts.findIndex(m => m.id === mountId);
+        if (idx === -1) return false;
+        const nextMounts = [...mounts];
+        nextMounts[idx] = { ...nextMounts[idx], name: newName };
+        get().updateHero(hero.id, { mounts: nextMounts });
+        try { notificationBus.emit({ type: 'item', title: 'Montaria Renomeada', message: `Agora: ${newName}`, duration: 3000, icon: '✏️' }); } catch {}
+        return true;
+      },
+
+      buyMountOffer: (heroId, type, rarity, price) => {
+        const hero = get().heroes.find(h => h.id === heroId);
+        if (!hero) return false;
+        let gold = hero.progression.gold || 0;
+        let finalPrice = price;
+        try {
+          const m = getMonetization();
+          if (m.seasonPassActive?.active) finalPrice = Math.ceil(price * 0.9);
+        } catch {}
+        if (gold < finalPrice) return false;
+        const ok = get().generateMountForSelected(type, rarity);
+        if (!ok) return false;
+        get().updateHero(heroId, { progression: { ...hero.progression, gold: Math.max(0, gold - finalPrice) } });
+        try { notificationBus.emit({ type: 'item', title: 'Compra de Montaria', message: `Oferta adquirida (${type}, ${rarity}).`, duration: 3500, icon: '🏇' }); } catch {}
+        try { trackMetric.custom?.('mount_offer_bought', { heroId, type, rarity, price: finalPrice }); } catch {}
+        return true;
+      },
+
+      importMountsForSelected: (json) => {
+        const hero = get().getSelectedHero();
+        if (!hero) return false;
+        let arr: any[] = [];
+        try { const parsed = JSON.parse(json); if (Array.isArray(parsed)) arr = parsed; else return false; } catch { return false; }
+        const MAX_MOUNTS = hero.stableCapacity || 50;
+        const remain = Math.max(0, MAX_MOUNTS - (hero.mounts?.length || 0));
+        if (remain <= 0) return false;
+        const take = arr.slice(0, remain);
+        const validTypes: string[] = ['cavalo','lobo','grifo','javali','lagarto','draconiano','urso','felino','cervo','alce','hipogrifo','rinoceronte','wyvern'];
+        const validRarities: string[] = ['comum','incomum','raro','epico','lendario','mistico'];
+        const now = new Date().toISOString();
+        const mountsToAdd = take.map(m => ({
+          id: uuidv4(),
+          name: String(m.name || 'Montaria'),
+          type: validTypes.includes(String(m.type)) ? m.type : 'cavalo',
+          rarity: validRarities.includes(String(m.rarity)) ? m.rarity : 'comum',
+          stage: ['comum','encantada','lendaria'].includes(String(m.stage)) ? m.stage : 'comum',
+          speedBonus: Math.max(0, Number(m.speedBonus || 0)),
+          attributes: typeof m.attributes === 'object' ? m.attributes : {},
+          refineLevel: Math.max(0, Number(m.refineLevel || 0)),
+          mastery: Math.max(0, Number(m.mastery || 0)),
+          history: [{ ts: now, action: 'obtain', details: 'import' }],
+          createdAt: now
+        }));
+        const next = [ ...(hero.mounts || []), ...mountsToAdd ];
+        get().updateHero(hero.id, { mounts: next });
+        try { notificationBus.emit({ type: 'item', title: 'Montarias Importadas', message: `Importadas ${mountsToAdd.length} montarias.`, duration: 3500, icon: '🏇' }); } catch {}
+        return true;
+      },
+
+      releaseCommonMounts: () => {
+        const hero = get().getSelectedHero();
+        if (!hero) return false;
+        const favs = new Set(hero.favoriteMountIds || []);
+        const next = (hero.mounts || []).filter(m => !(m.rarity === 'comum' && m.id !== hero.activeMountId && !favs.has(m.id) && !m.locked));
+        if (next.length === (hero.mounts || []).length) return false;
+        const updates: Partial<Hero> = { mounts: next } as any;
+        if (hero.activeMountId && !next.some(m => m.id === hero.activeMountId)) (updates as any).activeMountId = undefined;
+        get().updateHero(hero.id, updates);
+        try { notificationBus.emit({ type: 'item', title: 'Montarias Comuns Liberadas', message: 'Liberadas montarias comuns não favoritas.', duration: 3500, icon: '🏇' }); } catch {}
+        return true;
+      },
+
+      upgradeStableForSelected: (costGold: number = 500, increment: number = 10, maxCap: number = 100) => {
+        const hero = get().getSelectedHero();
+        if (!hero) return false;
+        const cap = hero.stableCapacity || 50;
+        if (cap >= maxCap) return false;
+        let gold = hero.progression.gold || 0;
+        let inc = increment;
+        let price = costGold;
+        try {
+          const m = getMonetization();
+          if (m.seasonPassActive?.active) {
+            price = Math.ceil(costGold * 0.8);
+            inc = increment + 5;
+          }
+        } catch {}
+        if (gold < price) return false;
+        const nextCap = Math.min(maxCap, cap + inc);
+        get().updateHero(hero.id, { stableCapacity: nextCap, progression: { ...hero.progression, gold: Math.max(0, gold - price) } });
+        try { notificationBus.emit({ type: 'item', title: 'Estábulo Expandido', message: `Capacidade aumentada para ${nextCap}.`, duration: 3500, icon: '🏛️' }); } catch {}
+        try { trackMetric.custom?.('stable_upgraded', { heroId: hero.id, newCapacity: nextCap }); } catch {}
+        return true;
+      },
+
+      trainMountForSelected: (costGold = 150, bonusSpeed = 1, minutes = 30) => {
+        const hero = get().getSelectedHero();
+        if (!hero) return false;
+        let gold = hero.progression.gold || 0;
+        let durMin = minutes;
+        let cost = costGold;
+        try {
+          const m = getMonetization();
+          if (m.seasonPassActive?.active) {
+            cost = Math.ceil(costGold * 0.7);
+            durMin = Math.ceil(minutes * 1.5);
+          }
+        } catch {}
+        if (gold < cost) return false;
+        const expiresAt = new Date(Date.now() + durMin * 60 * 1000).toISOString();
+        const mountBuff = { speedBonus: Math.max(0, bonusSpeed), expiresAt };
+        let nextMounts = hero.mounts || [];
+        const idx = nextMounts.findIndex(mm => mm.id === hero.activeMountId);
+        if (idx >= 0) {
+          const cur = nextMounts[idx];
+          const mastery = Math.max(0, (cur.mastery || 0) + 1);
+          const tier = mastery >= 30 ? 3 : mastery >= 20 ? 2 : mastery >= 10 ? 1 : 0;
+          const prevTier = Math.max(0, cur.rewardTier || 0);
+          let items = { ...hero.inventory.items } as Record<string, number>;
+          if (tier > prevTier) {
+            if (tier === 1) items['pergaminho-montaria'] = (items['pergaminho-montaria'] || 0) + 1;
+            if (tier === 2) items['pedra-magica'] = (items['pedra-magica'] || 0) + 1;
+            if (tier === 3) items['essencia-bestial'] = (items['essencia-bestial'] || 0) + 1;
+            hero.inventory = { ...hero.inventory, items } as any;
+            try { notificationBus.emit({ type: 'item', title: 'Marco de Maestria', message: `Recompensa recebida: ${tier===1?'📜 Pergaminho':tier===2?'🔷 Pedra Mágica':'🧬 Essência Bestial'}.`, duration: 4000, icon: '🎖️' }); } catch {}
+          }
+          nextMounts = [...nextMounts];
+          nextMounts[idx] = { ...cur, mastery, rewardTier: Math.max(prevTier, tier) };
+        }
+        const compBonus = computeCompanionBonus({ ...hero, mounts: nextMounts } as Hero);
+        const derived = calculateDerivedAttributes(hero.attributes, hero.class, hero.progression.level, hero.inventory, hero.activeTitle, compBonus);
+        get().updateHero(hero.id, { mountBuff, mounts: nextMounts, derivedAttributes: derived, progression: { ...hero.progression, gold: Math.max(0, gold - cost) } });
+        try { notificationBus.emit({ type: 'item', title: 'Treino de Montaria', message: `Velocidade +${bonusSpeed} por ${durMin} min. Maestria +1.`, duration: 3500, icon: '🏇' }); } catch {}
+        try { get().updateDailyGoalProgress(hero.id, 'mount-trained', 1); } catch {}
+        return true;
+      },
+
+      removeMountForSelected: (mountId: string) => {
+        const hero = get().getSelectedHero();
+        if (!hero) return false;
+        const mounts = hero.mounts || [];
+        if (!mounts.some(m => m.id === mountId)) return false;
+        const target = mounts.find(m => m.id === mountId);
+        if (target?.locked) { try { notificationBus.emit({ type: 'item', title: 'Montaria Travada', message: 'Destrave para poder liberar.', duration: 3000, icon: '🔒' }); } catch {} ; return false; }
+        try {
+          const idx = mounts.findIndex(m => m.id === mountId);
+          if (idx >= 0) {
+            const mm = mounts[idx];
+            const hist = [{ ts: new Date().toISOString(), action: 'release', details: '' }, ...((mm.history)||[])].slice(0,50);
+            const nextMounts = [...mounts];
+            nextMounts[idx] = { ...mm, history: hist };
+            hero.mounts = nextMounts;
+          }
+        } catch {}
+        const next = mounts.filter(m => m.id !== mountId);
+        const updates: Partial<Hero> = { mounts: next } as any;
+        if (hero.activeMountId === mountId) (updates as any).activeMountId = undefined;
+        if (hero.favoriteMountId === mountId) (updates as any).favoriteMountId = undefined;
+        get().updateHero(hero.id, updates);
+        try { notificationBus.emit({ type: 'item', title: 'Montaria Liberada', message: 'A montaria foi removida do seu estábulo.', duration: 3000, icon: '🏇' }); } catch {}
         return true;
       },
 
@@ -802,14 +1199,14 @@ export const useHeroStore = create<HeroState>()(
         if (idx === -1) return false;
         const m = mounts[idx];
         let nextStage: import('../types/hero').MountStage | undefined;
-        if (m.stage === 'comum') nextStage = 'encantada'; else if (m.stage === 'encantada') nextStage = 'lendaria'; else { try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Estágio Máximo', message: 'Esta montaria já é Lendária.', duration: 3500, icon: '⚠️' }); } catch {} ; return false; }
+        if (m.stage === 'comum') nextStage = 'encantada'; else if (m.stage === 'encantada') nextStage = 'lendaria'; else { try { notificationBus.emit({ type: 'item', title: 'Estágio Máximo', message: 'Esta montaria já é Lendária.', duration: 3500, icon: '⚠️' }); } catch {} ; return false; }
         const hasScroll = (hero.inventory.items['pergaminho-montaria'] || 0) > 0;
         const needsEssence = nextStage === 'lendaria';
         const hasEssence = (hero.inventory.items['essencia-bestial'] || 0) > 0;
         const costGold = m.stage === 'comum' ? 200 : 700;
-        if (!hasScroll) { try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Pergaminho insuficiente', message: 'Falta 📜 Pergaminho de Montaria para evoluir.', duration: 3500, icon: '📜' }); } catch {} ; return false; }
-        if ((hero.progression.gold || 0) < costGold) { try { require('../components/NotificationSystem').notificationBus.emit({ type: 'gold', title: 'Ouro insuficiente', message: `Evolução requer ${costGold} ouro.`, duration: 3500 }); } catch {} ; return false; }
-        if (needsEssence && !hasEssence) { try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Essência necessária', message: 'Para Lendária, você precisa de 🧬 Essência Bestial.', duration: 4000, icon: '🧬' }); } catch {} ; return false; }
+        if (!hasScroll) { try { notificationBus.emit({ type: 'item', title: 'Pergaminho insuficiente', message: 'Falta 📜 Pergaminho de Montaria para evoluir.', duration: 3500, icon: '📜' }); } catch {} ; return false; }
+        if ((hero.progression.gold || 0) < costGold) { try { notificationBus.emit({ type: 'gold', title: 'Ouro insuficiente', message: `Evolução requer ${costGold} ouro.`, duration: 3500 }); } catch {} ; return false; }
+        if (needsEssence && !hasEssence) { try { notificationBus.emit({ type: 'item', title: 'Essência necessária', message: 'Para Lendária, você precisa de 🧬 Essência Bestial.', duration: 4000, icon: '🧬' }); } catch {} ; return false; }
         const updatedSpeed = (m.speedBonus || 0) + (nextStage === 'encantada' ? 1 : 2);
         const stageAttrBoost: Partial<HeroAttributes> = (() => {
           const smallBoost = () => {
@@ -860,7 +1257,8 @@ export const useHeroStore = create<HeroState>()(
         })();
         const newAttrs = { ...(m.attributes || {}) };
         Object.entries(stageAttrBoost).forEach(([k, v]) => { newAttrs[k as keyof HeroAttributes] = (newAttrs[k as keyof HeroAttributes] || 0) + (v as number); });
-        const newMount = { ...m, stage: nextStage, speedBonus: updatedSpeed, attributes: newAttrs };
+        const hist = [{ ts: new Date().toISOString(), action: 'evolve', details: `→ ${nextStage}` }, ...((m.history)||[])].slice(0,50);
+        const newMount = { ...m, stage: nextStage, speedBonus: updatedSpeed, attributes: newAttrs, history: hist };
         const nextMounts = [...mounts];
         nextMounts[idx] = newMount;
         const newItems = { ...hero.inventory.items } as Record<string, number>;
@@ -873,9 +1271,27 @@ export const useHeroStore = create<HeroState>()(
         const compBonus = computeCompanionBonus({ ...hero, mounts: nextMounts } as Hero);
         const derived = calculateDerivedAttributes(hero.attributes, hero.class, hero.progression.level, hero.inventory, hero.activeTitle, compBonus);
         get().updateHero(hero.id, { mounts: nextMounts, inventory: { ...hero.inventory, items: newItems }, progression: { ...hero.progression, gold: Math.max(0, (hero.progression.gold || 0) - costGold) }, derivedAttributes: derived });
-        try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Montaria Evoluída', message: `${m.name} agora é ${nextStage}. Velocidade +${updatedSpeed - (m.speedBonus || 0)}.`, duration: 4000, icon: '✨' }); } catch {}
+        try {
+          const flag = localStorage.getItem('auto_activate_recommended_mount') === '1';
+          if (flag) {
+            const stageOrder: Record<string, number> = { comum: 0, encantada: 1, lendaria: 2 };
+            const rarityOrder: Record<string, number> = { comum: 0, incomum: 1, raro: 2, epico: 3, lendario: 4, mistico: 5 };
+            const score = (mm: import('../types/hero').Mount) => {
+              const attrSum = Object.values(mm.attributes || {}).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0);
+              return (mm.speedBonus || 0) * 3 + attrSum + (stageOrder[mm.stage] || 0) * 2 + (rarityOrder[mm.rarity] || 0);
+            };
+            const best = nextMounts.slice().sort((a,b)=>score(b)-score(a))[0]?.id;
+            if (best) {
+              const compBonus2 = computeCompanionBonus({ ...hero, activeMountId: best, mounts: nextMounts } as Hero);
+              const derived2 = calculateDerivedAttributes(hero.attributes, hero.class, hero.progression.level, hero.inventory, hero.activeTitle, compBonus2);
+              get().updateHero(hero.id, { activeMountId: best, derivedAttributes: derived2 });
+              notificationBus.emit({ type: 'item', title: 'Recomendada ativada', message: 'Auto ativação da melhor montaria.', duration: 3000, icon: '⭐' });
+            }
+          }
+        } catch {}
+        try { notificationBus.emit({ type: 'item', title: 'Montaria Evoluída', message: `${m.name} agora é ${nextStage}. Velocidade +${updatedSpeed - (m.speedBonus || 0)}.`, duration: 4000, icon: '✨' }); } catch {}
         try { get().updateDailyGoalProgress(hero.id, 'mount-evolved', 1); } catch {}
-        try { require('../utils/metricsSystem').trackMetric.custom?.('mount_evolved', { heroId: hero.id, mountId, stage: nextStage }); } catch {}
+        try { trackMetric.custom?.('mount_evolved', { heroId: hero.id, mountId, stage: nextStage }); } catch {}
         return true;
       },
 
@@ -885,7 +1301,7 @@ export const useHeroStore = create<HeroState>()(
         const stonesMagic = hero.inventory.items['pedra-magica'] || 0;
         const stonesLink = hero.inventory.items['essencia-vinculo'] || 0;
         const stones = stonesMagic + stonesLink;
-        if (stones <= 0) { try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Materiais insuficientes', message: 'Você precisa de Pedra Mágica ou Essência de Vínculo.', duration: 3500, icon: '🔷' }); } catch {} ; return false; }
+        if (stones <= 0) { try { notificationBus.emit({ type: 'item', title: 'Materiais insuficientes', message: 'Você precisa de Pedra Mágica ou Essência de Vínculo.', duration: 3500, icon: '🔷' }); } catch {} ; return false; }
         const updateRefine = (current: number) => {
           const next = Math.min(10, current + 1);
           const chance = next <= 3 ? 1 : next <= 6 ? 0.75 : 0.45;
@@ -912,12 +1328,13 @@ export const useHeroStore = create<HeroState>()(
           const newLevel = updateRefine(m.refineLevel || 0);
           if (newLevel !== (m.refineLevel || 0)) {
             const nextMounts = [...mounts];
-            nextMounts[idx] = { ...m, refineLevel: newLevel };
+            const hist = [{ ts: new Date().toISOString(), action: 'refine', details: `→ ${newLevel}` }, ...((m.history)||[])].slice(0,50);
+            nextMounts[idx] = { ...m, refineLevel: newLevel, history: hist };
             hero.mounts = nextMounts;
             changed = true;
           }
         }
-        if (!changed) { try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Refino falhou', message: 'A tentativa de refino não teve efeito desta vez.', duration: 3000, icon: '⚠️' }); } catch {} ; return false; }
+        if (!changed) { try { notificationBus.emit({ type: 'item', title: 'Refino falhou', message: 'A tentativa de refino não teve efeito desta vez.', duration: 3000, icon: '⚠️' }); } catch {} ; return false; }
         const newItems = { ...hero.inventory.items } as Record<string, number>;
         if (stonesMagic > 0) {
           newItems['pedra-magica'] = stonesMagic - 1;
@@ -929,9 +1346,9 @@ export const useHeroStore = create<HeroState>()(
         const compBonus = computeCompanionBonus(hero);
         const derived = calculateDerivedAttributes(hero.attributes, hero.class, hero.progression.level, hero.inventory, hero.activeTitle, compBonus);
         get().updateHero(hero.id, { inventory: { ...hero.inventory, items: newItems }, derivedAttributes: derived });
-        try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: kind === 'mount' ? 'Montaria Refinada' : 'Mascote Refinado', message: 'Bônus do companheiro aumentados em +1% por nível de refino.', duration: 3500, icon: kind === 'mount' ? '🏇' : '🐾' }); } catch {}
+        try { notificationBus.emit({ type: 'item', title: kind === 'mount' ? 'Montaria Refinada' : 'Mascote Refinado', message: 'Bônus do companheiro aumentados em +1% por nível de refino.', duration: 3500, icon: kind === 'mount' ? '🏇' : '🐾' }); } catch {}
         try { if (kind === 'mount') get().updateDailyGoalProgress(hero.id, 'mount-refined', 1); } catch {}
-        try { if (kind === 'mount') require('../utils/metricsSystem').trackMetric.custom?.('mount_refined', { heroId: hero.id, mountId: id }); } catch {}
+        try { if (kind === 'mount') trackMetric.custom?.('mount_refined', { heroId: hero.id, mountId: id }); } catch {}
         return true;
       },
 
@@ -946,19 +1363,72 @@ export const useHeroStore = create<HeroState>()(
         return get().refineCompanion(hero.id, 'mount', mountId);
       },
 
+      suggestCompanionQuestForSelected: () => {
+        const hero = get().getSelectedHero();
+        if (!hero) return false;
+        const inv = hero.inventory.items || {} as Record<string, number>;
+        const missing: string[] = [];
+        const mount = (hero.mounts || []).find(m => m.id === hero.activeMountId);
+        if (mount) {
+          if (mount.stage === 'comum' && (inv['pergaminho-montaria'] || 0) < 1) missing.push('pergaminho-montaria');
+          if (mount.stage === 'encantada') {
+            if ((inv['pergaminho-montaria'] || 0) < 1) missing.push('pergaminho-montaria');
+            if ((inv['essencia-bestial'] || 0) < 1) missing.push('essencia-bestial');
+          }
+        }
+        const pet = (hero.pets || []).find(p => p.id === hero.activePetId);
+        if (pet && (pet.refineLevel || 0) < 10) {
+          if ((inv['pedra-magica'] || 0) < 1 && (inv['essencia-vinculo'] || 0) < 1) missing.push('pedra-magica');
+        }
+        if (missing.length === 0) return false;
+        const target = missing[0];
+        const q: Quest = {
+          id: `companion-${target}-${Date.now()}`,
+          title: target === 'essencia-bestial' ? 'Encontrar a Essência Bestial' : target === 'pergaminho-montaria' ? 'Conseguir Pergaminho de Montaria' : 'Refinar Vínculo do Mascote',
+          description: target === 'essencia-bestial' ? 'Explore ruínas ou derrote um boss para coletar a Essência Bestial.' : target === 'pergaminho-montaria' ? 'Complete tarefas da guilda para obter um Pergaminho de Montaria.' : 'Participe de treinos e rituais para fortalecer o vínculo com seu mascote.',
+          type: target === 'essencia-bestial' ? 'exploracao' : 'caca',
+          difficulty: 'padrao',
+          levelRequirement: Math.max(1, hero.progression.level),
+          rewards: { gold: 50, xp: 40, items: [{ id: target, qty: 1 }] },
+          repeatable: false,
+          isGuildQuest: true,
+          sticky: true
+        };
+        set((state) => ({ availableQuests: [q, ...state.availableQuests] }));
+        try {
+          const cur = hero.stats?.suggestedCompanionMissions || 0;
+          get().updateHero(hero.id, { stats: { ...hero.stats, suggestedCompanionMissions: cur + 1 } });
+        } catch {}
+        try {
+          const v = localStorage.getItem('auto_accept_companion_mission');
+          if (v === '1') {
+            get().acceptQuest(hero.id, q.id);
+          }
+        } catch {}
+        return true;
+      },
+
       // === SISTEMA DE CONVITES / INDICAÇÕES ===
       createReferralInvite: (inviterHeroId: string): ReferralInvite | null => {
         const state = get();
         const inviter = state.heroes.find(h => h.id === inviterHeroId);
         if (!inviter) return null;
         const code = uuidv4().slice(0, 8);
+        const validityDays = Math.max(1, getGameSettings().inviteLinkValidityDays || 7);
+        const expiresAt = new Date(Date.now() + validityDays * 24 * 3600 * 1000).toISOString();
+        const inviterTag = String(inviter.name || 'heroi');
+        const personalizedSlug = `${inviterTag.toLowerCase().replace(/[^a-z0-9]+/g,'-')}-${code}`;
         const invite: ReferralInvite = {
           id: uuidv4(),
           code,
           inviterHeroId,
           createdAt: new Date().toISOString(),
           status: 'pending',
-          rewardGranted: false
+          rewardGranted: false,
+          expiresAt,
+          inviterTag,
+          personalizedSlug,
+          activity: [{ ts: new Date().toISOString(), action: 'created' }]
         };
         set(s => ({ referralInvites: [...(s.referralInvites || []), invite] }));
         // Métrica de criação de convite
@@ -976,6 +1446,11 @@ export const useHeroStore = create<HeroState>()(
         const inviteIndex = (state.referralInvites || []).findIndex(i => i.code === code && i.status === 'pending');
         if (inviteIndex === -1) return false;
         const invite = state.referralInvites[inviteIndex];
+        if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now()) {
+          const expiredInvite: ReferralInvite = { ...invite, status: 'expired', activity: [...(invite.activity||[]), { ts: new Date().toISOString(), action: 'expired' }] };
+          set(s => ({ referralInvites: s.referralInvites.map((i, idx) => idx === inviteIndex ? expiredInvite : i) }));
+          return false;
+        }
         const inviter = state.heroes.find(h => h.id === invite.inviterHeroId);
         const newHero = state.heroes.find(h => h.id === newHeroId);
         if (!inviter || !newHero) return false;
@@ -987,13 +1462,21 @@ export const useHeroStore = create<HeroState>()(
           acceptedAt: new Date().toISOString()
         };
         set(s => ({
-          referralInvites: s.referralInvites.map((i, idx) => idx === inviteIndex ? updatedInvite : i)
+          referralInvites: s.referralInvites.map((i, idx) => idx === inviteIndex ? { ...updatedInvite, activity: [...(updatedInvite.activity||invite.activity||[]), { ts: new Date().toISOString(), action: 'accepted', details: newHeroId }] } : i)
         }));
         // Conceder bônus ao convidador
-        const bonusGold = 100;
-        const bonusXP = 150;
+        const bonusGold = Math.max(0, getGameSettings().inviteRewardGold || 0);
+        const bonusXP = Math.max(0, getGameSettings().inviteRewardXP || 0);
         get().gainGold(inviter.id, bonusGold);
         get().gainXP(inviter.id, bonusXP);
+        try {
+          const acceptedCount = (get().getReferralInvitesForHero(inviter.id) || []).filter(i => i.status === 'accepted').length;
+          if (acceptedCount === 1 || acceptedCount === 5 || acceptedCount === 10) {
+            notificationBus.emit({ type: 'achievement', title: 'Convite bem-sucedido!', message: `Marcos atingidos: ${acceptedCount} aceites`, icon: '🎉', duration: 4000 });
+            if (acceptedCount === 5) { get().gainGold(inviter.id, Math.floor(bonusGold * 2)); }
+            if (acceptedCount === 10) { get().gainXP(inviter.id, Math.floor(bonusXP * 2)); }
+          }
+        } catch {}
         // Marcar recompensa concedida
         set(s => ({
           referralInvites: s.referralInvites.map(i => i.id === updatedInvite.id ? { ...i, rewardGranted: true } : i)
@@ -1002,19 +1485,89 @@ export const useHeroStore = create<HeroState>()(
         trackMetric.custom?.('referral_accepted', { inviterHeroId: inviter.id, newHeroId, code, bonusGold, bonusXP });
         return true;
       },
+
+      revokeReferralInvite: (inviteId: string): boolean => {
+        const state = get();
+        const idx = (state.referralInvites || []).findIndex(i => i.id === inviteId && i.status === 'pending');
+        if (idx === -1) return false;
+        const cur = state.referralInvites[idx];
+        const next: ReferralInvite = { ...cur, status: 'expired', activity: [...(cur.activity||[]), { ts: new Date().toISOString(), action: 'revoked' }] };
+        set(s => ({ referralInvites: s.referralInvites.map((i, j) => j === idx ? next : i) }));
+        return true;
+      },
+
+      expireOldInvites: () => {
+        const state = get();
+        const now = Date.now();
+        const next = (state.referralInvites || []).map(i => {
+          if (i.status !== 'pending') return i;
+          if (i.expiresAt && new Date(i.expiresAt).getTime() < now) {
+            return { ...i, status: 'expired', activity: [...(i.activity||[]), { ts: new Date().toISOString(), action: 'expired' }] };
+          }
+          return i;
+        });
+        set({ referralInvites: next });
+      },
+
+      getReferralStatsForHero: (heroId: string) => {
+        const list = get().getReferralInvitesForHero(heroId);
+        const total = list.length;
+        const pending = list.filter(i => i.status === 'pending').length;
+        const accepted = list.filter(i => i.status === 'accepted').length;
+        const expired = list.filter(i => i.status === 'expired').length;
+        const rewardsGranted = list.filter(i => i.rewardGranted).length;
+        return { total, pending, accepted, expired, rewardsGranted };
+      },
+
+      logReferralActivity: (inviteId: string, action: 'shared' | 'revoked' | 'expired' | 'accepted', details?: string) => {
+        set(s => ({
+          referralInvites: (s.referralInvites || []).map(i => i.id === inviteId ? { ...i, activity: [...(i.activity||[]), { ts: new Date().toISOString(), action, details }] } : i)
+        }));
+      },
+
+      updateReferralInvite: (inviteId, updates) => {
+        let changed = false;
+        set(s => ({
+          referralInvites: (s.referralInvites || []).map(i => {
+            if (i.id !== inviteId) return i;
+            changed = true;
+            return { ...i, ...updates };
+          })
+        }));
+        return changed;
+      },
+
+      renewReferralInvite: (inviteId, extraDays = Math.max(1, getGameSettings().inviteLinkValidityDays || 7)) => {
+        const cur = get().referralInvites.find(i => i.id === inviteId);
+        if (!cur) return false;
+        const base = cur.expiresAt ? new Date(cur.expiresAt).getTime() : Date.now();
+        const expiresAt = new Date(base + extraDays * 24 * 3600 * 1000).toISOString();
+        set(s => ({
+          referralInvites: (s.referralInvites || []).map(i => i.id === inviteId ? { ...i, expiresAt, status: i.status === 'expired' ? 'pending' : i.status, activity: [...(i.activity||[]), { ts: new Date().toISOString(), action: 'renewed' }] } : i)
+        }));
+        return true;
+      },
+
+      getReferralInviteByCode: (code: string) => {
+        const state = get();
+        return (state.referralInvites || []).find(i => i.code === code);
+      },
       
       updateHero: (id, heroData) => {
         set(state => ({
           heroes: state.heroes.map(hero => {
             if (hero.id !== id) return hero;
-            
-            const updatedHero = { 
-              ...hero, 
-              ...heroData, 
-              updatedAt: new Date().toISOString()
-            };
-            
-            // Recalcular atributos derivados se atributos, classe, nível, inventário, título ou companheiros mudaram
+            const nowIso = new Date().toISOString();
+            const updatedTop = { ...hero, ...heroData, updatedAt: nowIso } as Hero;
+            if (heroData.stats) {
+              updatedTop.stats = { ...hero.stats, ...heroData.stats } as any;
+            }
+            if (heroData.stamina) {
+              updatedTop.stamina = { ...(hero.stamina as any), ...(heroData.stamina as any) } as any;
+            }
+            if (heroData.progression) {
+              updatedTop.progression = { ...hero.progression, ...heroData.progression } as any;
+            }
             if (heroData.attributes || heroData.class || heroData.level || heroData.inventory || heroData.activeTitle !== undefined || heroData.activePetId !== undefined || heroData.activeMountId !== undefined || heroData.pets || heroData.mounts) {
               const finalAttributes = heroData.attributes 
                 ? { ...hero.attributes, ...heroData.attributes }
@@ -1024,8 +1577,7 @@ export const useHeroStore = create<HeroState>()(
               const finalInventory = heroData.inventory || hero.inventory;
               const finalActiveTitle = heroData.activeTitle !== undefined ? heroData.activeTitle : hero.activeTitle;
               const compBonus = computeCompanionBonus({ ...hero, ...heroData } as Hero);
-              
-              updatedHero.derivedAttributes = calculateDerivedAttributes(
+              updatedTop.derivedAttributes = calculateDerivedAttributes(
                 finalAttributes,
                 finalClass,
                 finalLevel,
@@ -1034,8 +1586,15 @@ export const useHeroStore = create<HeroState>()(
                 compBonus
               );
             }
-            
-            return updatedHero;
+            const beforeCompleted = Array.isArray(hero.completedQuests) ? hero.completedQuests.length : 0;
+            const afterCompleted = Array.isArray((updatedTop as any).completedQuests) ? (updatedTop as any).completedQuests.length : beforeCompleted;
+            const beforeMissions = hero.stats?.questsCompleted || 0;
+            const afterMissions = (updatedTop.stats?.questsCompleted ?? beforeMissions);
+            if (afterCompleted < beforeCompleted || afterMissions < beforeMissions) {
+              try { trackMetric.featureUsed(id, `mission-reset-detected:${beforeMissions}->${afterMissions}`); } catch {}
+              try { console.warn('mission reset detected', { heroId: id, beforeMissions, afterMissions, beforeCompleted, afterCompleted, ts: nowIso }); } catch {}
+            }
+            return updatedTop;
           })
         }));
       },
@@ -1160,35 +1719,34 @@ export const useHeroStore = create<HeroState>()(
       
       acceptQuest: (heroId: string, questId: string) => {
         console.log('🔍 acceptQuest chamada:', { heroId, questId });
-        
         const state = get();
         const hero = state.heroes.find(h => h.id === heroId);
         const quest = state.availableQuests.find(q => q.id === questId);
-        
         console.log('👤 Herói encontrado:', hero ? `${hero.name} (Level ${hero.progression.level})` : 'Não encontrado');
         console.log('📋 Missão encontrada:', quest ? `${quest.title} (Level ${quest.levelRequirement})` : 'Não encontrada');
-        
         if (!hero || !quest) {
           console.log('❌ Herói ou missão não encontrados');
+          try { notificationBus.emit({ type: 'quest', title: 'Missão indisponível', message: 'Não foi possível localizar esta missão.', duration: 2500, icon: 'ℹ️' }); } catch {}
           return false;
         }
-        
         if (hero.progression.level < quest.levelRequirement) {
           console.log('❌ Nível insuficiente:', hero.progression.level, '<', quest.levelRequirement);
+          try { notificationBus.emit({ type: 'quest', title: 'Nível insuficiente', message: `Requer nível ${quest.levelRequirement}.`, duration: 2500, icon: '⚠️' }); } catch {}
           return false;
         }
-        
+        if (hero.activeQuests.includes(questId)) {
+          console.log('ℹ️ Missão já ativa:', questId);
+          try { notificationBus.emit({ type: 'quest', title: 'Missão já ativa', message: `${quest.title}`, duration: 2000, icon: '🐾' }); } catch {}
+          return true;
+        }
         if (hero.activeQuests.length >= 3) {
           console.log('❌ Máximo de missões ativas atingido:', hero.activeQuests.length);
+          try { notificationBus.emit({ type: 'quest', title: 'Limite de missões', message: 'Máximo de 3 missões ativas.', duration: 2500, icon: '⛔' }); } catch {}
           return false;
         }
-        
         console.log('✅ Todos os requisitos atendidos, adicionando missão às ativas');
-        
-        get().updateHero(heroId, {
-          activeQuests: [...hero.activeQuests, questId]
-        });
-        
+        get().updateHero(heroId, { activeQuests: [...hero.activeQuests, questId] });
+        try { notificationBus.emit({ type: 'quest', title: 'Missão aceita', message: `${quest.title}`, duration: 2500, icon: '✅' }); } catch {}
         console.log('🎉 Missão aceita com sucesso!');
         return true;
       },
@@ -1236,18 +1794,13 @@ export const useHeroStore = create<HeroState>()(
             : resolveCombat(hero, quest.enemies);
           
           if (!combatResult.victory) {
-            // Falha na missão
             if (quest.failurePenalty) {
               if (quest.failurePenalty.gold) {
                 get().gainGold(heroId, -quest.failurePenalty.gold);
               }
               if (quest.failurePenalty.reputation) {
-                get().updateHero(heroId, {
-                  progression: {
-                    ...hero.progression,
-                    reputation: Math.max(0, hero.progression.reputation + quest.failurePenalty.reputation)
-                  }
-                });
+                const factionFail = quest.isGuildQuest ? 'Ordem' : (quest.type === 'exploracao' ? 'Livre' : 'Ordem');
+                state.updateReputation(factionFail, quest.failurePenalty.reputation);
               }
             }
             return combatResult;
@@ -1337,9 +1890,9 @@ export const useHeroStore = create<HeroState>()(
               const egg = generateMysteryEgg(rarity as any);
               const eggs = [...(hero.eggs || []), egg];
               get().updateHero(heroId, { eggs });
-              try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Ovo Encontrado', message: `${egg.name}`, duration: 3000, icon: '🥚' }); } catch {}
+              try { notificationBus.emit({ type: 'item', title: 'Ovo Encontrado', message: `${egg.name}`, duration: 3000, icon: '🥚' }); } catch {}
             } else {
-              try { require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Inventário de Ovos Cheio', message: 'Você não tem espaço para novos ovos.', duration: 4000 }); } catch {}
+              try { notificationBus.emit({ type: 'item', title: 'Inventário de Ovos Cheio', message: 'Você não tem espaço para novos ovos.', duration: 4000 }); } catch {}
             }
           }
         } catch {}
@@ -1353,6 +1906,9 @@ export const useHeroStore = create<HeroState>()(
             const compDone = (curStats.companionQuestsCompleted || 0) + 1;
             get().updateHero(heroId, { stats: { ...hero.stats, companionQuestsCompleted: compDone } });
           } catch {}
+        } else {
+          const inferred = inferQuestFactionChanges(quest);
+          inferred.forEach(({ factionName, change }) => state.updateReputation(factionName, change));
         }
         
         // Atualizar estatísticas
@@ -1369,6 +1925,7 @@ export const useHeroStore = create<HeroState>()(
         });
 
         try { updateProgressDelta({ missionsCompleted: 1 }); } catch {}
+        try { logActivity({ type: 'mission_completed', heroId, questId }).catch(() => {}); } catch {}
 
         // Se a missão era sticky, removê-la do quadro disponível
         if (quest.sticky) {
@@ -1714,13 +2271,13 @@ export const useHeroStore = create<HeroState>()(
             const s = hero.stats || ({} as any);
             const next = (s.mountScrollsFound || 0) + quantity;
             get().updateHero(heroId, { stats: { ...hero.stats, mountScrollsFound: next } });
-            require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Pergaminho de Montaria', message: `Você obteve 📜 x${quantity}.`, duration: 3500, icon: '📜' });
+            notificationBus.emit({ type: 'item', title: 'Pergaminho de Montaria', message: `Você obteve 📜 x${quantity}.`, duration: 3500, icon: '📜' });
           }
           if (itemId === 'essencia-bestial') {
             const s = hero.stats || ({} as any);
             const next = (s.beastEssenceCollected || 0) + quantity;
             get().updateHero(heroId, { stats: { ...hero.stats, beastEssenceCollected: next } });
-            require('../components/NotificationSystem').notificationBus.emit({ type: 'item', title: 'Essência Bestial', message: `Você obteve 🧬 x${quantity}.`, duration: 3500, icon: '🧬' });
+            notificationBus.emit({ type: 'item', title: 'Essência Bestial', message: `Você obteve 🧬 x${quantity}.`, duration: 3500, icon: '🧬' });
           }
         } catch {}
       },
@@ -1783,6 +2340,7 @@ export const useHeroStore = create<HeroState>()(
             }
           });
           try { updateProgressDelta({ achievementsUnlocked: newAchievements.length }); } catch {}
+          try { logActivity({ type: 'achievement_unlocked', heroId, count: newAchievements.length }).catch(() => {}); } catch {}
         }
         
         return newAchievements;
@@ -2130,6 +2688,36 @@ export const useHeroStore = create<HeroState>()(
         const beforeHp = hero.derivedAttributes.currentHp ?? hero.derivedAttributes.hp;
         const beforeMp = hero.derivedAttributes.currentMp ?? hero.derivedAttributes.mp;
         const beforeFatigue = hero.progression.fatigue ?? 0;
+
+        if (itemId === 'contrato-montaria') {
+          const ok = get().generateMountForSelected();
+          if (!ok) return false;
+          // Remover o item do inventário
+          const currentQuantity = hero.inventory.items[itemId] || 0;
+          get().updateHero(heroId, {
+            inventory: {
+              ...hero.inventory,
+              items: {
+                ...hero.inventory.items,
+                [itemId]: Math.max(0, currentQuantity - 1)
+              }
+            }
+          });
+          return true;
+        }
+
+        if (itemId === 'kit-montaria') {
+          const items = hero.inventory.items || {} as Record<string, number>;
+          const nextItems = { ...items };
+          nextItems['contrato-montaria'] = (nextItems['contrato-montaria'] || 0) + 1;
+          nextItems['pergaminho-montaria'] = (nextItems['pergaminho-montaria'] || 0) + 1;
+          nextItems['essencia-bestial'] = (nextItems['essencia-bestial'] || 0) + 1;
+          nextItems['pedra-magica'] = (nextItems['pedra-magica'] || 0) + 1;
+          const currentQuantity = hero.inventory.items[itemId] || 0;
+          get().updateHero(heroId, { inventory: { ...hero.inventory, items: { ...nextItems, [itemId]: Math.max(0, currentQuantity - 1) } } });
+          try { notificationBus.emit({ type: 'item', title: 'Kit de Montaria', message: 'Itens adicionados: 📜, 🧬, 🔷 e Contrato.', duration: 3500, icon: '🎁' }); } catch {}
+          return true;
+        }
 
         const result = useConsumable(hero, itemId);
         if (result.success) {
@@ -3035,15 +3623,24 @@ export const useHeroStore = create<HeroState>()(
         if (pointsToSpend <= 0) return false;
         if (pointsToSpend > availablePoints) return false;
 
+        const currentRank = hero.rankData?.currentRank || rankSystem.calculateRank(hero);
+        const maxAttr = getMaxAttributeForRank(currentRank);
+        const totalCap = getTotalAttributePointsCapForRank(currentRank);
+        
         // Validar limites máximos por atributo
         const newAttributes = { ...hero.attributes };
         for (const { key, inc } of increments) {
           const current = newAttributes[key];
           const proposed = current + inc;
-          if (proposed > ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE) {
+          if (proposed > maxAttr) {
             return false;
           }
           newAttributes[key] = proposed;
+        }
+
+        const totalAfter = Object.values(newAttributes).reduce((s, v) => s + v, 0);
+        if (totalAfter > totalCap) {
+          return false;
         }
 
         // Atualizar herói: atributos, pontos restantes e derivados

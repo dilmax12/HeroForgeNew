@@ -48,6 +48,18 @@ export const CLASS_SKILLS: Record<HeroClass, Skill[]> = {
         }
       }
     }
+    ,
+    {
+      id: 'investida-feroz',
+      name: 'Investida Feroz',
+      description: 'Avança rapidamente causando dano e empurrando o alvo',
+      type: 'attack',
+      cost: 4,
+      basePower: 14,
+      element: 'physical',
+      target: 'single',
+      effects: { special: 'knockback_small' }
+    }
   ],
   mago: [
     {
@@ -83,6 +95,18 @@ export const CLASS_SKILLS: Record<HeroClass, Skill[]> = {
       effects: {
         special: 'reduce_cooldown_1'
       }
+    }
+    ,
+    {
+      id: 'rajada-gelo',
+      name: 'Rajada de Gelo',
+      description: 'Ataque de gelo com chance de reduzir velocidade',
+      type: 'attack',
+      cost: 5,
+      basePower: 16,
+      element: 'ice',
+      target: 'single',
+      effects: { debuff: { special: 'slow' } }
     }
   ],
   arqueiro: [
@@ -124,6 +148,18 @@ export const CLASS_SKILLS: Record<HeroClass, Skill[]> = {
       element: 'physical',
       target: 'aoe',
       cooldown: 4
+    }
+    ,
+    {
+      id: 'disparo-penetrante',
+      name: 'Disparo Penetrante',
+      description: 'Ataque que ignora parte da armadura',
+      type: 'attack',
+      cost: 5,
+      basePower: 13,
+      element: 'physical',
+      target: 'single',
+      effects: { special: 'ignore_armor_small' }
     }
   ],
   clerigo: [

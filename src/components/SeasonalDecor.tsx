@@ -5,10 +5,8 @@ import { seasonalThemes } from '../styles/medievalTheme';
 const SeasonalDecor: React.FC = () => {
   const { activeSeasonalTheme } = useMonetizationStore();
   const [msgIndex, setMsgIndex] = useState(0);
-  if (!activeSeasonalTheme) return null;
-  const cfg = (seasonalThemes as any)[activeSeasonalTheme];
-  if (!cfg) return null;
-  const messages: string[] = cfg.messages || [];
+  const cfg = (seasonalThemes as any)[activeSeasonalTheme || ''];
+  const messages: string[] = Array.isArray(cfg?.messages) ? cfg.messages : [];
   useEffect(() => {
     if (!messages.length) return;
     setMsgIndex(0);
@@ -16,7 +14,8 @@ const SeasonalDecor: React.FC = () => {
       setMsgIndex((i) => (i + 1) % messages.length);
     }, 12000);
     return () => clearInterval(t);
-  }, [activeSeasonalTheme]);
+  }, [activeSeasonalTheme, messages.length]);
+  if (!activeSeasonalTheme || !cfg) return null;
   return (
     <div className="mt-3 rounded-lg border px-3 py-2 text-sm" style={{}}>
       <div className={`bg-gradient-to-r ${cfg.banner} rounded px-2 py-2 flex items-center gap-2`}>

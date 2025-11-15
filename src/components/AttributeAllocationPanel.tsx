@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Hero, HeroAttributes } from '../types/hero';
 import { useHeroStore } from '../store/heroStore';
-import { ATTRIBUTE_CONSTRAINTS, ATTRIBUTE_INFO } from '../utils/attributeSystem';
+import { ATTRIBUTE_CONSTRAINTS, ATTRIBUTE_INFO, getMaxAttributeForRank } from '../utils/attributeSystem';
+import { rankSystem } from '../utils/rankSystem';
 
 interface AttributeAllocationPanelProps {
   hero: Hero;
@@ -14,6 +15,8 @@ const AttributeAllocationPanel: React.FC<AttributeAllocationPanelProps> = ({ her
   const [message, setMessage] = useState<string>('');
 
   const pointsAvailable = hero.attributePoints || 0;
+  const currentRank = hero.rankData?.currentRank || rankSystem.calculateRank(hero);
+  const maxAttr = useMemo(() => getMaxAttributeForRank(currentRank), [currentRank]);
 
   const pointsToSpend = useMemo(() => {
     return Object.values(pending).reduce((sum, v) => sum + (typeof v === 'number' ? Math.max(0, v) : 0), 0);
@@ -35,7 +38,7 @@ const AttributeAllocationPanel: React.FC<AttributeAllocationPanelProps> = ({ her
   const canIncrease = (key: keyof HeroAttributes) => {
     const current = hero.attributes[key];
     const inc = (pending[key] || 0) as number;
-    return pointsRemaining > 0 && current + inc < ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE;
+    return pointsRemaining > 0 && current + inc < maxAttr;
   };
 
   const canDecrease = (key: keyof HeroAttributes) => {

@@ -11,6 +11,7 @@ import { saveQuest } from '../services/questsService';
 import { SHOP_ITEMS } from '../utils/shop';
 import { logActivity } from '../services/loggerService';
 import { getUserProgress } from '../services/userService';
+import { saveLocalHeroes, saveLocalQuests } from '../services/localStore';
 
 const PlayerRegistration: React.FC = () => {
   const { createHero, addItemToInventory, getSelectedHero, selectHero } = useHeroStore();
@@ -33,6 +34,15 @@ const PlayerRegistration: React.FC = () => {
   function isValidUsername(v: string) {
     const s = (v || '').trim().toLowerCase();
     return s.length >= 3 && /^[a-z0-9_\.\-]+$/.test(s);
+  }
+  function isStrongPassword(v: string) {
+    const s = String(v || '');
+    if (s.length < 12) return false;
+    const hasUpper = /[A-Z]/.test(s);
+    const hasLower = /[a-z]/.test(s);
+    const hasNumber = /[0-9]/.test(s);
+    const hasSpecial = /[^A-Za-z0-9]/.test(s);
+    return hasUpper && hasLower && hasNumber && hasSpecial;
   }
   const [heroName, setHeroName] = useState('');
   const [heroRace, setHeroRace] = useState<'humano'|'elfo'|'anao'|'orc'|'halfling'>('humano');
@@ -99,12 +109,16 @@ const PlayerRegistration: React.FC = () => {
       // Fluxo opcional: criar conta via email/senha
       let userId = sbUserId;
       if (useEmailPassword) {
-        if (!emailInput || !passwordInput || passwordInput.length < 6) {
-          setError('Informe email válido e senha (mín. 6 caracteres).');
+        if (!emailInput || !passwordInput) {
+          setError('Informe email e senha.');
           return;
         }
         if (!isValidEmail(emailInput)) {
           setError('Formato de email inválido.');
+          return;
+        }
+        if (!isStrongPassword(passwordInput)) {
+          setError('Senha fraca. Use 12+ caracteres, com maiúsculas, minúsculas, números e especiais.');
           return;
         }
         const { data, error: signUpErr } = await supabase.auth.signUp({ email: emailInput, password: passwordInput, options: { emailRedirectTo: window.location.origin } });
@@ -168,6 +182,8 @@ const PlayerRegistration: React.FC = () => {
           setError('Falha ao salvar o herói no Supabase.');
           return;
         }
+      } else {
+        saveLocalHeroes(userId, [hero]);
       }
 
       // Cria missão simples se preenchida e persiste
@@ -185,13 +201,19 @@ const PlayerRegistration: React.FC = () => {
         };
         if (cloudSync && userId) {
           await saveQuest(userId, hero.id, quest, 'active');
+        } else {
+          saveLocalQuests(userId, [{ heroId: hero.id, status: 'active', data: quest }]);
         }
       }
 
       setMessage('Cadastro salvo com sucesso! Conta e dados registrados com segurança.');
       try {
-        const progress = await getUserProgress(userId);
-        setMessage(`Cadastro salvo! Missões: ${progress.missionsCompleted}, Conquistas: ${progress.achievementsUnlocked}, Tempo: ${progress.playtimeMinutes}m.`);
+        if (cloudSync && userId) {
+          const progress = await getUserProgress(userId);
+          setMessage(`Cadastro salvo! Missões: ${progress.missionsCompleted}, Conquistas: ${progress.achievementsUnlocked}, Tempo: ${progress.playtimeMinutes}m.`);
+        } else {
+          setMessage('Cadastro salvo localmente! Você pode sincronizar com a nuvem depois no painel Admin.');
+        }
       } catch {}
       if (cloudSync && userId) {
         try { await logActivity({ type: 'registration', userId, username: username || null, email: sbEmail || emailInput || null }); } catch {}
@@ -244,7 +266,12 @@ const PlayerRegistration: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm text-gray-600 mb-1">Senha</label>
-                <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="mínimo 6 caracteres" />
+                <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="mínimo 12 caracteres e complexa" />
+                <div className="mt-1 text-xs">
+                  {passwordInput.length === 0 && <span className="text-gray-500">Informe uma senha</span>}
+                  {passwordInput.length > 0 && !isStrongPassword(passwordInput) && <span className="text-red-700">Fraca</span>}
+                  {passwordInput.length >= 12 && isStrongPassword(passwordInput) && <span className="text-green-700">Forte</span>}
+                </div>
               </div>
             </div>
           )}

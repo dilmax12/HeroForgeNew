@@ -80,6 +80,32 @@ export default function AdminDashboard() {
   const [logPreview, setLogPreview] = useState<string>('—');
   const [logType, setLogType] = useState<string>('');
   const [logOffset, setLogOffset] = useState<number>(0);
+  const [exportUserStatus, setExportUserStatus] = useState<string>('—');
+  async function importLocalToCloud() {
+    try {
+      const { data } = await supabase.auth.getUser();
+      const userId = data?.user?.id || null;
+      if (!userId) {
+        alert('Faça login para importar seus dados');
+        return;
+      }
+      const heroes = loadLocalHeroes(userId);
+      const quests = loadLocalQuests(userId);
+      let hCount = 0;
+      for (const h of heroes) {
+        const saved = await fetch('/api/hero-create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId, hero: h }) });
+        if (saved.ok) hCount++;
+      }
+      let qCount = 0;
+      for (const q of quests) {
+        const res = await fetch('/api/missions?action=generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId, hero_id: q.heroId, prompt: q.data?.prompt || 'Missão importada', context: q.data || {} }) });
+        if (res.ok) qCount++;
+      }
+      alert(`Importação concluída: ${hCount} herói(s), ${qCount} missão(ões).`);
+    } catch (e: any) {
+      alert(e?.message || String(e));
+    }
+  }
 
   async function testSupabase() {
     setSbLoading(true);
@@ -140,7 +166,12 @@ export default function AdminDashboard() {
       if (logType) qs.set('type', logType);
       qs.set('limit', '20');
       qs.set('offset', String(logOffset));
-      const res = await fetch(`/api/logs?${qs.toString()}`, { headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : {} });
+      const { data: sessData } = await supabase.auth.getSession();
+      const sessionToken = sessData?.session?.access_token || '';
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+      if (adminToken) headers['x-admin-token'] = adminToken;
+      const res = await fetch(`/api/logs?${qs.toString()}`, { headers });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Falha ao listar logs');
       setLogFiles(Array.isArray(data?.files) ? data.files : []);
@@ -152,7 +183,11 @@ export default function AdminDashboard() {
 
   async function fetchLogContent(name: string) {
     try {
-      const headers: Record<string, string> = adminToken ? { Authorization: `Bearer ${adminToken}` } : {};
+      const { data: sessData } = await supabase.auth.getSession();
+      const sessionToken = sessData?.session?.access_token || '';
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+      if (adminToken) headers['x-admin-token'] = adminToken;
       const res = await fetch(`/api/logs?action=get&name=${encodeURIComponent(name)}`, { headers });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Falha ao obter log');
@@ -160,6 +195,31 @@ export default function AdminDashboard() {
       setLogPreview(content);
     } catch (e: any) {
       setLogPreview(e?.message || String(e));
+    }
+  }
+
+  async function exportUserData() {
+    try {
+      setExportUserStatus('Exportando...');
+      const { data } = await supabase.auth.getUser();
+      const userId = data?.user?.id || null;
+      if (!userId) { setExportUserStatus('Sem login'); return; }
+      const { data: sessData } = await supabase.auth.getSession();
+      const sessionToken = sessData?.session?.access_token || '';
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+      if (adminToken) headers['x-admin-token'] = adminToken;
+      const res = await fetch(`/api/export-user?id=${encodeURIComponent(userId)}`, { headers });
+      const txt = await res.text();
+      if (!res.ok) { setExportUserStatus('Erro'); return; }
+      const blob = new Blob([txt], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `hfn-user-${userId}-${Date.now()}.json`; a.click();
+      URL.revokeObjectURL(url);
+      setExportUserStatus('OK');
+    } catch (e: any) {
+      setExportUserStatus(e?.message || 'Erro');
     }
   }
 
@@ -502,6 +562,10 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
             <div className="text-xs text-gray-900">{playerProfile?.created_at ? new Date(playerProfile.created_at).toLocaleString() : '—'}</div>
           </div>
         </div>
+        <div className="mt-3 flex items-center gap-2">
+          <button onClick={exportUserData} className="px-3 py-2 bg-white text-indigo-700 border border-indigo-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">Exportar dados (JSON)</button>
+          <div className="text-sm text-gray-700">Export: {exportUserStatus}</div>
+        </div>
       </div>
 
       {/* KPIs adicionais e tendências (estilo Playtest) */}
@@ -561,6 +625,12 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
             Fazer backup agora
           </button>
           <div className="text-sm text-gray-700">Backup: {backupStatus}</div>
+          <button
+            onClick={importLocalToCloud}
+            className="px-3 py-2 bg-white text-indigo-700 border border-indigo-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            Importar dados locais
+          </button>
         </div>
         {sbError && (
           <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2 mb-3">
@@ -589,19 +659,22 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
       {/* Logs Admin Panel */}
       <div className="bg-white p-6 rounded-lg border border-gray-200 mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-3">🧾 Logs (Admin)</h2>
-          <div className="flex items-end gap-2 mb-3">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Admin Token</label>
-              <input value={adminToken} onChange={e => setAdminToken(e.target.value)} className="bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Bearer token" />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Tipo</label>
-              <select value={logType} onChange={e => { setLogType(e.target.value); setLogOffset(0); }} className="bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                <option value="">Todos</option>
-                <option value="backup-">Backup</option>
-                <option value="evt-">Eventos</option>
-              </select>
-            </div>
+        <div className="flex items-end gap-2 mb-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Admin Token</label>
+            <input value={adminToken} onChange={e => setAdminToken(e.target.value)} className="bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Bearer token" />
+          </div>
+          {!adminToken && (
+            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Defina ADMIN_API_TOKEN no servidor para listar logs em produção</div>
+          )}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Tipo</label>
+            <select value={logType} onChange={e => { setLogType(e.target.value); setLogOffset(0); }} className="bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+              <option value="">Todos</option>
+              <option value="backup-">Backup</option>
+              <option value="evt-">Eventos</option>
+            </select>
+          </div>
             <button onClick={fetchLogs} className="px-3 py-2 bg-white text-purple-700 border border-purple-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">Listar logs</button>
             <button onClick={() => { setLogOffset(Math.max(0, logOffset - 20)); fetchLogs(); }} className="px-2 py-2 bg-white text-gray-700 border border-gray-300 rounded">Prev</button>
             <button onClick={() => { setLogOffset(logOffset + 20); fetchLogs(); }} className="px-2 py-2 bg-white text-gray-700 border border-gray-300 rounded">Next</button>

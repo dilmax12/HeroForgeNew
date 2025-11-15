@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { HeroGallery } from './HeroGallery';
+import ErrorBoundary from './ErrorBoundary';
 import { useHeroStore } from '../store/heroStore';
 import { Hero } from '../types/hero';
 import { EXAMPLE_HERO_DATA, generateExampleHero } from '../utils/heroExample';
@@ -104,15 +105,17 @@ const HeroList: React.FC = () => {
         </div>
 
         {/* Galeria de Heróis */}
-        <HeroGallery
-          onCreateHero={handleCreateHero}
-          onHeroSelect={handleHeroSelect}
-          onHeroEdit={handleHeroEdit}
-          onHeroImageChange={handleHeroImageChange}
-          showCreateButton={true}
-          cardSize="medium"
-          viewMode="grid"
-        />
+        <ErrorBoundary>
+          <HeroGallery
+            onCreateHero={handleCreateHero}
+            onHeroSelect={handleHeroSelect}
+            onHeroEdit={handleHeroEdit}
+            onHeroImageChange={handleHeroImageChange}
+            showCreateButton={true}
+            cardSize="medium"
+            viewMode="grid"
+          />
+        </ErrorBoundary>
       </div>
     </div>
   );

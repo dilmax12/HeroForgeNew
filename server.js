@@ -7,10 +7,67 @@ import { createClient as createSbClient } from '@supabase/supabase-js';
 dotenv.config();
 
 const app = express();
-app.use(express.json());
+app.set('trust proxy', 1);
+app.use(express.json({ limit: '256kb' }));
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+app.use((req, res, next) => {
+  const origin = String(req.headers.origin || '');
+  if (ALLOWED_ORIGINS.length && ALLOWED_ORIGINS.includes(origin)) {
+    res.set('Access-Control-Allow-Origin', origin);
+    res.set('Vary', 'Origin');
+    res.set('Access-Control-Allow-Credentials', 'true');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.set('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  } else if (!ALLOWED_ORIGINS.length) {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  res.set('X-Frame-Options', 'DENY');
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Referrer-Policy', 'no-referrer');
+  res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+});
+
+// Rate limiting simples por IP e caminho (dev server apenas)
+const RATE_LIMITS = new Map();
+function rateLimit(windowMs = 10000, maxHits = 20) {
+  return (req, res, next) => {
+    try {
+      const ip = (req.ip || 'local').toString();
+      const key = `${ip}:${req.path}`;
+      const now = Date.now();
+      const entry = RATE_LIMITS.get(key) || { hits: 0, start: now };
+      if (now - entry.start > windowMs) {
+        entry.hits = 0;
+        entry.start = now;
+      }
+      entry.hits++;
+      RATE_LIMITS.set(key, entry);
+      if (entry.hits > maxHits) {
+        return res.status(429).json({ error: 'Too many requests' });
+      }
+      next();
+    } catch { next(); }
+  };
+}
+
+app.use(rateLimit(10000, 30));
+app.use('/api/gerar-texto', rateLimit(60000, 12));
+app.use('/api/hf-text', rateLimit(60000, 12));
+app.use('/api/gerar-imagem', rateLimit(60000, 8));
+app.use('/api/pollinations-image', rateLimit(60000, 20));
+app.use('/api/login-google', rateLimit(60000, 10));
 
 // Memória simples para leaderboard diário (apenas em dev server)
 const dailyLeaderboardByDay = {};
+const tavernDiceEvents = [];
+const tavernChampions = [];
+let lastSnapshotAt = null;
+const tavernCronLogs = [];
+const tavernRerollUsage = new Map();
 
 // === Lobby Online (Party) em memória ===
 // Estrutura para multiplayer assíncrono simples
@@ -196,6 +253,683 @@ app.post('/api/party/transfer', (req, res) => {
     return res.status(500).json({ error: 'Erro ao transferir liderança' });
   }
 });
+
+app.all('/api/tavern', (req, res) => {
+  try {
+    const action = String((req.query && (req.query.action || req.query.a)) || '').toLowerCase();
+    if (!action) return res.status(400).json({ error: 'Missing action' });
+    if (action === 'dice' && req.method === 'POST') {
+      const { heroId, heroName, roll, critical = false, betAmount = null, opponentName = null } = req.body || {};
+      if (!heroName || typeof roll !== 'number') return res.status(400).json({ error: 'Parâmetros inválidos' });
+      tavernDiceEvents.push({ heroId, heroName, roll, critical: !!critical, betAmount: betAmount, opponentName, created_at: new Date().toISOString() });
+      return res.json({ ok: true });
+    }
+    if (action === 'dice-weekly' && req.method === 'GET') {
+      const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const recent = tavernDiceEvents.filter(ev => new Date(ev.created_at).getTime() >= since);
+      const map = {};
+      recent.forEach(ev => {
+        const name = ev.heroName;
+        const r = Number(ev.roll || 0);
+        const crit = !!ev.critical;
+        const cur = map[name] || { heroName: name, best: 0, crits: 0, count: 0 };
+        cur.best = Math.max(cur.best, r);
+        cur.crits += crit ? 1 : 0;
+        cur.count += 1;
+        map[name] = cur;
+      });
+      const entries = Object.values(map).sort((a,b) => { if (b.best !== a.best) return b.best - a.best; if (b.crits !== a.crits) return b.crits - a.crits; return b.count - a.count; }).slice(0, 50);
+      return res.json({ entries });
+    }
+    if (action === 'dice-weekly-snapshot' && req.method === 'POST') {
+      const now = new Date();
+      const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const end = now;
+      const recent = tavernDiceEvents.filter(ev => { const t = new Date(ev.created_at).getTime(); return t >= start.getTime() && t <= end.getTime(); });
+      const score = {};
+      recent.forEach(ev => { const name = ev.heroName; const crit = !!ev.critical; score[name] = (score[name] || 0) + (crit ? 12 : 2); });
+      const entries = Object.entries(score).sort((a,b) => b[1] - a[1]);
+      const top = entries[0];
+      if (!top) return res.json({ ok: true, snapshot: null });
+      const [heroName, topScore] = top;
+      const snap = { id: `c-${Date.now()}`, week_start: start.toISOString(), week_end: end.toISOString(), hero_name: heroName, score: Number(topScore), created_at: new Date().toISOString() };
+      tavernChampions.push(snap);
+      tavernCronLogs.push({ executed_at: new Date().toISOString(), status: 'success', message: `Snapshot manual para ${heroName}` });
+      return res.json({ ok: true, snapshot: snap });
+    }
+    if (action === 'dice-weekly-champions' && req.method === 'GET') {
+      const list = tavernChampions.slice().sort((a,b) => new Date(b.week_start).getTime() - new Date(a.week_start).getTime()).slice(0, 20);
+      return res.json({ champions: list });
+    }
+    if (action === 'dice-weekly-cron-status' && req.method === 'GET') {
+      const now = new Date();
+      const next = (() => { const d = new Date(now); const day = d.getDay(); const diff = (7 - day) % 7; d.setDate(d.getDate() + diff); d.setHours(23, 59, 0, 0); if (d.getTime() <= now.getTime()) d.setDate(d.getDate() + 7); return d; })();
+      return res.json({ nextSnapshotAt: next.toISOString(), lastSnapshotAt });
+    }
+    if (action === 'dice-weekly-cron-logs' && req.method === 'GET') {
+      const logs = tavernCronLogs.slice().sort((a,b) => new Date(b.executed_at).getTime() - new Date(a.executed_at).getTime()).slice(0, 20);
+      return res.json({ logs });
+    }
+    if (action === 'reroll-usage-get' && req.method === 'GET') {
+      const heroId = String(req.query.heroId || '');
+      if (!heroId) return res.status(400).json({ error: 'Missing heroId' });
+      const today = new Date().toDateString();
+      const key = `${heroId}|${today}`;
+      const count = Number(tavernRerollUsage.get(key) || 0);
+      return res.json({ count, cap: 5 });
+    }
+    if (action === 'reroll-usage-increment' && req.method === 'POST') {
+      const { heroId } = req.body || {};
+      if (!heroId) return res.status(400).json({ error: 'Missing heroId' });
+      const today = new Date().toDateString();
+      const key = `${heroId}|${today}`;
+      const cap = 5;
+      const current = Number(tavernRerollUsage.get(key) || 0);
+      if (current >= cap) return res.json({ ok: false, reason: 'cap' });
+      tavernRerollUsage.set(key, current + 1);
+      return res.json({ ok: true, count: current + 1, cap });
+    }
+    return res.status(400).json({ error: 'Ação inválida' });
+  } catch (err) {
+    console.error('local /api/tavern error:', err);
+    return res.status(500).json({ error: 'Erro no servidor local' });
+  }
+});
+
+setInterval(() => {
+  try {
+    const now = new Date();
+    if (now.getHours() === 0 && now.getMinutes() === 0) {
+      const today = now.toDateString();
+      if (!lastSnapshotAt || new Date(lastSnapshotAt).toDateString() !== today) {
+        const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const end = now;
+        const recent = tavernDiceEvents.filter(ev => { const t = new Date(ev.created_at).getTime(); return t >= start.getTime() && t <= end.getTime(); });
+        const score = {};
+        recent.forEach(ev => { const name = ev.heroName; const crit = !!ev.critical; score[name] = (score[name] || 0) + (crit ? 12 : 2); });
+        const entries = Object.entries(score).sort((a,b) => b[1] - a[1]);
+        const top = entries[0];
+        if (top) {
+          const [heroName, topScore] = top;
+          const snap = { id: `c-${Date.now()}`, week_start: start.toISOString(), week_end: end.toISOString(), hero_name: heroName, score: Number(topScore), created_at: new Date().toISOString() };
+          tavernChampions.push(snap);
+        }
+        lastSnapshotAt = now.toISOString();
+        tavernRerollUsage.clear();
+      }
+    }
+  } catch {}
+}, 60000);
+
+const activeEvents = new Map();
+
+function eventPublicView(e, viewerId) {
+  if (!e) return null;
+  const base = {
+    id: e.id,
+    name: e.name,
+    description: e.description,
+    dateTime: e.dateTime,
+    locationText: e.locationText,
+    lat: e.lat,
+    lng: e.lng,
+    capacity: e.capacity,
+    tags: Array.isArray(e.tags) ? e.tags : [],
+    privacy: e.privacy,
+    ownerId: e.ownerId,
+    createdAt: e.createdAt,
+    deleted: !!e.deleted
+  };
+  const canViewPrivate = e.ownerId === viewerId || (Array.isArray(e.invitedIds) && e.invitedIds.includes(viewerId));
+  const priv = e.privacy;
+  if (priv === 'public') {
+    return {
+      ...base,
+      attendees: Object.fromEntries(Object.entries(e.attendees || {})),
+      invitedIds: Array.isArray(e.invitedIds) ? e.invitedIds : []
+    };
+  }
+  if (priv === 'private') {
+    return canViewPrivate ? {
+      ...base,
+      attendees: Object.fromEntries(Object.entries(e.attendees || {})),
+      invitedIds: Array.isArray(e.invitedIds) ? e.invitedIds : []
+    } : { ...base };
+  }
+  return canViewPrivate ? {
+    ...base,
+    attendees: Object.fromEntries(Object.entries(e.attendees || {})),
+    invitedIds: Array.isArray(e.invitedIds) ? e.invitedIds : []
+  } : { ...base };
+}
+
+app.post('/api/events/create', async (req, res) => {
+  try {
+    const { name, dateTime, locationText, lat, lng, description, capacity, tags, privacy, ownerId, invitedIds } = req.body || {};
+    if (!name || !dateTime || !ownerId) return res.status(400).json({ error: 'name, dateTime e ownerId são obrigatórios' });
+    const id = `e-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+    const ev = {
+      id,
+      name: String(name).slice(0, 80),
+      description: String(description || '').slice(0, 2000),
+      dateTime: new Date(dateTime).toISOString(),
+      locationText: String(locationText || '').slice(0, 200),
+      lat: typeof lat === 'number' ? lat : undefined,
+      lng: typeof lng === 'number' ? lng : undefined,
+      capacity: Math.max(1, Math.min(10000, Number(capacity || 100))),
+      tags: Array.isArray(tags) ? tags.slice(0, 20).map(t => String(t).slice(0, 32)) : [],
+      privacy: ['public','private','invite'].includes(String(privacy)) ? String(privacy) : 'public',
+      ownerId: String(ownerId),
+      createdAt: new Date().toISOString(),
+      attendees: {},
+      invitedIds: Array.isArray(invitedIds) ? invitedIds.map(x => String(x)) : [],
+      messages: [],
+      media: [],
+      ratings: [],
+      deleted: false
+    };
+    activeEvents.set(id, ev);
+    try {
+      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        await supabase.from('events').upsert({ id: ev.id, name: ev.name, description: ev.description, date_time: ev.dateTime, location_text: ev.locationText, lat: ev.lat, lng: ev.lng, capacity: ev.capacity, tags: ev.tags, privacy: ev.privacy, owner_id: ev.ownerId, created_at: ev.createdAt, deleted: ev.deleted }, { onConflict: 'id' });
+      }
+    } catch {}
+    return res.json({ event: eventPublicView(ev, ownerId) });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao criar evento' });
+  }
+});
+
+app.get('/api/events/list', (req, res) => {
+  try {
+    const viewerId = String(req.query.viewerId || '');
+    const tag = String(req.query.tag || '');
+    const ownerId = String(req.query.ownerId || '');
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit || 50)));
+    const offset = Math.max(0, Number(req.query.offset || 0));
+    const all = Array.from(activeEvents.values()).filter(e => {
+      if (e.deleted) return false;
+      if (ownerId && e.ownerId !== ownerId) return false;
+      if (tag && !(Array.isArray(e.tags) && e.tags.map(t => String(t).toLowerCase()).includes(tag.toLowerCase()))) return false;
+      if (e.privacy === 'public') return true;
+      if (e.privacy === 'private') return e.ownerId === viewerId;
+      return e.ownerId === viewerId || (Array.isArray(e.invitedIds) && e.invitedIds.includes(viewerId));
+    });
+    const slice = all.slice(offset, offset + limit).map(e => eventPublicView(e, viewerId));
+    return res.json({ events: slice, pagination: { total: all.length, offset, limit, hasMore: offset + limit < all.length } });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao listar eventos' });
+  }
+});
+
+app.get('/api/events/:id', (req, res) => {
+  try {
+    const viewerId = String(req.query.viewerId || '');
+    const ev = activeEvents.get(String(req.params.id));
+    if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
+    return res.json({ event: eventPublicView(ev, viewerId) });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao obter evento' });
+  }
+});
+
+app.post('/api/events/:id/update', async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const { actorId, updates } = req.body || {};
+    const ev = activeEvents.get(id);
+    if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
+    if (ev.ownerId !== String(actorId)) return res.status(403).json({ error: 'Apenas o organizador pode alterar' });
+    const patch = updates || {};
+    if (patch.name) ev.name = String(patch.name).slice(0, 80);
+    if (patch.description !== undefined) ev.description = String(patch.description || '').slice(0, 2000);
+    if (patch.dateTime) ev.dateTime = new Date(patch.dateTime).toISOString();
+    if (patch.locationText !== undefined) ev.locationText = String(patch.locationText || '').slice(0, 200);
+    if (typeof patch.lat === 'number') ev.lat = patch.lat;
+    if (typeof patch.lng === 'number') ev.lng = patch.lng;
+    if (patch.capacity) ev.capacity = Math.max(1, Math.min(10000, Number(patch.capacity)));
+    if (Array.isArray(patch.tags)) ev.tags = patch.tags.slice(0, 20).map(t => String(t).slice(0, 32));
+    if (patch.privacy && ['public','private','invite'].includes(String(patch.privacy))) ev.privacy = String(patch.privacy);
+    if (Array.isArray(patch.invitedIds)) ev.invitedIds = patch.invitedIds.map(x => String(x));
+    try {
+      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        await supabase.from('events').upsert({ id: ev.id, name: ev.name, description: ev.description, date_time: ev.dateTime, location_text: ev.locationText, lat: ev.lat, lng: ev.lng, capacity: ev.capacity, tags: ev.tags, privacy: ev.privacy, owner_id: ev.ownerId, created_at: ev.createdAt, deleted: ev.deleted }, { onConflict: 'id' });
+      }
+    } catch {}
+    return res.json({ event: eventPublicView(ev, actorId) });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao atualizar evento' });
+  }
+});
+
+app.post('/api/events/:id/delete', async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const { actorId } = req.body || {};
+    const ev = activeEvents.get(id);
+    if (!ev || ev.deleted) return res.json({ ok: true });
+    if (ev.ownerId !== String(actorId)) return res.status(403).json({ error: 'Apenas o organizador pode excluir' });
+    ev.deleted = true;
+    try {
+      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        await supabase.from('events').upsert({ id: ev.id, deleted: true }, { onConflict: 'id' });
+      }
+    } catch {}
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao excluir evento' });
+  }
+});
+
+app.post('/api/events/:id/attend', async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const { viewerId, status } = req.body || {};
+    const ev = activeEvents.get(id);
+    if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
+    const st = String(status || '').toLowerCase();
+    if (!['yes','no','maybe'].includes(st)) return res.status(400).json({ error: 'status inválido' });
+    const currentCount = Object.values(ev.attendees || {}).filter(v => v === 'yes').length;
+    if (st === 'yes' && currentCount >= ev.capacity) return res.status(409).json({ error: 'Limite de participantes atingido' });
+    if (!ev.attendees) ev.attendees = {};
+    ev.attendees[String(viewerId)] = st;
+    try {
+      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        await supabase.from('event_attendance').upsert({ event_id: id, user_id: String(viewerId), status: st, updated_at: new Date().toISOString() }, { onConflict: 'event_id,user_id' });
+      }
+    } catch {}
+    return res.json({ event: eventPublicView(ev, viewerId) });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao confirmar presença' });
+  }
+});
+
+app.get('/api/events/:id/chat', (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const ev = activeEvents.get(id);
+    if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit || 100)));
+    const msgs = Array.isArray(ev.messages) ? ev.messages.slice(-limit) : [];
+    return res.json({ messages: msgs });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao listar chat' });
+  }
+});
+
+app.post('/api/events/:id/chat', async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const { viewerId, text } = req.body || {};
+    const ev = activeEvents.get(id);
+    if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
+    const priv = ev.privacy;
+    const isAllowed = priv === 'public' || ev.ownerId === String(viewerId) || (Array.isArray(ev.invitedIds) && ev.invitedIds.includes(String(viewerId))) || (ev.attendees && ev.attendees[String(viewerId)]);
+    if (!isAllowed) return res.status(403).json({ error: 'Sem permissão para chat' });
+    const msg = { id: `em-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, userId: String(viewerId), text: String(text || '').slice(0, 500), ts: Date.now() };
+    ev.messages = ev.messages || [];
+    ev.messages.push(msg);
+    try {
+      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        await supabase.from('event_messages').insert({ event_id: id, user_id: String(viewerId), text: msg.text, ts: new Date(msg.ts).toISOString() });
+      }
+    } catch {}
+    return res.json({ ok: true, message: msg });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao enviar mensagem' });
+  }
+});
+
+app.post('/api/events/:id/media', async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const { viewerId, url, caption } = req.body || {};
+    const ev = activeEvents.get(id);
+    if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
+    const priv = ev.privacy;
+    const isAllowed = priv === 'public' || ev.ownerId === String(viewerId) || (Array.isArray(ev.invitedIds) && ev.invitedIds.includes(String(viewerId))) || (ev.attendees && ev.attendees[String(viewerId)]);
+    if (!isAllowed) return res.status(403).json({ error: 'Sem permissão para mídia' });
+    const item = { id: `md-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, userId: String(viewerId), url: String(url || '').slice(0, 500), caption: String(caption || '').slice(0, 200), ts: Date.now() };
+    ev.media = ev.media || [];
+    ev.media.push(item);
+    try {
+      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        await supabase.from('event_media').insert({ event_id: id, user_id: String(viewerId), url: item.url, caption: item.caption, ts: new Date(item.ts).toISOString() });
+      }
+    } catch {}
+    return res.json({ ok: true, media: item });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao compartilhar mídia' });
+  }
+});
+
+app.get('/api/events/:id/media', (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const ev = activeEvents.get(id);
+    if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit || 100)));
+    const list = Array.isArray(ev.media) ? ev.media.slice(-limit) : [];
+    return res.json({ media: list });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao listar mídia' });
+  }
+});
+
+app.post('/api/events/:id/rate', async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const { viewerId, stars, comment } = req.body || {};
+    const ev = activeEvents.get(id);
+    if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
+    const eventTime = new Date(ev.dateTime).getTime();
+    if (Date.now() < eventTime) return res.status(409).json({ error: 'Avaliação disponível após o evento' });
+    const attended = ev.attendees && ev.attendees[String(viewerId)] === 'yes';
+    if (!attended) return res.status(403).json({ error: 'Apenas participantes confirmados podem avaliar' });
+    const s = Math.max(1, Math.min(5, Number(stars || 0)));
+    const r = { id: `rt-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, userId: String(viewerId), stars: s, comment: String(comment || '').slice(0, 500), ts: Date.now() };
+    ev.ratings = ev.ratings || [];
+    const prevIdx = ev.ratings.findIndex(x => x.userId === String(viewerId));
+    if (prevIdx >= 0) ev.ratings[prevIdx] = r; else ev.ratings.push(r);
+    try {
+      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        await supabase.from('event_ratings').upsert({ event_id: id, user_id: String(viewerId), stars: s, comment: r.comment, ts: new Date(r.ts).toISOString() }, { onConflict: 'event_id,user_id' });
+      }
+    } catch {}
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao avaliar' });
+  }
+});
+
+app.get('/api/events/recommendations', (req, res) => {
+  try {
+    const viewerId = String(req.query.viewerId || '');
+    const interests = String(req.query.interests || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit || 50)));
+    const offset = Math.max(0, Number(req.query.offset || 0));
+    const all = Array.from(activeEvents.values()).filter(e => {
+      if (e.deleted) return false;
+      if (e.ownerId === viewerId) return false;
+      if (e.privacy !== 'public') return false;
+      const count = Object.values(e.attendees || {}).filter(v => v === 'yes').length;
+      if (count >= e.capacity) return false;
+      if (!interests.length) return true;
+      const etags = (Array.isArray(e.tags) ? e.tags : []).map(t => String(t).toLowerCase());
+      return interests.some(t => etags.includes(t));
+    });
+    const slice = all.slice(offset, offset + limit).map(e => eventPublicView(e, viewerId));
+    return res.json({ events: slice, pagination: { total: all.length, offset, limit, hasMore: offset + limit < all.length } });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao recomendar eventos' });
+  }
+});
+
+app.get('/api/events/export', (req, res) => {
+  try {
+    const ownerId = String(req.query.ownerId || '');
+    if (!ownerId) return res.status(400).json({ error: 'ownerId requerido' });
+    const list = Array.from(activeEvents.values()).filter(e => e.ownerId === ownerId).map(e => ({
+      id: e.id,
+      name: e.name,
+      description: e.description,
+      dateTime: e.dateTime,
+      locationText: e.locationText,
+      lat: e.lat,
+      lng: e.lng,
+      capacity: e.capacity,
+      tags: e.tags,
+      privacy: e.privacy,
+      ownerId: e.ownerId,
+      invitedIds: e.invitedIds,
+      deleted: !!e.deleted
+    }));
+    return res.json({ events: list });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao exportar' });
+  }
+});
+
+app.post('/api/events/import', async (req, res) => {
+  try {
+    const { actorId, events } = req.body || {};
+    if (!actorId || !Array.isArray(events)) return res.status(400).json({ error: 'actorId e events requeridos' });
+    const imported = [];
+    for (const ev of events) {
+      try {
+        if (String(ev.ownerId) !== String(actorId)) continue;
+        const id = String(ev.id || `e-${Date.now()}-${Math.random().toString(36).slice(2,7)}`);
+        const obj = {
+          id,
+          name: String(ev.name || '').slice(0, 80),
+          description: String(ev.description || '').slice(0, 2000),
+          dateTime: new Date(ev.dateTime || Date.now()).toISOString(),
+          locationText: String(ev.locationText || '').slice(0, 200),
+          lat: typeof ev.lat === 'number' ? ev.lat : undefined,
+          lng: typeof ev.lng === 'number' ? ev.lng : undefined,
+          capacity: Math.max(1, Math.min(10000, Number(ev.capacity || 100))),
+          tags: Array.isArray(ev.tags) ? ev.tags.slice(0, 20).map(t => String(t).slice(0, 32)) : [],
+          privacy: ['public','private','invite'].includes(String(ev.privacy)) ? String(ev.privacy) : 'public',
+          ownerId: String(actorId),
+          createdAt: new Date().toISOString(),
+          attendees: {},
+          invitedIds: Array.isArray(ev.invitedIds) ? ev.invitedIds.map(x => String(x)) : [],
+          messages: [],
+          media: [],
+          ratings: [],
+          deleted: !!ev.deleted
+        };
+        activeEvents.set(id, obj);
+        imported.push(eventPublicView(obj, actorId));
+      } catch {}
+    }
+    try {
+      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        for (const e of imported) {
+          await supabase.from('events').upsert({ id: e.id, name: e.name, description: e.description, date_time: e.dateTime, location_text: e.locationText, lat: e.lat, lng: e.lng, capacity: e.capacity, tags: e.tags, privacy: e.privacy, owner_id: e.ownerId, created_at: e.createdAt, deleted: e.deleted }, { onConflict: 'id' });
+        }
+      }
+    } catch {}
+    return res.json({ imported });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao importar' });
+  }
+});
+
+const userProfiles = new Map();
+const userFriends = new Map();
+
+app.get('/api/users/profile', (req, res) => {
+  try {
+    const userId = String(req.query.userId || '');
+    if (!userId) return res.status(400).json({ error: 'userId requerido' });
+    const p = userProfiles.get(userId) || { userId, displayName: '', avatarUrl: '', bio: '', interests: [] };
+    return res.json({ profile: p });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao obter perfil' });
+  }
+});
+
+app.post('/api/users/profile', async (req, res) => {
+  try {
+    const { userId, displayName, avatarUrl, bio, interests } = req.body || {};
+    if (!userId) return res.status(400).json({ error: 'userId requerido' });
+    const p = userProfiles.get(userId) || { userId, displayName: '', avatarUrl: '', bio: '', interests: [] };
+    if (displayName !== undefined) p.displayName = String(displayName).slice(0, 60);
+    if (avatarUrl !== undefined) p.avatarUrl = String(avatarUrl).slice(0, 500);
+    if (bio !== undefined) p.bio = String(bio).slice(0, 1000);
+    if (Array.isArray(interests)) p.interests = interests.slice(0, 20).map(t => String(t).slice(0, 32));
+    userProfiles.set(userId, p);
+    try {
+      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        await supabase.from('user_profiles').upsert({ user_id: userId, display_name: p.displayName, avatar_url: p.avatarUrl, bio: p.bio, interests: p.interests }, { onConflict: 'user_id' });
+      }
+    } catch {}
+    return res.json({ profile: p });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao salvar perfil' });
+  }
+});
+
+app.get('/api/users/friends', (req, res) => {
+  try {
+    const userId = String(req.query.userId || '');
+    if (!userId) return res.status(400).json({ error: 'userId requerido' });
+    const list = Array.from(userFriends.get(userId) || new Set());
+    return res.json({ friends: list });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao listar amigos' });
+  }
+});
+
+app.post('/api/users/friends/add', async (req, res) => {
+  try {
+    const { userId, targetId } = req.body || {};
+    if (!userId || !targetId) return res.status(400).json({ error: 'userId e targetId requeridos' });
+    const setA = userFriends.get(userId) || new Set();
+    const setB = userFriends.get(String(targetId)) || new Set();
+    setA.add(String(targetId));
+    setB.add(String(userId));
+    userFriends.set(userId, setA);
+    userFriends.set(String(targetId), setB);
+    try {
+      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        await supabase.from('user_friends').upsert({ user_id: userId, friend_id: String(targetId) }, { onConflict: 'user_id,friend_id' });
+        await supabase.from('user_friends').upsert({ user_id: String(targetId), friend_id: userId }, { onConflict: 'user_id,friend_id' });
+      }
+    } catch {}
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao adicionar amigo' });
+  }
+});
+
+app.post('/api/users/friends/remove', async (req, res) => {
+  try {
+    const { userId, targetId } = req.body || {};
+    if (!userId || !targetId) return res.status(400).json({ error: 'userId e targetId requeridos' });
+    const setA = userFriends.get(userId) || new Set();
+    const setB = userFriends.get(String(targetId)) || new Set();
+    setA.delete(String(targetId));
+    setB.delete(String(userId));
+    userFriends.set(userId, setA);
+    userFriends.set(String(targetId), setB);
+    try {
+      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        await supabase.from('user_friends').delete().eq('user_id', userId).eq('friend_id', String(targetId));
+        await supabase.from('user_friends').delete().eq('user_id', String(targetId)).eq('friend_id', userId);
+      }
+    } catch {}
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao remover amigo' });
+  }
+});
+
+app.get('/api/events/history', (req, res) => {
+  try {
+    const viewerId = String(req.query.viewerId || '');
+    if (!viewerId) return res.status(400).json({ error: 'viewerId requerido' });
+    const list = Array.from(activeEvents.values()).filter(e => e.attendees && e.attendees[viewerId]).map(e => eventPublicView(e, viewerId));
+    return res.json({ events: list });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao listar histórico' });
+  }
+});
+
+app.get('/api/notifications/list', (req, res) => {
+  try {
+    const viewerId = String(req.query.viewerId || '');
+    if (!viewerId) return res.status(400).json({ error: 'viewerId requerido' });
+    const prof = userProfiles.get(viewerId) || { interests: [] };
+    const now = Date.now();
+    const soonMs = 7 * 24 * 3600 * 1000;
+    const ints = (Array.isArray(prof.interests) ? prof.interests : []).map(s => String(s).toLowerCase());
+    const items = Array.from(activeEvents.values()).filter(e => {
+      if (e.deleted) return false;
+      const time = new Date(e.dateTime).getTime();
+      if (time < now) return false;
+      if (time > now + soonMs) return false;
+      if (e.ownerId === viewerId) return false;
+      const etags = (Array.isArray(e.tags) ? e.tags : []).map(t => String(t).toLowerCase());
+      return ints.length ? ints.some(t => etags.includes(t)) : true;
+    }).map(e => ({ id: `n-${e.id}`, type: 'event_recommendation', event: eventPublicView(e, viewerId) }));
+    return res.json({ notifications: items });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao listar notificações' });
+  }
+});
+
+function scheduleAutoBackup() {
+  try {
+    const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+    const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return;
+    setInterval(async () => {
+      try {
+        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        const [playersRes, heroesRes, questsRes] = await Promise.all([
+          supabase.from('players').select('*'),
+          supabase.from('heroes').select('*'),
+          supabase.from('quests').select('*')
+        ]);
+        if (playersRes.error || heroesRes.error || questsRes.error) return;
+        const payload = {
+          timestamp: new Date().toISOString(),
+          players: playersRes.data || [],
+          heroes: heroesRes.data || [],
+          quests: questsRes.data || [],
+          events: Array.from(activeEvents.values()).map(e => eventPublicView(e, ''))
+        };
+        try { await supabase.storage.createBucket('backups', { public: false }); } catch {}
+        const d = new Date();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const HH = String(d.getHours()).padStart(2, '0');
+        const fileName = `auto-backup-${yyyy}${mm}${dd}-${HH}.json`;
+        const { error: uploadError } = await supabase.storage.from('backups').upload(fileName, Buffer.from(JSON.stringify(payload)), { contentType: 'application/json', upsert: true });
+        if (uploadError) return;
+        try { await supabase.storage.createBucket('logs', { public: false }); } catch {}
+        const log = { type: 'auto-backup', file: fileName, ts: new Date().toISOString(), counts: { players: payload.players.length, heroes: payload.heroes.length, quests: payload.quests.length, events: payload.events.length } };
+        await supabase.storage.from('logs').upload(`auto-${fileName}`, Buffer.from(JSON.stringify(log)), { contentType: 'application/json', upsert: true });
+      } catch {}
+    }, 6 * 60 * 60 * 1000);
+  } catch {}
+}
 
 const HF_TOKEN = process.env.HF_TOKEN;
 const MODEL_ID = process.env.HF_TEXT_MODEL || 'mistralai/Mistral-7B-Instruct-v0.3';
@@ -763,9 +1497,10 @@ app.post('/api/hf-text', async (req, res) => {
     return res.status(400).json({ error: 'Campo "prompt" é obrigatório' });
   }
 
+  const safePrompt = String(prompt).slice(0, 300);
   const composed = systemMessage
-    ? `System: ${systemMessage}\nUser: ${prompt}\nAssistant:`
-    : prompt;
+    ? `System: ${systemMessage}\nUser: ${safePrompt}\nAssistant:`
+    : safePrompt;
 
   try {
     const models = [
@@ -781,9 +1516,9 @@ app.post('/api/hf-text', async (req, res) => {
           model,
           messages: [
             ...(systemMessage ? [{ role: 'system', content: systemMessage }] : []),
-            { role: 'user', content: prompt }
+            { role: 'user', content: safePrompt }
           ],
-          max_tokens: maxTokens,
+          max_tokens: Math.min(Number(maxTokens) || 512, 1024),
           temperature,
           provider: 'hf-inference'
         });
@@ -813,7 +1548,7 @@ app.post('/api/hf-text', async (req, res) => {
       const output = await hfRouterChatCompletion('Qwen/Qwen2.5-7B-Instruct', [
         ...(systemMessage ? [{ role: 'system', content: systemMessage }] : []),
         { role: 'user', content: prompt }
-      ], { max_tokens: maxTokens, temperature });
+      ], { max_tokens: Math.min(Number(maxTokens) || 512, 1024), temperature });
       if (output) return res.json({ text: output });
     } catch (err) {
       console.warn('Router v1 fallback error (Qwen):', err?.message || String(err));
@@ -857,7 +1592,7 @@ app.post('/api/gerar-imagem', async (req, res) => {
 
     for (const model of models) {
       try {
-        const blob = await hfClient.textToImage({ model, inputs: prompt, provider: 'hf-inference' });
+        const blob = await hfClient.textToImage({ model, inputs: String(prompt).slice(0, 200), provider: 'hf-inference' });
         const arrayBuffer = await blob.arrayBuffer();
         const base64 = Buffer.from(arrayBuffer).toString('base64');
         return res.json({ imagem: `data:image/png;base64,${base64}` });
@@ -962,6 +1697,7 @@ app.get('/api/pollinations-image', async (req, res) => {
 });
 
 // Login com Google: valida ID token via endpoint tokeninfo
+const LOGIN_FAILS = new Map();
 app.post('/api/login-google', async (req, res) => {
   const { credential } = req.body || {};
   if (!credential) {
@@ -974,15 +1710,31 @@ app.post('/api/login-google', async (req, res) => {
   }
 
   try {
+    const ip = (req.ip || 'local').toString();
+    const f = LOGIN_FAILS.get(ip) || { fails: 0, since: Date.now(), lockedUntil: 0 };
+    const now = Date.now();
+    if (f.lockedUntil && now < f.lockedUntil) {
+      return res.status(429).json({ error: 'Bloqueado temporariamente por falhas de login' });
+    }
     const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
     const payload = await verifyRes.json();
 
     if (!verifyRes.ok) {
       const message = payload?.error_description || payload?.error || 'Falha ao validar token';
+      f.fails = (f.fails || 0) + 1;
+      if (f.fails >= 5) {
+        f.lockedUntil = now + 15 * 60 * 1000;
+      }
+      LOGIN_FAILS.set(ip, f);
       return res.status(401).json({ error: message });
     }
 
     if (payload.aud !== clientId) {
+      f.fails = (f.fails || 0) + 1;
+      if (f.fails >= 5) {
+        f.lockedUntil = now + 15 * 60 * 1000;
+      }
+      LOGIN_FAILS.set(ip, f);
       return res.status(401).json({ error: 'Token inválido para este cliente' });
     }
 
@@ -1004,6 +1756,7 @@ app.post('/api/login-google', async (req, res) => {
       }
     } catch {}
 
+    LOGIN_FAILS.delete(ip);
     return res.json({ user });
   } catch (err) {
     console.error(err);
@@ -1172,7 +1925,8 @@ app.get('/api/backup', async (_req, res) => {
       timestamp: new Date().toISOString(),
       players: playersRes.data || [],
       heroes: heroesRes.data || [],
-      quests: questsRes.data || []
+      quests: questsRes.data || [],
+      events: Array.from(activeEvents.values()).map(e => eventPublicView(e, ''))
     };
     try { await supabase.storage.createBucket('backups', { public: false }); } catch {}
     const d = new Date();
@@ -1197,4 +1951,5 @@ app.get('/api/backup', async (_req, res) => {
 });
 app.listen(PORT, () => {
   console.log(`Servidor IA rodando na porta ${PORT}`);
+  scheduleAutoBackup();
 });

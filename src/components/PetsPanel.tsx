@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useHeroStore } from '../store/heroStore';
 import { Egg, Pet } from '../types/hero';
 import { INCUBATION_MS, EGG_IDENTIFY_COST } from '../utils/pets';
@@ -115,12 +116,12 @@ const EggCard: React.FC<{ egg: Egg; onIdentify: () => void; onIncubate: () => vo
   );
 };
 
-  const PetCard: React.FC<{ pet: Pet; onTrain: () => void; onSoulStone: () => void; onFeedBasic: () => void; onFeedDeluxe: () => void; onSetActive: () => void; onRename: (name: string) => void; onRefine: () => void; onSuggestMission?: () => void; inventory: Record<string, number>; isActive: boolean }>
-  = ({ pet, onTrain, onSoulStone, onFeedBasic, onFeedDeluxe, onSetActive, onRename, onRefine, onSuggestMission, inventory, isActive }) => (
-    <div className="p-4 rounded-lg bg-slate-800 border border-slate-700 flex flex-col gap-2">
+  const PetCard: React.FC<{ pet: Pet; onTrain: () => void; onSoulStone: () => void; onFeedBasic: () => void; onFeedDeluxe: () => void; onSetActive: () => void; onRename: (name: string) => void; onRefine: () => void; onSuggestMission?: () => void; onSell?: () => void; inventory: Record<string, number>; isActive: boolean }>
+  = ({ pet, onTrain, onSoulStone, onFeedBasic, onFeedDeluxe, onSetActive, onRename, onRefine, onSuggestMission, onSell, inventory, isActive }) => (
+    <div className="p-4 rounded-lg bg-slate-800 border border-slate-700 flex flex-col gap-2 overflow-hidden clip-container">
       <div className="flex justify-between items-center">
         <div className="font-semibold">{pet.name} {isActive && <span className="ml-2 text-xs bg-emerald-700 text-white px-2 py-1 rounded">Ativo</span>} {pet.mutation?.visualBadge && <span className="ml-1">{pet.mutation.visualBadge}</span>}</div>
-        <div className="text-xs text-amber-300">{pet.type} • {pet.petClass} • {pet.rarity}</div>
+        <div className="text-xs text-amber-300">{pet.type} • {pet.petClass} • {pet.rarity ?? 'comum'}</div>
       </div>
       <div className="text-sm">Nível {pet.level} • Estágio: {pet.stage.replace('_', ' ')}</div>
       {pet.exclusiveSkill && <div className="text-xs text-emerald-300">Skill Exclusiva: {pet.exclusiveSkill}</div>}
@@ -143,7 +144,7 @@ const EggCard: React.FC<{ egg: Egg; onIdentify: () => void; onIncubate: () => vo
           </div>
         )}
       </div>
-      <div className="flex gap-2 mt-2">
+      <div className="flex flex-wrap gap-2 mt-2 clearfix min-w-0">
         <button onClick={onTrain} className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm">🎖 Treinar (+100 XP)</button>
         <button disabled={!inventory['pedra-alma']} onClick={onSoulStone} className={`px-3 py-1 rounded ${inventory['pedra-alma'] ? 'bg-violet-600 hover:bg-violet-700' : 'bg-gray-700'} text-white text-sm`}>🪨 Pedra de Alma (+300 XP)</button>
         <button disabled={!inventory['racao-basica']} onClick={onFeedBasic} className={`px-3 py-1 rounded ${inventory['racao-basica'] ? 'bg-orange-600 hover:bg-orange-700' : 'bg-gray-700'} text-white text-sm`}>🍖 Ração (+50 XP)</button>
@@ -151,19 +152,11 @@ const EggCard: React.FC<{ egg: Egg; onIdentify: () => void; onIncubate: () => vo
         <button onClick={onSetActive} className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-sm">⭐ Tornar Ativo</button>
         <button disabled={!inventory['essencia-vinculo'] && !inventory['pedra-magica']} onClick={onRefine} className={`px-3 py-1 rounded ${(inventory['essencia-vinculo'] || inventory['pedra-magica']) ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-700'} text-white text-sm`}>🔗 Refinar Vínculo (+1%)</button>
         {onSuggestMission && !(inventory['essencia-vinculo'] || inventory['pedra-magica']) && (
-          <button onClick={onSuggestMission} className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-sm">🐾 Sugerir Missão</button>
+          <button aria-label="Sugerir Missão" onClick={onSuggestMission} className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 active:brightness-90 text-white text-sm">🐾 Sugerir Missão</button>
         )}
-        <span className="text-[11px] text-gray-400 self-center">
-          {(() => {
-            const needBond = !(inventory['essencia-vinculo'] || 0);
-            const needMagic = !(inventory['pedra-magica'] || 0);
-            const parts: string[] = [];
-            if (needBond) parts.push('🔗 Essência de Vínculo');
-            if (needMagic) parts.push('🔷 Pedra Mágica');
-            if (parts.length === 0) return 'Pronto para refino';
-            return `Materiais: ${parts.join(' ou ')}`;
-          })()}
-        </span>
+        {onSell && (
+          <button aria-label="Vender Mascote" onClick={onSell} className="px-3 py-1 rounded bg-green-700 hover:bg-green-800 active:brightness-90 text-white text-sm">💸 Vender Mascote</button>
+        )}
         <button disabled={!inventory['tonico-companheiro']} onClick={() => {
           if (inventory['tonico-companheiro']) {
             if (consumeInventoryItem(useHeroStore.getState().getSelectedHero()!.id, 'tonico-companheiro', 1)) {
@@ -173,7 +166,17 @@ const EggCard: React.FC<{ egg: Egg; onIdentify: () => void; onIncubate: () => vo
           }
         }} className={`px-3 py-1 rounded ${inventory['tonico-companheiro'] ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-gray-700'} text-white text-sm`}>⚡ Tônico de Energia (+50)</button>
       </div>
-      <div className="flex items-center gap-2 mt-2">
+      {(() => {
+        const totalReq = 1;
+        const readyCount = ((inventory['essencia-vinculo']||0)>0 || (inventory['pedra-magica']||0)>0) ? 1 : 0;
+        const pct = Math.round((readyCount / totalReq) * 100);
+        return (
+          <div className="mt-1 w-full bg-gray-700 rounded h-2">
+            <div className="h-2 bg-indigo-500" style={{ width: `${pct}%` }} />
+          </div>
+        );
+      })()}
+      <div className="flex items-center gap-2 mt-2 flex-wrap min-w-0">
         <input type="text" placeholder="Renomear" className="px-2 py-1 rounded bg-slate-700 text-white text-sm" onKeyDown={(e) => { if (e.key === 'Enter') onRename((e.target as HTMLInputElement).value); }} />
         <span className="text-xs text-gray-300">Pressione Enter para salvar</span>
       </div>
@@ -183,17 +186,34 @@ const EggCard: React.FC<{ egg: Egg; onIdentify: () => void; onIncubate: () => vo
 export const PetsPanel: React.FC = () => {
   const { getSelectedHero, generateEggForSelected, identifyEggForSelected, startIncubationForSelected, accelerateIncubationForSelected, hatchEggForSelected, consumeInventoryItem, addPetXPForSelected, setActivePet, updateHero, refinePetForSelected, suggestCompanionQuestForSelected } = useHeroStore();
   const hero = getSelectedHero();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<'ovos'|'camara'|'meus'|'historico'>('ovos');
   const [hatchingEggId, setHatchingEggId] = useState<string | null>(null);
   const [hatchResultPetId, setHatchResultPetId] = useState<string | null>(null);
   const [historyFilter, setHistoryFilter] = useState<'todos'|'raro'|'epico'|'lendario'|'mistico'>('todos');
   const [confirmEggId, setConfirmEggId] = useState<string | null>(null);
   const [confirmAccelerateGold, setConfirmAccelerateGold] = useState<number>(0);
+  const [confirmSellPetId, setConfirmSellPetId] = useState<string | null>(null);
+  const [isSelling, setIsSelling] = useState<boolean>(false);
 
   useEffect(() => {
     const iv = setInterval(() => { useHeroStore.getState().updateIncubationTick?.(); }, 1000);
     return () => clearInterval(iv);
   }, []);
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(location.search);
+      const hatchNext = params.get('hatchNext');
+      const eggsArr = hero.eggs || [];
+      if (hatchNext && eggsArr.length > 0) {
+        const ready = eggsArr.find(e => e.status === 'pronto_para_chocar');
+        if (ready) setConfirmEggId(ready.id);
+        navigate('/pets', { replace: true });
+      }
+    } catch {}
+  }, [location.search]);
 
   if (!hero) {
     return (
@@ -206,7 +226,7 @@ export const PetsPanel: React.FC = () => {
   }
 
   const eggs = hero.eggs || [];
-  const pets = hero.pets || [];
+  const pets = (hero.pets || []).filter(Boolean).map(p => ({ ...p, rarity: (p as any).rarity ?? 'comum' }));
   const inventory = hero.inventory.items || {};
   const rarityOrder = ['mistico','lendario','epico','raro','incomum','comum'];
   const statusOrder = ['pronto_para_chocar','incubando','identificado','misterioso'];
@@ -223,6 +243,39 @@ export const PetsPanel: React.FC = () => {
     eggs.forEach(e => { const r = String(e.identified?.rarity || e.baseRarity); acc[r] = (acc[r]||0)+1; });
     return acc;
   })();
+  const hatchSummary = (() => {
+    const hist = hero.hatchHistory || [];
+    const total = hist.length;
+    let mut = 0;
+    let totalCost = 0;
+    const counts: Record<string, number> = { comum:0, incomum:0, raro:0, epico:0, lendario:0, mistico:0 };
+    const now = Date.now();
+    const last7 = { total: 0, mutations: 0, cost: 0 };
+    const last30 = { total: 0, mutations: 0, cost: 0 };
+    hist.forEach(h => {
+      const p = pets.find(pp => pp.id === h.petId);
+      const ts = new Date(h.timestamp).getTime();
+      if (p) {
+        counts[String(p.rarity ?? 'comum')] = (counts[String(p.rarity ?? 'comum')] || 0) + 1;
+        if (p.mutation?.variant) mut++;
+      }
+      if (typeof h.hatchCost === 'number') totalCost += h.hatchCost;
+      if (now - ts <= 7*24*60*60*1000) {
+        last7.total += 1;
+        if (p?.mutation?.variant) last7.mutations += 1;
+        if (typeof h.hatchCost === 'number') last7.cost += h.hatchCost;
+      }
+      if (now - ts <= 30*24*60*60*1000) {
+        last30.total += 1;
+        if (p?.mutation?.variant) last30.mutations += 1;
+        if (typeof h.hatchCost === 'number') last30.cost += h.hatchCost;
+      }
+    });
+    const rate = total > 0 ? Math.round((mut / total) * 100) : 0;
+    const rate7 = last7.total > 0 ? Math.round((last7.mutations / last7.total) * 100) : 0;
+    const rate30 = last30.total > 0 ? Math.round((last30.mutations / last30.total) * 100) : 0;
+    return { total, counts, rate, totalCost, last7, last30, rate7, rate30 };
+  })();
   const filteredHistory = (() => {
     const hist = hero.hatchHistory || [];
     if (historyFilter === 'todos') return hist;
@@ -231,7 +284,7 @@ export const PetsPanel: React.FC = () => {
     return hist.filter(h => {
       const pet = pets.find(p => p.id === h.petId);
       if (!pet) return false;
-      return order.indexOf(pet.rarity) >= minIdx;
+      return order.indexOf(pet.rarity ?? 'comum') >= minIdx;
     });
   })();
 
@@ -274,12 +327,15 @@ export const PetsPanel: React.FC = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-6xl mx-auto clip-container overflow-hidden">
       <div className="mb-4 flex gap-2">
         <TabButton active={tab==='ovos'} onClick={() => setTab('ovos')} label="Inventário de Ovos" icon="🥚" />
         <TabButton active={tab==='camara'} onClick={() => setTab('camara')} label="Câmara de Eclosão" icon="🪽" />
         <TabButton active={tab==='meus'} onClick={() => setTab('meus')} label="Meus Mascotes" icon="🐾" />
         <TabButton active={tab==='historico'} onClick={() => setTab('historico')} label="Histórico de Eclosões" icon="📜" />
+        <label className="ml-auto flex items-center gap-1 text-xs text-gray-300">
+          <input type="checkbox" onChange={e => { try { localStorage.setItem('auto_accept_companion_mission', e.target.checked ? '1' : '0'); if (hero?.id) trackMetric.featureUsed(hero.id, `pref:auto_accept_companion_mission:${e.target.checked?'on':'off'}`); } catch {} }} defaultChecked={(() => { try { return localStorage.getItem('auto_accept_companion_mission') === '1'; } catch { return false; } })()} /> Aceitar missão sugerida
+        </label>
       </div>
 
       {tab === 'ovos' && (
@@ -435,8 +491,11 @@ export const PetsPanel: React.FC = () => {
                   const ok = suggestCompanionQuestForSelected();
                   if (ok) {
                     try { (window as any).notificationBus?.emit?.({ type: 'quest', title: 'Missão sugerida', message: 'Uma missão de companheiros foi adicionada ao quadro', icon: '🐾', duration: 2500 }); } catch {}
+                  } else {
+                    try { (window as any).notificationBus?.emit?.({ type: 'item', title: 'Sem missão disponível', message: 'Nenhuma necessidade detectada para sugerir missão.', icon: 'ℹ️', duration: 2000 }); } catch {}
                   }
                 }}
+                onSell={() => setConfirmSellPetId(pet.id)}
               />
             ))}
           </div>
@@ -446,6 +505,18 @@ export const PetsPanel: React.FC = () => {
       {tab === 'historico' && (
         <div className="space-y-3">
           <h2 className="text-xl font-bold">Histórico de Eclosões</h2>
+          <div className="text-xs text-gray-300 flex flex-wrap gap-2">
+            <span className="px-2 py-1 rounded bg-slate-800 border border-slate-700">Total: {hatchSummary.total}</span>
+            {Object.entries(hatchSummary.counts).map(([r,c]) => (
+              <span key={`sum-${r}`} className="px-2 py-1 rounded bg-slate-800 border border-slate-700">{r}: {c}</span>
+            ))}
+            <span className="px-2 py-1 rounded bg-slate-800 border border-slate-700">Taxa de mutação: {hatchSummary.rate}%</span>
+            <span className="px-2 py-1 rounded bg-slate-800 border border-slate-700">Custo total: {hatchSummary.totalCost} ouro</span>
+          </div>
+          <div className="text-xs text-gray-300 flex flex-wrap gap-2">
+            <span className="px-2 py-1 rounded bg-slate-800 border border-slate-700">Últimos 7 dias: {hatchSummary.last7.total} • Mutação {hatchSummary.rate7}% • Custo {hatchSummary.last7.cost} ouro</span>
+            <span className="px-2 py-1 rounded bg-slate-800 border border-slate-700">Últimos 30 dias: {hatchSummary.last30.total} • Mutação {hatchSummary.rate30}% • Custo {hatchSummary.last30.cost} ouro</span>
+          </div>
           <div className="flex gap-2 items-center text-xs">
             <span className="text-gray-300">Filtrar:</span>
             {['todos','raro','epico','lendario','mistico'].map(f => (
@@ -455,8 +526,15 @@ export const PetsPanel: React.FC = () => {
           <div className="space-y-2">
             {filteredHistory.length === 0 && <div className="text-gray-400">Nenhuma eclosão registrada para este filtro.</div>}
             {filteredHistory.map(h => (
-              <div key={h.timestamp} className="p-3 rounded bg-slate-800 border border-slate-700 text-sm text-gray-200">
-                🐣 Eclodiu em {new Date(h.timestamp).toLocaleString()} • Mascote {(hero.pets||[]).find(p=>p.id===h.petId)?.name || h.petId.slice(0,8)} • Raridade {(hero.pets||[]).find(p=>p.id===h.petId)?.rarity}
+              <div key={h.timestamp} className="p-3 rounded bg-slate-800 border border-slate-700 text-sm text-gray-200 flex items-center justify-between">
+                <div>
+                  🐣 Eclodiu em {new Date(h.timestamp).toLocaleString()} • Mascote {(hero.pets||[]).find(p=>p.id===h.petId)?.name || h.petId.slice(0,8)} • Raridade {(hero.pets||[]).find(p=>p.id===h.petId)?.rarity}
+                </div>
+                {(() => {
+                  const pet = (hero.pets||[]).find(p=>p.id===h.petId);
+                  if (pet?.mutation?.variant) return <span className="px-2 py-1 rounded bg-amber-700 text-white text-xs">✨ Mutado</span>;
+                  return null;
+                })()}
               </div>
             ))}
           </div>
@@ -525,6 +603,38 @@ export const PetsPanel: React.FC = () => {
               <div className="mt-4 flex gap-2">
                 <button disabled={insufficient} onClick={confirmHatchProceed} className={`px-3 py-2 rounded ${insufficient ? 'bg-gray-700 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}>Confirmar</button>
                 <button onClick={() => { setConfirmAccelerateGold(0); setConfirmEggId(null); }} className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600">Cancelar</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      {confirmSellPetId && (() => {
+        const pet = (hero.pets || []).find(p => p.id === confirmSellPetId)!;
+        const baseByRarity: Record<string, number> = { comum: 100, incomum: 200, raro: 400, epico: 800, lendario: 1600, mistico: 3000 };
+        const base = baseByRarity[String(pet.rarity ?? 'comum')] || 100;
+        const levelBonus = Math.max(0, pet.level || 1) * 20;
+        const refineBonus = Math.max(0, pet.refineLevel || 0) * 50;
+        const mutationBonus = pet.mutation?.variant ? 200 : 0;
+        const price = base + levelBonus + refineBonus + mutationBonus;
+        return (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center" role="dialog" aria-modal="true">
+            <div className="w-full max-w-md rounded-xl border border-amber-500 bg-slate-900 p-5 text-white">
+              <div className="text-lg font-semibold mb-2">Confirmar Venda de Mascote</div>
+              <div className="text-sm text-gray-200">Você receberá {price} ouro por {pet.name}.</div>
+              <div className="mt-2 text-xs text-gray-300">Raridade: {String(pet.rarity ?? 'comum')} • Nível {pet.level} • Refino {(pet.refineLevel||0)}</div>
+              <div className="mt-4 flex gap-2">
+                <button aria-busy={isSelling} onClick={() => {
+                  setIsSelling(true);
+                  setTimeout(() => {
+                    try {
+                      useHeroStore.getState().sellPetForSelected(confirmSellPetId!);
+                      (window as any).notificationBus?.emit?.({ type: 'gold', title: 'Venda concluída', message: `${pet.name} vendido por ${price} ouro.`, icon: '💰', duration: 3000 });
+                    } catch {}
+                    setIsSelling(false);
+                    setConfirmSellPetId(null);
+                  }, 600);
+                }} className={`px-3 py-2 rounded ${isSelling ? 'bg-gray-700 cursor-wait' : 'bg-green-700 hover:bg-green-800'} text-white`}>{isSelling ? 'Processando…' : 'Confirmar'}</button>
+                <button onClick={() => setConfirmSellPetId(null)} className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600">Cancelar</button>
               </div>
             </div>
           </div>

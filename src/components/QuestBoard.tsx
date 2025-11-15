@@ -98,7 +98,14 @@ const QuestBoard: React.FC = () => {
   const selectedHero = getSelectedHero();
   
   const [selectedTab, setSelectedTab] = useState<'available' | 'active' | 'completed'>('available');
-  const [companionsOnly, setCompanionsOnly] = useState(false);
+  const [companionsOnly, setCompanionsOnly] = useState<boolean>(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      if (q.get('companions') === '1') return true;
+      const ls = localStorage.getItem('questboard_companions_only');
+      return ls === '1';
+    } catch { return false; }
+  });
   const [forceUpdate, setForceUpdate] = useState(0);
 
   // Selecionar automaticamente o primeiro herói se não há nenhum selecionado
@@ -226,6 +233,28 @@ const QuestBoard: React.FC = () => {
                   return has ? (<span className="px-2 py-1 rounded-md text-xs font-medium bg-emerald-900/30 text-emerald-300 border border-emerald-600/30 flex items-center gap-1">🐾 Companheiros</span>) : null;
                 } catch { return null; }
               })()}
+              {(() => {
+                try {
+                  const hero = getSelectedHero();
+                  if (!hero) return null;
+                  const inv = hero.inventory.items || {} as Record<string, number>;
+                  let pct = 0;
+                  if (String(quest.id).startsWith('companion-')) {
+                    const parts = String(quest.id).split('-');
+                    const target = parts[1];
+                    pct = (inv[target] || 0) > 0 ? 100 : 0;
+                  } else {
+                    const compSet = new Set(['racao-basica','racao-deluxe','pedra-alma','pedra-magica','essencia-vinculo','essencia-bestial','pergaminho-montaria','essencia-calor','brasas-magicas']);
+                    const rewardIds = (quest.rewards?.items || []).map(i => (typeof (i as any) === 'string' ? (i as any) : (i as any).id)).filter(id => compSet.has(id));
+                    const total = rewardIds.length;
+                    const have = rewardIds.filter(id => (inv[id] || 0) > 0).length;
+                    pct = total > 0 ? Math.round((have / total) * 100) : 0;
+                  }
+                  return (
+                    <span className="px-2 py-1 rounded-md text-xs font-medium bg-indigo-900/30 text-indigo-300 border border-indigo-600/30 flex items-center gap-1">Progresso {pct}%</span>
+                  );
+                } catch { return null; }
+              })()}
             </div>
           </div>
         </div>
@@ -315,10 +344,10 @@ const QuestBoard: React.FC = () => {
   return (
     <div className="container mx-auto p-6">
       <div className="flex items-center justify-between mb-8">
-        <h2 className="text-3xl font-bold text-amber-400">Quadro de Missões</h2>
+        <h2 className="text-3xl font-bold text-amber-400">Quadro de Missões {companionsOnly && <span className="ml-2 text-sm px-2 py-1 rounded bg-emerald-800/40 text-emerald-200 border border-emerald-600/40">Companheiros ({availableQuests.filter(q => q.isGuildQuest).length})</span>}</h2>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setCompanionsOnly(v => !v)}
+            onClick={() => setCompanionsOnly(v => { try { localStorage.setItem('questboard_companions_only', v ? '0' : '1'); } catch {}; return !v; })}
             className={`px-3 py-2 rounded-md font-medium transition-colors ${companionsOnly ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'}`}
             title="Mostrar apenas missões de companheiros"
           >
@@ -341,7 +370,10 @@ const QuestBoard: React.FC = () => {
         return (
           <div className="mb-6 p-3 rounded-lg bg-emerald-900/30 border border-emerald-600/30 text-emerald-200 text-sm flex items-center justify-between">
             <div className="flex items-center gap-2"><span>🐾 Nova Missão de Companheiros adicionada:</span><span className="font-semibold">{bannerQuest.title}</span></div>
-            <a href="#" className="px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-xs" onClick={(e) => { e.preventDefault(); setSelectedTab('available'); }}>Ver</a>
+            <div className="flex items-center gap-2">
+              <a href="#" className="px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-xs" onClick={(e) => { e.preventDefault(); setSelectedTab('available'); }}>Ver</a>
+              <button className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white text-xs" onClick={() => { handleAcceptQuest(bannerQuest); setSelectedTab('active'); }}>Aceitar agora</button>
+            </div>
           </div>
         );
       })()}

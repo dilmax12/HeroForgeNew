@@ -1,4 +1,5 @@
 import { Hero } from '../types/hero';
+import type { Quest } from '../types/hero';
 
 export interface ReputationLevel {
   name: string;
@@ -202,4 +203,49 @@ export function formatReputationChange(change: number): string {
   const sign = change > 0 ? '+' : '';
   const color = change > 0 ? 'text-green-400' : 'text-red-400';
   return `<span class="${color}">${sign}${change}</span>`;
+}
+
+// Inferir mudanças de reputação com base no conteúdo da missão
+export function inferQuestFactionChanges(quest: Quest): Array<{ factionName: string; change: number; reason?: string }> {
+  const text = `${quest.title} ${quest.description}`.toLowerCase();
+  const baseByDifficulty: Record<string, number> = { rapida: 1, facil: 2, padrao: 3, medio: 5, dificil: 8, epica: 12 };
+  const base = baseByDifficulty[quest.difficulty] ?? 3;
+
+  const changes: Array<{ factionName: string; change: number; reason?: string }> = [];
+
+  if (quest.isGuildQuest) {
+    const guildBase: Record<string, number> = { facil: 5, medio: 8, dificil: 12, epica: 20 };
+    const gb = guildBase[quest.difficulty] ?? 6;
+    changes.push({ factionName: 'Ordem', change: gb, reason: 'Missão de guilda' });
+    return changes;
+  }
+
+  if (quest.type === 'exploracao') {
+    changes.push({ factionName: 'Livre', change: base, reason: 'Exploração e mapeamento' });
+  } else if (quest.type === 'caca' || quest.type === 'contrato' || quest.type === 'historia') {
+    changes.push({ factionName: 'Ordem', change: base, reason: 'Proteção e estabilidade' });
+  }
+
+  const keywordMap: Array<{ re: RegExp; faction: string; delta: number; reason: string }> = [
+    { re: /(comerciante|mercador|rota|caravana)/, faction: 'Livre', delta: Math.max(1, Math.floor(base * 0.5)), reason: 'Apoio a comércio' },
+    { re: /(cultista|ladrao|roubo|contrabando|clandestino|assassino)/, faction: 'Sombra', delta: -Math.max(1, Math.floor(base * 0.4)), reason: 'Contrário às sombras' },
+    { re: /(resgatar|defender|patrulha|guarda|protege)/, faction: 'Ordem', delta: Math.max(1, Math.floor(base * 0.5)), reason: 'Ações de ordem' },
+    { re: /(mapear|explorar|ruínas|descobrir)/, faction: 'Livre', delta: Math.max(1, Math.floor(base * 0.4)), reason: 'Exploração livre' }
+  ];
+
+  keywordMap.forEach(rule => {
+    if (rule.re.test(text)) {
+      changes.push({ factionName: rule.faction, change: rule.delta, reason: rule.reason });
+    }
+  });
+
+  const merged: Record<string, { change: number; reason?: string[] }> = {};
+  changes.forEach(c => {
+    const key = c.factionName;
+    merged[key] = merged[key] || { change: 0, reason: [] };
+    merged[key].change += c.change;
+    if (c.reason) merged[key].reason!.push(c.reason);
+  });
+
+  return Object.entries(merged).map(([factionName, info]) => ({ factionName, change: info.change, reason: info.reason?.join('; ') }));
 }

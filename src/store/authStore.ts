@@ -21,22 +21,21 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   login: (user, token) => {
     try {
-      localStorage.setItem('hf_hero_auth', JSON.stringify({ user, token }));
+      sessionStorage.setItem('hf_user', JSON.stringify({ user }));
     } catch {}
-    set({ user, token, isAuthenticated: true });
+    set({ user, token: null, isAuthenticated: true });
   },
   logout: () => {
-    try { localStorage.removeItem('hf_hero_auth'); } catch {}
+    try { sessionStorage.removeItem('hf_user'); } catch {}
     set({ user: null, token: null, isAuthenticated: false });
   }
 }));
 
-// try restore from localStorage
 try {
-  const raw = localStorage.getItem('hf_hero_auth');
+  const raw = sessionStorage.getItem('hf_user');
   if (raw) {
-    const { user, token } = JSON.parse(raw);
-    useAuthStore.setState({ user, token, isAuthenticated: true });
+    const { user } = JSON.parse(raw);
+    useAuthStore.setState({ user, token: null, isAuthenticated: true });
   }
 } catch {}
 

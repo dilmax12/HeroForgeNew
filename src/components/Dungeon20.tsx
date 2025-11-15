@@ -8,6 +8,7 @@ import { generateChestLoot } from '../utils/chestLoot';
 import { SHOP_ITEMS } from '../utils/shop';
 import BattleModal from './BattleModal';
 import { RankLevel } from '../types/ranks';
+import { rankSystem } from '../utils/rankSystem';
 import { useHeroStore as useStoreRef } from '../store/heroStore';
 
 type FloorResult = {
@@ -81,7 +82,7 @@ export default function Dungeon20() {
         return 3;
     }
   };
-  const heroRank: RankLevel | undefined = hero?.rankData?.currentRank as RankLevel | undefined;
+  const heroRank: RankLevel | undefined = hero ? (rankSystem.calculateRank(hero) as RankLevel) : undefined;
   const maxFloorsAllowed = getMaxFloorsByRank(heroRank);
 
   const startRun = () => {

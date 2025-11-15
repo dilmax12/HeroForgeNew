@@ -26,6 +26,7 @@ Informações do herói:
 - Nome: ${hero.name}
 - Classe: ${hero.class}
 - Nível: ${hero.progression.level}
+- Alinhamento: ${hero.alignment}
 - Atributos principais: ${Object.entries(hero.attributes)
       .sort(([,a], [,b]) => b - a)
       .slice(0, 3)
@@ -54,7 +55,7 @@ Informações do herói:
         prompt += '\n\nConte como o herói conquistou uma de suas maiores realizações.';
         break;
       default:
-        prompt += '\n\nCrie uma história épica que capture a essência deste herói.';
+        prompt += '\n\nCrie uma história épica que capture a essência deste herói e reflita seu alinhamento em decisões, tom e consequências.';
     }
 
     return prompt;

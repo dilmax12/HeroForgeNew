@@ -21,6 +21,7 @@ export default function HuntingMissions() {
   const generateEggForSelected = useStoreRef(s => s.generateEggForSelected)
 
   const [biome, setBiome] = useState<Biome>('Colinas de Boravon')
+  const [categorySel, setCategorySel] = useState<'controle'|'coleta'|'escolta'|'especial'|null>(null)
   const [mission, setMission] = useState<HuntingMission | null>(null)
   const [running, setRunning] = useState(false)
   const [finished, setFinished] = useState(false)
@@ -33,14 +34,16 @@ export default function HuntingMissions() {
   const getHeroRankProgress = useHeroStore(s => s.getHeroRankProgress)
   const rankProgress = useMemo(() => (hero ? getHeroRankProgress(hero.id) : null), [hero?.id, hero?.progression?.xp, hero?.stats?.questsCompleted])
   const [autoRun, setAutoRun] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
 
   const phasesTotal = useMemo(() => mission?.phases || 0, [mission?.phases])
   const rank = hero?.rankData?.currentRank
 
   useEffect(() => {
     if (!hero) return
-    setMission(generateHuntingMission(hero, biome))
-  }, [hero?.id, biome])
+    const prefCat = (hero.rankData?.currentRank === 'F') ? (categorySel ?? undefined) : undefined
+    setMission(generateHuntingMission(hero, biome, prefCat as any))
+  }, [hero?.id, biome, categorySel])
 
   const canEnter = useMemo(() => {
     if (!hero || !mission) return false
@@ -85,6 +88,20 @@ export default function HuntingMissions() {
     const chance = Math.max(0.2, Math.min(0.95, base + classBonus))
     return Math.round(chance * 100)
   }, [hero?.id, mission?.id])
+
+  const estimatedTotals = useMemo(() => {
+    if (!mission) return null
+    const p = (estimatedSuccess ?? 80) / 100
+    const xpPer = Math.round(p * mission.baseRewards.xp + (1 - p) * Math.round(mission.baseRewards.xp * 0.5))
+    const goldPer = Math.round(p * mission.baseRewards.gold + (1 - p) * Math.round(mission.baseRewards.gold * 0.3))
+    return { xp: xpPer * mission.phases, gold: goldPer * mission.phases }
+  }, [mission?.id, estimatedSuccess])
+
+  const estimatedTotalStamina = useMemo(() => {
+    if (!mission) return 0
+    const extra = Math.max(0, mission.phases - 2)
+    return staminaCostPerPhase * mission.phases + extra
+  }, [mission?.phases, staminaCostPerPhase])
 
   const resolvePhase = () => {
     if (!hero || !mission || finished) return
@@ -182,6 +199,8 @@ export default function HuntingMissions() {
         const loss = (((hero.rankData?.currentRank || 'F') === 'F') && mission.category === 'escolta') ? 7 : 10
         setNpcIntegrity(Math.max(0, npcIntegrity - loss))
       }
+      const maxHp2 = hero.derivedAttributes.hp || 1
+      if ((newHp2 / maxHp2) < 0.2) { setAutoRun(false); setError('HP baixo, auto desativado.') }
     }
     // Penalidades por falha (dano/fadiga e integridade do NPC)
     if (!success) {
@@ -198,6 +217,8 @@ export default function HuntingMissions() {
         const next = Math.max(0, npcIntegrity - loss)
         setNpcIntegrity(next)
       }
+      const maxHp2 = hero.derivedAttributes.hp || 1
+      if ((newHp / maxHp2) < 0.2) { setAutoRun(false); setError('HP baixo, auto desativado.') }
     }
     let narrativeExtra = ''
     const hour2 = new Date().getHours()
@@ -216,6 +237,7 @@ export default function HuntingMissions() {
         extraIds.push('essencia-bestial')
       }
     }
+    if (success && npcIntegrity !== null && ((hero.rankData?.currentRank || 'F') === 'F') && mission.category === 'escolta') setNpcIntegrity(Math.min(100, (npcIntegrity || 0) + 5))
     const result: PhaseResult = { phase: phaseIndex + 1, success, xp, gold, narrative: (success ? `Progresso na fase ${phaseIndex + 1}.` : `Revés na fase ${phaseIndex + 1}.`) + ambushText + narrativeExtra, itemsAwarded: [...itemsEquip.map(i => ({ id: i.id, name: i.name })), ...extraIds.map(id => ({ id, name: mapName(id) }))] }
     const newLog = [...log, result]
     setLog(newLog)
@@ -301,29 +323,52 @@ export default function HuntingMissions() {
             <option key={b} value={b}>{b}</option>
           ))}
         </select>
+        {hero?.rankData?.currentRank === 'F' && (
+          <select value={categorySel || ''} onChange={(e) => setCategorySel((e.target.value || null) as any)} className="ml-2 px-3 py-2 rounded bg-gray-800 text-white">
+            <option value=''>Aleatória</option>
+            {(['controle','coleta','escolta'] as const).map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        )}
       </div>
       {mission && (
         <div className="mt-4 p-4 border rounded bg-gray-800 border-gray-700">
           <div className="text-white font-semibold">{mission.title} — {mission.biome}</div>
           <div className="text-gray-300 text-sm">Objetivo: {mission.objective}</div>
-          <div className="text-gray-300 text-sm">Fases: {mission.phases} • Dificuldade: {mission.difficulty} • Recompensa base: +{mission.baseRewards.xp} XP, +{mission.baseRewards.gold} ouro</div>
-          <div className="text-gray-400 text-xs">Custo estimado de stamina: {staminaCostPerPhase} × {mission.phases} + {Math.max(0, mission.phases - 2)} = {staminaCostPerPhase * mission.phases + Math.max(0, mission.phases - 2)}</div>
-          {estimatedSuccess !== null && (
-            <div className="text-gray-400 text-xs">Chance inicial estimada de sucesso (fase 1): {estimatedSuccess}%</div>
+          {showDetails && (
+            <div className="mt-2">
+              <div className="text-gray-300 text-sm">Fases: {mission.phases} • Dificuldade: {mission.difficulty} • Recompensa base: +{mission.baseRewards.xp} XP, +{mission.baseRewards.gold} ouro</div>
+              {mission.rankRequired === 'F' && (mission.category === 'escolta' || mission.category === 'controle') && (
+                <div className="text-emerald-300 text-xs">Bônus Novato ativo para {mission.category}.</div>
+              )}
+              <div className="text-gray-400 text-xs">Custo estimado de stamina: {staminaCostPerPhase} × {mission.phases} + {Math.max(0, mission.phases - 2)} = {staminaCostPerPhase * mission.phases + Math.max(0, mission.phases - 2)}</div>
+              {estimatedSuccess !== null && (
+                <div className="text-gray-400 text-xs">Chance inicial estimada de sucesso (fase 1): {estimatedSuccess}%</div>
+              )}
+              {rankProgress && rankProgress.progress && (
+                <div className="text-gray-400 text-xs mt-1">Progresso para {rankProgress.progress.nextRank || rankProgress.progress.currentRank}: XP {rankProgress.progress.currentXP}/{rankProgress.progress.requiredXP} • Missões {rankProgress.progress.currentMissions}/{rankProgress.progress.requiredMissions}</div>
+              )}
+              {estimatedTotals && (
+                <div className="text-gray-300 text-sm mt-1">Estimativa bruta de recompensa: ~ +{estimatedTotals.xp} XP, +{estimatedTotals.gold} ouro</div>
+              )}
+              <div className="text-gray-400 text-xs">Dica: atributo que ajuda nesta missão: {mission.category === 'controle' ? 'Destreza' : mission.category === 'coleta' ? 'Inteligência' : mission.category === 'escolta' ? 'Constituição' : 'Força'}</div>
+              <div className="text-gray-300 text-sm">Requer Rank: {mission.rankRequired}</div>
+              {mission.classHint && <div className="text-gray-400 text-xs">{mission.classHint}</div>}
+              {mission.timeHint && <div className="text-gray-400 text-xs">Melhor período: {mission.timeHint}</div>}
+              <div className="text-gray-400 text-xs">Possível loot: {(mission.category === 'controle' ? ['pele-lobo-sombrio','colmilho-vampirico','osso-antigo'] : mission.category === 'coleta' ? ['erva-sangue','essencia-lunar','cristal-runico'] : mission.category === 'escolta' ? ['pergaminho-protecao','pergaminho-velocidade'] : []).map((id, idx) => (
+                <span key={`pv_${id}_${idx}`} className="inline-block ml-1 px-2 py-0.5 rounded bg-gray-700 text-white text-xs">{SHOP_ITEMS.find(i => i.id === id)?.name || id}</span>
+              ))}</div>
+            </div>
           )}
-          {rankProgress && rankProgress.progress && (
-            <div className="text-gray-400 text-xs mt-1">Progresso para {rankProgress.progress.nextRank || rankProgress.progress.currentRank}: XP {rankProgress.progress.currentXP}/{rankProgress.progress.requiredXP} • Missões {rankProgress.progress.currentMissions}/{rankProgress.progress.requiredMissions}</div>
-          )}
-          <div className="text-gray-400 text-xs">Dica: atributo que ajuda nesta missão: {mission.category === 'controle' ? 'Destreza' : mission.category === 'coleta' ? 'Inteligência' : mission.category === 'escolta' ? 'Constituição' : 'Força'}</div>
-          <div className="text-gray-300 text-sm">Requer Rank: {mission.rankRequired}</div>
-          {mission.classHint && <div className="text-gray-400 text-xs">{mission.classHint}</div>}
-          {mission.timeHint && <div className="text-gray-400 text-xs">Melhor período: {mission.timeHint}</div>}
           {!running && !finished && (
             <div className="mt-3">
               <button onClick={start} disabled={!hero || !canEnter} className="px-3 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">Iniciar Caçada</button>
               <button onClick={reroll} disabled={!hero || running} className="ml-2 px-3 py-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50">Nova Missão</button>
+              <button onClick={() => setShowDetails(v => !v)} className="ml-2 px-3 py-2 rounded bg-gray-700 text-white hover:bg-gray-600">{showDetails ? 'Ocultar Detalhes' : 'Detalhes da Missão'}</button>
               {!canEnter && <div className="mt-2 text-sm text-red-300">Rank insuficiente para esta missão.</div>}
               {hero && (hero.stamina || 0) < staminaCostPerPhase && <div className="mt-2 text-sm text-amber-300">Stamina insuficiente para iniciar. Restaure energia antes de prosseguir.</div>}
+              {hero && estimatedTotalStamina > (hero.stamina || 0) && <div className="mt-2 text-sm text-amber-300">Atenção: stamina atual pode não ser suficiente para todas as fases.</div>}
               {canEnter && mission.rankRequired === 'F' && <div className="mt-2 text-sm text-emerald-300">Missão inicial liberada para Novatos (Rank F).</div>}
               {error && <div className="mt-2 text-sm text-red-300">{error}</div>}
             </div>

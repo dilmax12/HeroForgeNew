@@ -43,7 +43,11 @@ export default async function handler(req, res) {
     }
     const { user_id, missionsCompleted = 0, achievementsUnlocked = 0, playtimeMinutes = 0, lastLogin = null } = body || {};
     if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
-    const inc = { missions_completed: missionsCompleted, achievements_unlocked: achievementsUnlocked, playtime_minutes: playtimeMinutes };
+    const m = Number(missionsCompleted) || 0;
+    const a = Number(achievementsUnlocked) || 0;
+    const p = Number(playtimeMinutes) || 0;
+    if (m < 0 || a < 0 || p < 0) return res.status(400).json({ error: 'Delta inválido' });
+    const inc = { missions_completed: m, achievements_unlocked: a, playtime_minutes: p };
     try {
       const now = new Date().toISOString();
       const { data: existing } = await supabase.from('player_progress').select('*').eq('user_id', user_id).limit(1);

@@ -183,7 +183,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
             <div className="text-sm text-amber-300">Missões</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-amber-100">{rankProgress.rankData.rankPoints}</div>
+            <div className="text-2xl font-bold text-amber-100">{rankProgress.rankData.totalRankPoints}</div>
             <div className="text-sm text-amber-300">Pontos de Rank</div>
           </div>
         </div>
@@ -198,14 +198,14 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
       />
 
       {/* Recent Achievements */}
-      {rankProgress.rankData?.rankHistory && rankProgress.rankData.rankHistory.length > 0 && (
+            {rankProgress.rankData?.rankHistory && rankProgress.rankData.rankHistory.length > 0 && (
         <div className="bg-slate-700 rounded-lg p-6">
           <h4 className="text-lg font-semibold text-slate-100 mb-4 flex items-center">
             <Award className="w-5 h-5 mr-2 text-amber-400" />
             Conquistas Recentes
           </h4>
           <div className="space-y-2">
-            {rankProgress.rankData.rankHistory.slice(-3).reverse().map((entry, index) => (
+            {rankProgress.rankData.rankHistory.slice(-3).slice().reverse().map((entry, index) => (
               <div key={index} className="flex items-center justify-between p-3 bg-slate-600 rounded">
                 <div className="flex items-center">
                   <LocalRankCard rank={entry.rank} size="small" />
@@ -216,7 +216,9 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
                     </div>
                   </div>
                 </div>
-                <div className="text-amber-400 font-bold">+{entry.rankPointsEarned}</div>
+                {entry.notableAchievement && (
+                  <div className="text-purple-300 text-sm">{entry.notableAchievement}</div>
+                )}
               </div>
             ))}
           </div>
@@ -353,7 +355,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
             <p>Nenhum histórico encontrado para o filtro selecionado</p>
           </div>
         ) : (
-          filteredHistory.reverse().map((entry, index) => (
+          [...filteredHistory].reverse().map((entry, index) => (
             <div key={index} className="flex items-center p-4 bg-slate-700 rounded-lg">
               <LocalRankCard rank={entry.rank} size="medium" />
               <div className="ml-4 flex-1">
@@ -373,8 +375,9 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-amber-400 font-bold">+{entry.rankPointsEarned}</div>
-                    <div className="text-slate-400 text-sm">pontos</div>
+                    {entry.notableAchievement && (
+                      <div className="text-purple-300 text-sm">{entry.notableAchievement}</div>
+                    )}
                   </div>
                 </div>
                 {entry.specialAchievement && (
@@ -480,7 +483,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-300">Pontos de Rank</span>
-                <span className="text-slate-100">{comparisonData.currentProgress?.rankData.rankPoints || 0}</span>
+                <span className="text-slate-100">{comparisonData.currentProgress?.rankData.totalRankPoints || 0}</span>
               </div>
             </div>
           </div>
@@ -508,7 +511,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-300">Pontos de Rank</span>
-                <span className="text-slate-100">{comparisonData.compareProgress?.rankData.rankPoints || 0}</span>
+                <span className="text-slate-100">{comparisonData.compareProgress?.rankData.totalRankPoints || 0}</span>
               </div>
             </div>
           </div>

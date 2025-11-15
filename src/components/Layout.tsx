@@ -20,6 +20,9 @@ import { getMonetizationConfig } from '../services/monetizationService';
 import { useMonetizationStore } from '../store/monetizationStore';
 import { listHeroesByUser, saveHero, sanitizeStoredHeroData } from '../services/heroesService';
 import { listQuestsByHero, saveQuest } from '../services/questsService';
+import { listNotifications } from '../services/userService';
+import { listEventsPaged } from '../services/socialEventsService';
+import { isNearFull } from '../utils/eventsHelpers';
 
 const Layout = () => {
   const location = useLocation();
@@ -36,6 +39,8 @@ const Layout = () => {
   const [progressLoading, setProgressLoading] = useState(false);
   const [progressError, setProgressError] = useState<string | null>(null);
   const [playerProgress, setPlayerProgress] = useState<{ missions_completed: number; achievements_unlocked: number; playtime_minutes: number; last_login?: string | null } | null>(null);
+  const [notifCount, setNotifCount] = useState<number>(0);
+  const [organizerNearCount, setOrganizerNearCount] = useState<number>(0);
 
   useEffect(() => {
     let mounted = true;
@@ -58,6 +63,39 @@ const Layout = () => {
     });
     return () => { mounted = false; sub?.subscription.unsubscribe(); };
   }, []);
+
+  useEffect(() => {
+    let timer: any = null;
+    const load = async () => {
+      try {
+        const me = getSelectedHero();
+        const id = me?.id || '';
+        if (!id) { setNotifCount(0); return; }
+        const items = await listNotifications(id);
+        setNotifCount(Array.isArray(items) ? items.length : 0);
+      } catch {}
+    };
+    load();
+    timer = setInterval(load, 60000);
+    return () => { if (timer) clearInterval(timer); };
+  }, [heroes.length, selectedHero?.id]);
+
+  useEffect(() => {
+    let timer: any = null;
+    const loadOrganizer = async () => {
+      try {
+        const me = getSelectedHero();
+        const id = me?.id || '';
+        if (!id) { setOrganizerNearCount(0); return; }
+        const paged = await listEventsPaged(id, { ownerId: id, limit: 50, offset: 0 });
+        const near = paged.items.filter((e: any) => isNearFull(e.capacity, e.attendees)).length;
+        setOrganizerNearCount(near);
+      } catch {}
+    };
+    loadOrganizer();
+    timer = setInterval(loadOrganizer, 60000);
+    return () => { if (timer) clearInterval(timer); };
+  }, [selectedHero?.id]);
 
   // Carregar configuração de monetização (AdSense/Stripe) no boot
   useEffect(() => {
@@ -261,7 +299,9 @@ const Layout = () => {
             }
           }
         } catch {}
-        updateHero(h.id, { derivedAttributes: h.derivedAttributes, stamina: h.stamina, stats: h.stats });
+        const prev = (useHeroStore.getState().heroes || []).find(x => x.id === h.id);
+        const mergedStats = { ...(prev?.stats || {}), lastActiveAt: h.stats.lastActiveAt } as any;
+        updateHero(h.id, { derivedAttributes: h.derivedAttributes, stamina: h.stamina, stats: mergedStats });
       } catch {}
     }, 60_000);
     return () => clearInterval(interval);
@@ -333,6 +373,15 @@ const Layout = () => {
                 <div>
                   <div className="text-sm font-medium flex items-center space-x-2">
                     <span>{selectedHero.name}</span>
+                    {(() => {
+                      const medal = (selectedHero.stats as any)?.profileMedal;
+                      const valid = medal?.expiresAt ? Date.now() < new Date(medal.expiresAt).getTime() : false;
+                      return valid ? (
+                        <span className="text-amber-400 text-xs flex items-center gap-1">
+                          {medal.icon} {medal.name}
+                        </span>
+                      ) : null;
+                    })()}
                     {selectedHero.activeTitle && selectedHero.titles.find(t => t.id === selectedHero.activeTitle) && (
                       <span className="text-amber-400 text-xs">
                         {selectedHero.titles.find(t => t.id === selectedHero.activeTitle)?.badge} 
@@ -365,7 +414,7 @@ const Layout = () => {
                   </Link>
                 </li>
                 <li>
-                  <Link to={new URLSearchParams(location.search).get('ref') ? `/create?ref=${new URLSearchParams(location.search).get('ref')}` : "/create"} className={`${navLinkClass('/create')} text-sm md:text-base`}>
+                  <Link to={(() => { const p = new URLSearchParams(location.search); const ref = p.get('ref'); const by = p.get('by'); return ref ? `/create?ref=${ref}${by?`&by=${by}`:''}` : "/create"; })()} className={`${navLinkClass('/create')} text-sm md:text-base`}>
                     {medievalTheme.icons.ui.profile} Criar Herói
                   </Link>
                 </li>
@@ -380,13 +429,18 @@ const Layout = () => {
                   </Link>
                 </li>
                 <li>
-                  <Link to="/pets" className={`${navLinkClass('/pets')} text-sm md:text-base`}>
-                    🐾 Mascotes
+                  <Link to="/stable" className={`${navLinkClass('/stable')} text-sm md:text-base`}>
+                    🐴 Estábulo
                   </Link>
                 </li>
                 <li>
                   <Link to="/dungeon-infinita" className={`${navLinkClass('/dungeon-infinita')} text-sm md:text-base`}>
                     🗝️ Dungeon Infinita
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/duel-arena" className={`${navLinkClass('/duel-arena')} text-sm md:text-base`}>
+                    ⚔️ Arena de Duelos
                   </Link>
                 </li>
                 <li>
@@ -431,10 +485,45 @@ const Layout = () => {
                       🏪 Loja
                     </Link>
                   </li>
+                <li>
+                  <Link to="/premium" className={navLinkClass('/premium')}>
+                    ✨ Premium
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/social-events" className={navLinkClass('/social-events')}>
+                    👥 Comunidade
+                  </Link>
+                </li>
+                <li>
+                  <Link to={organizerNearCount > 0 ? "/organizer?nearFull=1" : "/organizer"} title="Eventos quase lotados no seu painel" className={navLinkClass('/organizer')}>
+                    🛠️ Organizador {organizerNearCount > 0 && (<span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white">{organizerNearCount}</span>)}
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/friends" className={navLinkClass('/friends')}>
+                    🤝 Amigos
+                  </Link>
+                </li>
                   <li>
-                    <span className="px-2 py-1 rounded bg-gray-700 text-gray-300 cursor-not-allowed" title="Em breve">
-                      👥 Comunidade (Futuro)
-                    </span>
+                    <Link to="/notifications" className={navLinkClass('/notifications')}>
+                      🔔 Notificações {notifCount > 0 && (<span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white">{notifCount}</span>)}
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/events-history" className={navLinkClass('/events-history')}>
+                      🗂️ Histórico
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/profile" className={navLinkClass('/profile')}>
+                      👤 Perfil
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/metrics" className={navLinkClass('/metrics')}>
+                      📊 Métricas
+                    </Link>
                   </li>
                 </ul>
               )}
@@ -464,7 +553,7 @@ const Layout = () => {
             <div className="flex items-center justify-between">
               <div className="text-sm text-emerald-200">Você tem um convite ativo. A criação de um herói com esse convite concede bônus ao convidador.</div>
               <Link
-                to={`/create?ref=${new URLSearchParams(location.search).get('ref')}`}
+                to={(() => { const p = new URLSearchParams(location.search); const ref = p.get('ref'); const by = p.get('by'); return `/create?ref=${ref}${by?`&by=${by}`:''}`; })()}
                 className={`px-3 py-1 rounded bg-gradient-to-r ${((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.buttonGradient) || 'from-emerald-600 to-emerald-700'} text-white text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 hover:brightness-110 flex items-center gap-2`}
               >
                 {((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.accents?.[0]) || ''}

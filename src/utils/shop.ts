@@ -71,6 +71,24 @@ export const SHOP_ITEMS: Item[] = [
     effects: { mp: 30 }
   },
   {
+    id: 'contrato-montaria',
+    name: 'Contrato de Estábulo',
+    description: 'Permite recrutar uma montaria aleatória.',
+    type: 'consumable',
+    rarity: 'raro',
+    price: 300,
+    icon: '📜'
+  },
+  {
+    id: 'kit-montaria',
+    name: 'Kit de Montaria',
+    description: 'Pacote com itens para montar e evoluir: contrato, pergaminho, essência bestial e pedra mágica.',
+    type: 'bundle',
+    rarity: 'raro',
+    price: 950,
+    icon: '🎁'
+  },
+  {
     id: 'pergaminho-xp',
     name: 'Pergaminho de Experiência',
     description: 'Concede 50 XP de bônus',
@@ -1768,7 +1786,8 @@ export function canAfford(hero: Hero, item: Item): boolean {
   const balance = currency === 'gold' ? (prog.gold || 0)
                   : currency === 'glory' ? (prog.glory || 0)
                   : (prog.arcaneEssence || 0);
-  return balance >= item.price;
+  const price = getDiscountedPrice(item, hero);
+  return balance >= price;
 }
 
 export function purchaseItem(hero: Hero, itemId: string): PurchaseResult {
@@ -1790,7 +1809,7 @@ export function purchaseItem(hero: Hero, itemId: string): PurchaseResult {
     const currencyName = currency === 'gold' ? 'ouro' : currency === 'glory' ? 'glória' : 'essência arcana';
     return {
       success: false,
-      message: `${currencyName.charAt(0).toUpperCase() + currencyName.slice(1)} insuficiente! Você precisa de ${item.price} ${currencyName}, mas tem apenas ${balance}.`
+      message: `${currencyName.charAt(0).toUpperCase() + currencyName.slice(1)} insuficiente! Você precisa de ${getDiscountedPrice(item, hero)} ${currencyName}, mas tem apenas ${balance}.`
     };
   }
   
@@ -1810,11 +1829,12 @@ export function purchaseItem(hero: Hero, itemId: string): PurchaseResult {
   const current = currency === 'gold' ? (prog.gold || 0)
                   : currency === 'glory' ? (prog.glory || 0)
                   : (prog.arcaneEssence || 0);
-  const newBalance = current - item.price;
+  const price = getDiscountedPrice(item, hero);
+  const newBalance = current - price;
   const currencyName = currency === 'gold' ? 'ouro' : currency === 'glory' ? 'glória' : 'essência arcana';
   return {
     success: true,
-    message: `${item.name} comprado com sucesso! (-${item.price} ${currencyName})`,
+    message: `${item.name} comprado com sucesso! (-${price} ${currencyName})`,
     // compat: manter newGold preenchido quando moeda for ouro
     newGold: currency === 'gold' ? newBalance : undefined,
     currency,
@@ -2039,6 +2059,18 @@ export function getDiscountedPrice(item: Item, hero: Hero): number {
   const effectiveDiscount = Math.max(0, Math.min(0.5, (reputationDiscount + rankDiscount) * rarityFactor));
   const basePrice = computeItemBasePrice(item);
   return Math.floor(basePrice * (1 - effectiveDiscount));
+}
+
+export function getDiscountBreakdown(item: Item, hero: Hero) {
+  const reputationDiscount = getReputationDiscount(hero.progression.reputation);
+  const rankLevel: RankLevel = hero.rankData?.currentRank ?? 'F';
+  const rankDiscount = RANK_PRICE_DISCOUNT[rankLevel] ?? 0;
+  const rarityFactor = RARITY_DISCOUNT_FACTOR[item.rarity as 'comum' | 'incomum' | 'raro' | 'epico' | 'lendario'] ?? 1.0;
+  const effectiveDiscount = Math.max(0, Math.min(0.5, (reputationDiscount + rankDiscount) * rarityFactor));
+  const basePrice = computeItemBasePrice(item);
+  const effectivePrice = Math.floor(basePrice * (1 - effectiveDiscount));
+  const saved = Math.max(0, basePrice - effectivePrice);
+  return { reputationDiscount, rankDiscount, rarityFactor, effectiveDiscount, basePrice, effectivePrice, saved };
 }
 
 // Preço base dinâmico: nível × multiplicador de raridade × 100.

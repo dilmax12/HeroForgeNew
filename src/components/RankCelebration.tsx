@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { RankCelebration as RankCelebrationData, RankLevel } from '../types/ranks';
 import { RankCard } from './RankCard';
 import { RankPromotionAnimation } from './RankAnimations';
@@ -126,8 +127,11 @@ export const RankCelebration: React.FC<RankCelebrationProps> = ({
                           transition={{ delay: index * 0.1 }}
                           className="flex items-center justify-center bg-purple-800 bg-opacity-50 rounded-lg p-3"
                         >
-                          <span className="text-yellow-400 mr-2">✨</span>
-                          <span className="text-white">{reward}</span>
+                          <span className="text-yellow-400 mr-3 text-lg">{reward.icon}</span>
+                          <div className="text-white">
+                            <span className="font-semibold">{reward.name}</span>
+                            <span className="block text-sm text-purple-200">{reward.description}</span>
+                          </div>
                         </motion.div>
                       ))}
                     </div>

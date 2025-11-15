@@ -15,6 +15,13 @@ export interface GameSettingsState {
   guildEventExpiresAt?: string; // ISO timestamp
   guildBuffSourceGuildId?: string; // para rastrear origem
 
+  inviteLinksEnabled: boolean;
+  inviteLinkValidityDays: number;
+  invitePrivacyLevel: 'public' | 'friends' | 'private';
+  inviteShareIncludeContacts: boolean;
+  inviteRewardGold: number;
+  inviteRewardXP: number;
+
   updateSettings: (updates: Partial<GameSettingsState>) => void;
   resetDefaults: () => void;
   applyGuildBuffs: (params: {
@@ -33,6 +40,12 @@ const DEFAULTS = {
   regenStaminaPerMin: 5,
   deathRecoveryMinutes: 10,
   deathPenaltyEnabled: true,
+  inviteLinksEnabled: true,
+  inviteLinkValidityDays: 7,
+  invitePrivacyLevel: 'public' as const,
+  inviteShareIncludeContacts: false,
+  inviteRewardGold: 100,
+  inviteRewardXP: 150,
 };
 
 export const useGameSettingsStore = create<GameSettingsState>()(
@@ -81,6 +94,12 @@ export const useGameSettingsStore = create<GameSettingsState>()(
         activeGuildEventName: state.activeGuildEventName,
         guildEventExpiresAt: state.guildEventExpiresAt,
         guildBuffSourceGuildId: state.guildBuffSourceGuildId,
+        inviteLinksEnabled: state.inviteLinksEnabled,
+        inviteLinkValidityDays: state.inviteLinkValidityDays,
+        invitePrivacyLevel: state.invitePrivacyLevel,
+        inviteShareIncludeContacts: state.inviteShareIncludeContacts,
+        inviteRewardGold: state.inviteRewardGold,
+        inviteRewardXP: state.inviteRewardXP,
       }),
     }
   )

@@ -227,3 +227,187 @@ Regras: máximo 120 caracteres por rumor, sem spoilers, tom leve e divertido.`;
     return { rumors: [], error: err?.message || 'Erro desconhecido ao gerar rumores' };
   }
 }
+
+export interface DiceEventPayload {
+  heroId: string;
+  heroName: string;
+  roll: number;
+  critical?: boolean;
+  betAmount?: number;
+  opponentName?: string;
+}
+
+export async function recordDiceEvent(ev: DiceEventPayload): Promise<{ ok: boolean; error?: string }>{
+  try {
+    const resp = await fetch('/api/tavern?action=dice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ev)
+    });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      return { ok: false, error: json?.error || 'Falha ao registrar evento de dados' };
+    }
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Erro desconhecido ao registrar evento de dados' };
+  }
+}
+
+export interface WeeklyDiceEntry { heroName: string; best: number; crits: number; count: number }
+export async function getWeeklyDiceLeadersServer(): Promise<{ entries: WeeklyDiceEntry[]; error?: string }>{
+  try {
+    const resp = await fetch('/api/tavern?action=dice-weekly', { method: 'GET' });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      return { entries: [], error: json?.error || 'Falha ao obter ranking semanal' };
+    }
+    return { entries: (json?.entries || []) as WeeklyDiceEntry[] };
+  } catch (err: any) {
+    return { entries: [], error: err?.message || 'Erro desconhecido ao obter ranking semanal' };
+  }
+}
+
+export async function getWeeklyChampions(): Promise<{ champions: { week_start: string; week_end: string; hero_name: string; score: number }[]; error?: string }>{
+  try {
+    const resp = await fetch('/api/tavern?action=dice-weekly-champions', { method: 'GET' });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      return { champions: [], error: json?.error || 'Falha ao obter campeões' };
+    }
+    return { champions: (json?.champions || []) as any[] };
+  } catch (err: any) {
+    return { champions: [], error: err?.message || 'Erro desconhecido ao obter campeões' };
+  }
+}
+
+export async function snapshotWeeklyChampion(adminToken: string): Promise<{ ok: boolean; error?: string }>{
+  try {
+    const resp = await fetch('/api/tavern?action=dice-weekly-snapshot', { method: 'POST', headers: { 'Authorization': `Bearer ${adminToken}` } });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      return { ok: false, error: json?.error || 'Falha ao criar snapshot semanal' };
+    }
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Erro desconhecido ao criar snapshot' };
+  }
+}
+
+export async function getNextWeeklySnapshot(tzOffsetMin?: number): Promise<{ nextSnapshotAt?: string; error?: string }>{
+  try {
+    const qs = typeof tzOffsetMin === 'number' ? `&tz_offset_min=${tzOffsetMin}` : '';
+    const resp = await fetch(`/api/tavern?action=dice-weekly-next${qs}`, { method: 'GET' });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      return { error: json?.error || 'Falha ao obter próxima execução' };
+    }
+    return { nextSnapshotAt: json?.nextSnapshotAt };
+  } catch (err: any) {
+    return { error: err?.message || 'Erro desconhecido ao obter próxima execução' };
+  }
+}
+
+export async function snapshotWeeklyChampionAuto(adminToken: string): Promise<{ ok: boolean; error?: string }>{
+  try {
+    const resp = await fetch('/api/tavern?action=dice-weekly-snapshot-auto', { method: 'POST', headers: { 'Authorization': `Bearer ${adminToken}` } });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      return { ok: false, error: json?.error || 'Falha ao criar snapshot automático' };
+    }
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Erro desconhecido ao criar snapshot automático' };
+  }
+}
+
+export async function getTavernSettings(): Promise<{ settings: Record<string, string>; error?: string }>{
+  try {
+    const resp = await fetch('/api/tavern?action=settings-get', { method: 'GET' });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { settings: {}, error: json?.error || 'Falha ao obter configurações' };
+    const list = Array.isArray(json?.settings) ? json.settings : [];
+    const map: Record<string, string> = {};
+    list.forEach((s: any) => { if (s && s.key) map[s.key] = String(s.value || ''); });
+    return { settings: map };
+  } catch (err: any) {
+    return { settings: {}, error: err?.message || 'Erro ao obter configurações' };
+  }
+}
+
+export async function setTavernSettings(adminToken: string, settings: { tz_offset_min?: number; reroll_daily_cap?: number }): Promise<{ ok: boolean; error?: string }>{
+  try {
+    const resp = await fetch('/api/tavern?action=settings-set', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` }, body: JSON.stringify(settings) });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { ok: false, error: json?.error || 'Falha ao salvar configurações' };
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Erro ao salvar configurações' };
+  }
+}
+
+export async function setSupporterCap(adminToken: string, heroId: string, cap_bonus: number): Promise<{ ok: boolean; error?: string }>{
+  try {
+    const resp = await fetch('/api/tavern?action=supporter-set', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` }, body: JSON.stringify({ heroId, cap_bonus }) });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { ok: false, error: json?.error || 'Falha ao definir cap bônus' };
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Erro ao definir cap bônus' };
+  }
+}
+
+export async function getCronStatus(): Promise<{ nextSnapshotAt?: string; lastSnapshotAt?: string; error?: string }>{
+  try {
+    const resp = await fetch('/api/tavern?action=dice-weekly-cron-status', { method: 'GET' });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { error: json?.error || 'Falha ao obter status do cron' };
+    return { nextSnapshotAt: json?.nextSnapshotAt, lastSnapshotAt: json?.lastSnapshotAt };
+  } catch (err: any) {
+    return { error: err?.message || 'Erro ao obter status do cron' };
+  }
+}
+
+export async function getCronLogs(): Promise<{ logs: Array<{ executed_at: string; status: string; message?: string }>; error?: string }>{
+  try {
+    const resp = await fetch('/api/tavern?action=dice-weekly-cron-logs', { method: 'GET' });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { logs: [], error: json?.error || 'Falha ao obter logs' };
+    return { logs: Array.isArray(json?.logs) ? json.logs : [] };
+  } catch (err: any) {
+    return { logs: [], error: err?.message || 'Erro ao obter logs' };
+  }
+}
+
+export async function getRerollUsage(heroId: string): Promise<{ count: number; cap: number; error?: string }>{
+  try {
+    const resp = await fetch(`/api/tavern?action=reroll-usage-get&heroId=${encodeURIComponent(heroId)}`, { method: 'GET' });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { count: 0, cap: 5, error: json?.error || 'Falha ao obter uso diário' };
+    return { count: Number(json?.count || 0), cap: Number(json?.cap || 5) };
+  } catch (err: any) {
+    return { count: 0, cap: 5, error: err?.message || 'Erro ao obter uso diário' };
+  }
+}
+
+export async function incrementRerollUsage(heroId: string): Promise<{ ok: boolean; count?: number; cap?: number; reason?: string; error?: string }>{
+  try {
+    const resp = await fetch('/api/tavern?action=reroll-usage-increment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heroId }) });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { ok: false, error: json?.error || 'Falha ao incrementar' };
+    return { ok: !!json?.ok, count: json?.count, cap: json?.cap, reason: json?.reason };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Erro ao incrementar' };
+  }
+}
+
+export async function getRerollUsageHistory(heroId: string, days: number = 7): Promise<{ history: Array<{ usage_date: string; count: number }>; cap: number; error?: string }>{
+  try {
+    const resp = await fetch(`/api/tavern?action=reroll-usage-history&heroId=${encodeURIComponent(heroId)}&days=${days}`, { method: 'GET' });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { history: [], cap: 5, error: json?.error || 'Falha ao obter histórico' };
+    return { history: Array.isArray(json?.history) ? json.history : [], cap: Number(json?.cap || 5) };
+  } catch (err: any) {
+    return { history: [], cap: 5, error: err?.message || 'Erro ao obter histórico' };
+  }
+}

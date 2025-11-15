@@ -200,3 +200,85 @@ with check (auth.uid() = reported_by);
 -- using (((auth.jwt() ->> 'is_admin')::boolean) = true);
 
 -- Fim do script
+\n+-- === Eventos de Dados da Taverna ===
+-- Registro de rolagens (d20), críticos e apostas para ranking semanal
+create table if not exists public.tavern_dice_events (
+  id uuid primary key default gen_random_uuid(),
+  hero_id text,
+  hero_name text not null check (char_length(hero_name) between 1 and 80),
+  roll integer not null check (roll >= 1 and roll <= 20),
+  critical boolean not null default false,
+  bet_amount numeric,
+  opponent_name text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists tavern_dice_events_created_idx on public.tavern_dice_events (created_at desc);
+create index if not exists tavern_dice_events_hero_idx on public.tavern_dice_events (hero_name);
+
+alter table public.tavern_dice_events enable row level security;
+
+-- Leitura: qualquer pessoa pode ver eventos para compor rankings
+drop policy if exists "Anyone can read dice events" on public.tavern_dice_events;
+create policy "Anyone can read dice events" on public.tavern_dice_events
+for select using (true);
+
+-- Observação: inserção deve ser feita por API server-side usando Service Role (contorna RLS)
+\n+create table if not exists public.tavern_weekly_champions (
+  id uuid primary key default gen_random_uuid(),
+  week_start timestamptz not null,
+  week_end timestamptz not null,
+  hero_name text not null,
+  score integer not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists tavern_weekly_champions_week_idx on public.tavern_weekly_champions (week_start desc);
+alter table public.tavern_weekly_champions enable row level security;
+drop policy if exists "Anyone can read weekly champions" on public.tavern_weekly_champions;
+create policy "Anyone can read weekly champions" on public.tavern_weekly_champions
+for select using (true);
+
+create table if not exists public.tavern_settings (
+  key text primary key,
+  value text,
+  updated_at timestamptz not null default now()
+);
+alter table public.tavern_settings enable row level security;
+drop policy if exists "Anyone can read tavern settings" on public.tavern_settings;
+create policy "Anyone can read tavern settings" on public.tavern_settings
+for select using (true);
+
+-- Logs do cron semanal
+create table if not exists public.tavern_cron_logs (
+  id uuid primary key default gen_random_uuid(),
+  executed_at timestamptz not null default now(),
+  status text not null check (status in ('success','error','skipped','empty')),
+  message text
+);
+alter table public.tavern_cron_logs enable row level security;
+drop policy if exists "Anyone can read tavern cron logs" on public.tavern_cron_logs;
+create policy "Anyone can read tavern cron logs" on public.tavern_cron_logs
+for select using (true);
+
+create table if not exists public.tavern_reroll_usage (
+  id uuid primary key default gen_random_uuid(),
+  hero_id text not null,
+  usage_date date not null,
+  count integer not null default 0,
+  updated_at timestamptz not null default now(),
+  unique(hero_id, usage_date)
+);
+alter table public.tavern_reroll_usage enable row level security;
+drop policy if exists "Anyone can read reroll usage" on public.tavern_reroll_usage;
+create policy "Anyone can read reroll usage" on public.tavern_reroll_usage
+for select using (true);
+
+create table if not exists public.tavern_supporters (
+  hero_id text primary key,
+  cap_bonus integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+alter table public.tavern_supporters enable row level security;
+drop policy if exists "Anyone can read tavern supporters" on public.tavern_supporters;
+create policy "Anyone can read tavern supporters" on public.tavern_supporters
+for select using (true);

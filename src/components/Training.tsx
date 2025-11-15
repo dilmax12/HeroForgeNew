@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameSettingsStore } from '../store/gameSettingsStore';
 import { useHeroStore } from '../store/heroStore';
-import { ATTRIBUTE_CONSTRAINTS } from '../utils/attributeSystem';
+import { getMaxAttributeForRank } from '../utils/attributeSystem';
+import { rankSystem } from '../utils/rankSystem';
 
 interface TrainingOption {
   id: string;
@@ -160,6 +161,8 @@ const Training: React.FC = () => {
   const [activeTraining, setActiveTraining] = useState<string | null>(null);
   const [trainingEndTime, setTrainingEndTime] = useState<number | null>(null);
   const [tick, setTick] = useState(0); // força re-render para atualizar contador
+  const currentRank = selectedHero?.rankData?.currentRank || (selectedHero ? rankSystem.calculateRank(selectedHero) : undefined);
+  const maxAttr = currentRank ? getMaxAttributeForRank(currentRank) : undefined;
 
   // Atualiza o contador em tempo real enquanto houver treinamento ativo
   useEffect(() => {
@@ -238,10 +241,10 @@ const Training: React.FC = () => {
     if (!canAffordTraining(option) || !meetsRequirements(option)) return;
 
     // Bloquear se qualquer atributo-alvo já estiver no limite
-    if (option.rewards.attributes) {
+    if (option.rewards.attributes && maxAttr !== undefined) {
       const atCap = Object.entries(option.rewards.attributes).some(([attr]) => {
         const current = (selectedHero.attributes as any)[attr] || 0;
-        return current >= ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE;
+        return current >= (maxAttr as number);
       });
       if (atCap) {
         alert('Este treinamento não pode ser iniciado: atributo já está no limite.');
@@ -330,12 +333,12 @@ const Training: React.FC = () => {
       updates.progression.gold = (selectedHero.progression.gold || 0) + gained;
     }
 
-    if (option.rewards.attributes) {
+    if (option.rewards.attributes && maxAttr !== undefined) {
       updates.attributes = { ...selectedHero.attributes };
       Object.entries(option.rewards.attributes).forEach(([attr, value]) => {
         const current = (selectedHero.attributes as any)[attr] || 0;
         const next = current + Math.max(1, Math.floor(value * effectiveness));
-        (updates.attributes as any)[attr] = Math.min(ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE, next);
+        (updates.attributes as any)[attr] = Math.min(maxAttr as number, next);
       });
     }
 
@@ -441,9 +444,9 @@ const Training: React.FC = () => {
           const trainingsToday = selectedHero.stats.trainingsToday || 0;
           const dailyLimit = selectedHero.stats.trainingDailyLimit || 5;
           const remaining = Math.max(0, dailyLimit - trainingsToday);
-          const attrCapBlocked = option.rewards.attributes ? Object.entries(option.rewards.attributes).some(([attr]) => {
+          const attrCapBlocked = option.rewards.attributes && maxAttr !== undefined ? Object.entries(option.rewards.attributes).some(([attr]) => {
             const current = (selectedHero.attributes as any)[attr] || 0;
-            return current >= ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE;
+            return current >= (maxAttr as number);
           }) : false;
           const isAvailable = canAfford && meetsReqs && !activeTraining && remaining > 0 && !attrCapBlocked;
 

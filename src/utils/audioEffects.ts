@@ -94,3 +94,10 @@ export function playPolish() {
     { f: 1500, d: 80, t: 'sine', v: 0.08 },
   ], 20);
 }
+
+export function playForgeStart() {
+  if (!rateLimit(120)) return;
+  playSequence([
+    { f: 680, d: 60, t: 'sine', v: 0.06 },
+  ]);
+}

@@ -71,6 +71,7 @@ Informações do Herói:
 - Classe: ${hero.class}
 - Nível: ${hero.progression.level}
 - Rank: ${hero.rank || 'F'}
+- Alinhamento: ${hero.alignment}
 - Atributos principais: ${Object.entries(hero.attributes)
       .sort(([,a], [,b]) => b - a)
       .slice(0, 3)
@@ -101,7 +102,8 @@ Informações do Herói:
 5. Recompensas apropriadas para o nível
 6. Localização interessante
 7. Duração estimada em minutos
- 8. Se relevante, impacto em reputação com Ordem e/ou Sombra
+  8. Se relevante, impacto em reputação com Ordem e/ou Sombra
+  9. O alinhamento do herói deve influenciar tom, escolhas e consequências (ex.: leal favorece dever; caótico favorece risco; bom prioriza proteção; mal favorece poder)
 
 Formato da resposta em JSON:
 {
@@ -275,7 +277,7 @@ Formato da resposta em JSON:
         npcName,
         contextLen: context?.length || 0
       });
-      const prompt = `Crie um diálogo para o NPC "${npcName}" falando com ${hero.name} (${hero.class}, nível ${hero.progression.level}).
+      const prompt = `Crie um diálogo para o NPC "${npcName}" falando com ${hero.name} (${hero.class}, nível ${hero.progression.level}, alinhamento ${hero.alignment}).
 
 Contexto: ${context}
 
@@ -284,6 +286,7 @@ O diálogo deve:
 - Refletir a personalidade única do NPC
 - Incluir 2-3 opções de resposta para o jogador
 - Ter entre 50-100 palavras
+ - Refletir o alinhamento do herói nas respostas sugeridas e na postura do NPC
 
 Formato JSON:
 {

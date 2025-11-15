@@ -6,6 +6,7 @@ import { Item } from '../types/hero';
 import { useMonetizationStore } from '../store/monetizationStore';
 import ThemePreviewModal from './ThemePreviewModal';
 import { trackMetric } from '../utils/metricsSystem';
+import { seasonalThemes } from '../styles/medievalTheme';
 
 const Shop: React.FC = () => {
   const { getSelectedHero, updateHero } = useHeroStore();
@@ -265,6 +266,17 @@ const Shop: React.FC = () => {
               <span>Remover anúncios (IAP único)</span>
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Banner sazonal com link para Premium */}
+      <div className="max-w-full sm:max-w-4xl mx-auto mb-6">
+        <div className="rounded-lg border bg-white p-3 sm:p-4 flex items-center justify-between">
+          <div className="text-sm sm:text-base text-gray-700 flex items-center gap-2">
+            <span>{((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.accents?.[0]) || '🎭'}</span>
+            <span>Ofertas sazonais disponíveis conforme o tema atual.</span>
+          </div>
+          <Link to="/premium" className={`px-3 py-2 rounded bg-gradient-to-r ${((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.buttonGradient) || 'from-amber-600 to-yellow-600'} text-white text-sm hover:brightness-110`}>Ver Ofertas</Link>
         </div>
       </div>
 

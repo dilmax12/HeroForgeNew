@@ -122,6 +122,14 @@ export class ActivityManager {
         return `🏛️ ${heroName} (${heroClass}) ativou "${data.eventName || 'Evento da Guilda'}"${guildLabel}: ${xp}${sep}${tr}.`;
       }
 
+      case 'tavern-dice': {
+        const roll = typeof (data as any).roll === 'number' ? (data as any).roll : 0;
+        const critical = !!(data as any).critical;
+        const bet = (data as any).betAmount ? ` (aposta: ${(data as any).betAmount} 🪙)` : '';
+        const opponent = (data as any).opponentName ? ` contra ${(data as any).opponentName}` : '';
+        return `${critical ? '🎲✨' : '🎲'} ${heroName} (${heroClass}) rolou ${roll}${opponent}${bet}${critical ? ' — CRÍTICO!' : ''}`;
+      }
+
       default:
         return `${heroName} (${heroClass}) realizou uma ação heroica!`;
     }
@@ -142,7 +150,8 @@ export class ActivityManager {
       'tavern-rest': '🛏️',
       'item-used': '🧪',
       'guild-event-activated': '🏛️',
-      'pet-hatched': '🐣'
+      'pet-hatched': '🐣',
+      'tavern-dice': '🎲'
     };
     return icons[type] || '🎮';
   }
@@ -162,7 +171,8 @@ export class ActivityManager {
       'tavern-rest': 'from-amber-400 to-amber-600',
       'item-used': 'from-indigo-400 to-indigo-600',
       'guild-event-activated': 'from-indigo-500 to-indigo-700',
-      'pet-hatched': 'from-amber-400 to-emerald-600'
+      'pet-hatched': 'from-amber-400 to-emerald-600',
+      'tavern-dice': 'from-amber-400 to-purple-600'
     };
     return colors[type] || 'from-gray-400 to-gray-600';
   }
@@ -405,4 +415,7 @@ export const logActivity = {
   ,
   petHatched: (data: ActivityData) =>
     activityManager.createActivity('pet-hatched', data)
+  ,
+  tavernDice: (data: ActivityData & { roll: number; critical?: boolean; betAmount?: number; opponentName?: string }) =>
+    activityManager.createActivity('tavern-dice', data)
 };

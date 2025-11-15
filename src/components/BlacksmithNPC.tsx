@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useHeroStore } from '../store/heroStore'
 import { getAvailableRecipes, RECIPES } from '../utils/forging'
-import { resumeAudioContextIfNeeded, playSuccess, playFailure, playHammer } from '../utils/audioEffects'
+import { resumeAudioContextIfNeeded, playSuccess, playFailure, playHammer, playPolish, playForgeStart } from '../utils/audioEffects'
 import { SHOP_ITEMS, purchaseItem, getDiscountedPrice, canAfford } from '../utils/shop'
 import { RANK_CONFIG } from '../types/ranks'
 import { notificationBus } from './NotificationSystem'
@@ -56,7 +56,10 @@ export const BlacksmithNPC: React.FC<BlacksmithNPCProps> = ({ className = '' }) 
 
   const startForging = (rid: string, rname: string) => {
     if (forgingId) return
-    resumeAudioContextIfNeeded()
+    if (audioReady) {
+      resumeAudioContextIfNeeded()
+      try { playForgeStart() } catch {}
+    }
     setForgingId(rid)
     setForgingProgress(0)
     setForgingStage(0)
@@ -73,12 +76,12 @@ export const BlacksmithNPC: React.FC<BlacksmithNPCProps> = ({ className = '' }) 
         forgingTimerRef.current = null
         const ok = craftItem(hero!.id, rid)
         if (ok) {
-          playSuccess()
+          if (audioReady) playSuccess()
           setActiveDialogue({ type: 'comentario', text: 'Boa têmpera. A peça parece equilibrada.' })
           setLastAction({ type: 'forjar:ok', at: Date.now() })
           try { notificationBus.emit({ type: 'success', title: 'Forja concluída', message: `${rname} forjado com sucesso!`, timeoutMs: 3000 }) } catch {}
         } else {
-          playFailure()
+          if (audioReady) playFailure()
           setActiveDialogue({ type: 'comentario', text: 'Faltam insumos ou rank. Verifique seu inventário e posição.' })
           setLastAction({ type: 'forjar:falha', at: Date.now() })
           try { notificationBus.emit({ type: 'error', title: 'Forja falhou', message: 'Verifique materiais e rank.', timeoutMs: 3000 }) } catch {}
@@ -569,37 +572,33 @@ export const BlacksmithNPC: React.FC<BlacksmithNPCProps> = ({ className = '' }) 
               </div>
 
               <div className="p-3 rounded-lg bg-slate-800/60 border border-white/10">
-                <div className="text-sm font-semibold text-white mb-2">Aprimoramentos</div>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={() => {
-                    resumeAudioContextIfNeeded()
+              <div className="text-sm font-semibold text-white mb-2">Aprimoramentos</div>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => {
                     const ok = refineEquippedItem(hero.id, 'weapon')
-                    ok ? playSuccess() : playFailure()
+                    if (audioReady) { resumeAudioContextIfNeeded(); ok ? playSuccess() : playFailure() }
                     setLastAction({ type: ok ? 'refinar:ok' : 'refinar:falha', at: Date.now() })
                     try { notificationBus.emit({ type: ok ? 'success' : 'error', title: ok ? 'Refino realizado' : 'Refino falhou', message: ok ? 'Arma refinada.' : 'Requisitos não atendidos.', timeoutMs: 3000 }) } catch {}
                   }} className="px-2 py-1 rounded bg-purple-600 text-white text-xs hover:bg-purple-700">Refinar Arma</button>
-                  <button onClick={() => {
-                    resumeAudioContextIfNeeded()
+                <button onClick={() => {
                     const ok = refineEquippedItem(hero.id, 'armor')
-                    ok ? playSuccess() : playFailure()
+                    if (audioReady) { resumeAudioContextIfNeeded(); ok ? playSuccess() : playFailure() }
                     setLastAction({ type: ok ? 'refinar:ok' : 'refinar:falha', at: Date.now() })
                     try { notificationBus.emit({ type: ok ? 'success' : 'error', title: ok ? 'Refino realizado' : 'Refino falhou', message: ok ? 'Armadura refinada.' : 'Requisitos não atendidos.', timeoutMs: 3000 }) } catch {}
                   }} className="px-2 py-1 rounded bg-purple-600 text-white text-xs hover:bg-purple-700">Refinar Armadura</button>
-                  <button onClick={() => {
-                    resumeAudioContextIfNeeded()
+                <button onClick={() => {
                     const ok = refineEquippedItem(hero.id, 'accessory')
-                    ok ? playSuccess() : playFailure()
+                    if (audioReady) { resumeAudioContextIfNeeded(); ok ? playSuccess() : playFailure() }
                     setLastAction({ type: ok ? 'refinar:ok' : 'refinar:falha', at: Date.now() })
                     try { notificationBus.emit({ type: ok ? 'success' : 'error', title: ok ? 'Refino realizado' : 'Refino falhou', message: ok ? 'Acessório refinado.' : 'Requisitos não atendidos.', timeoutMs: 3000 }) } catch {}
                   }} className="px-2 py-1 rounded bg-purple-600 text-white text-xs hover:bg-purple-700">Refinar Acessório</button>
-                  <button onClick={() => {
-                    resumeAudioContextIfNeeded()
+                <button onClick={() => {
                     const ok = enchantEquippedItem(hero.id, 'weapon', 'lifesteal')
-                    ok ? playSuccess() : playFailure()
+                    if (audioReady) { resumeAudioContextIfNeeded(); ok ? playSuccess() : playFailure() }
                     setLastAction({ type: ok ? 'encantar:ok' : 'encantar:falha', at: Date.now() })
                     try { notificationBus.emit({ type: ok ? 'success' : 'error', title: ok ? 'Encantamento aplicado' : 'Encantamento falhou', message: ok ? 'Lifesteal ativo na arma.' : 'Essência insuficiente ou item não equipado.', timeoutMs: 3000 }) } catch {}
                   }} className="px-2 py-1 rounded bg-indigo-600 text-white text-xs hover:bg-indigo-700">Encantar Arma</button>
-                </div>
+              </div>
                 <div className="mt-2 text-xs text-gray-400">Refinos e encantos consomem ouro/essência e podem falhar.</div>
               </div>
 
@@ -611,12 +610,11 @@ export const BlacksmithNPC: React.FC<BlacksmithNPCProps> = ({ className = '' }) 
                 </div>
                 <div className="mt-2">
                   <button onClick={() => {
-                    resumeAudioContextIfNeeded()
                     const a = (document.getElementById('fuse-a') as HTMLInputElement)?.value
                     const b = (document.getElementById('fuse-b') as HTMLInputElement)?.value
                     if (a && b) {
                       const ok = fuseItems(hero.id, a, b)
-                      ok ? playSuccess() : playFailure()
+                      if (audioReady) { resumeAudioContextIfNeeded(); ok ? playSuccess() : playFailure() }
                       setLastAction({ type: ok ? 'fusao:ok' : 'fusao:falha', at: Date.now() })
                       try { notificationBus.emit({ type: ok ? 'success' : 'error', title: ok ? 'Fusão concluída' : 'Fusão falhou', message: ok ? 'Novo item único gerado.' : 'Verifique tipos e quantidades.', timeoutMs: 3000 }) } catch {}
                     }

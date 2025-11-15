@@ -1,6 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { loginWithGoogleCredential } from '../services/authService';
+import { supabase, supabaseConfigured } from '../lib/supabaseClient';
+import { notificationBus } from './NotificationSystem';
 
 declare global {
   interface Window { google: any; }
@@ -11,29 +13,33 @@ const GoogleLoginButton: React.FC = () => {
   const login = useAuthStore((s) => s.login);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    if (!clientId || !window.google || !btnRef.current) return;
+    if (!clientId || !window.google || !btnRef.current || isAuthenticated) return;
 
     try {
       window.google.accounts.id.initialize({
         client_id: clientId,
         callback: async (resp: any) => {
           try {
+            setLoading(true);
             const u = await loginWithGoogleCredential(resp.credential);
             login(u, resp.credential);
+            try { notificationBus.emit({ type: 'achievement', title: 'Login Google', message: 'Autenticado com sucesso', icon: '✅', duration: 2500 }); } catch {}
           } catch (err) {
             console.error('Login Google falhou', err);
-            alert('Falha ao autenticar com Google.');
+            try { notificationBus.emit({ type: 'error', title: 'Falha no Login Google', message: 'Verifique configuração e tente novamente', duration: 3500 }); } catch {}
           }
+          finally { setLoading(false); }
         }
       });
       window.google.accounts.id.renderButton(btnRef.current, { theme: 'outline', size: 'large' });
     } catch (err) {
       console.error('Erro inicializando Google Identity', err);
     }
-  }, [login]);
+  }, [login, isAuthenticated]);
 
   if (isAuthenticated) {
     return (
@@ -51,7 +57,25 @@ const GoogleLoginButton: React.FC = () => {
     return <span className="text-xs text-red-300">Google Login não configurado</span>;
   }
 
-  return <div ref={btnRef} />;
+  return (
+    <div className="flex items-center gap-2">
+      <div ref={btnRef} />
+      {supabaseConfigured && (
+        <button
+          onClick={async () => {
+            try {
+              setLoading(true);
+              await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
+            } catch {
+              try { notificationBus.emit({ type: 'error', title: 'OAuth Google (Supabase)', message: 'Falha ao redirecionar', duration: 3000 }); } catch {}
+            } finally { setLoading(false); }
+          }}
+          className={`px-2 py-1 rounded ${loading ? 'bg-gray-600 opacity-60' : 'bg-gray-700 hover:bg-gray-600'} text-white text-xs`}
+          disabled={loading}
+        >Supabase</button>
+      )}
+    </div>
+  );
 };
 
 export default GoogleLoginButton;

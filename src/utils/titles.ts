@@ -687,7 +687,8 @@ export const TITLE_PASSIVE_ATTRIBUTE_BONUSES: Record<string, Partial<HeroAttribu
   'forjador-original': { carisma: 1 },
   'lenda-do-povo': { carisma: 2 },
   'colecionador-de-reliquias': { inteligencia: 1 },
-  'mestre-dos-herois': { carisma: 1 }
+  'mestre-dos-herois': { carisma: 1 },
+  'mestre-dos-dados': { carisma: 2, sabedoria: 1 }
 };
 
 export function getTitleAttributeBonus(titleId?: string): Partial<HeroAttributes> {
@@ -715,4 +716,50 @@ export function getRarityBg(rarity: Title['rarity']): string {
     case 'especial': return 'bg-pink-900/20';
     default: return 'bg-gray-900/20';
   }
+}
+
+export function scoreTitleForHero(title: Title, hero: Hero): number {
+  const rarityRank: Record<Title['rarity'], number> = { comum: 1, raro: 2, epico: 3, lendario: 4, especial: 5 } as const;
+  const bonus = getTitleAttributeBonus(title.id);
+  const bonusSum = Object.values(bonus).reduce((acc, v) => acc + (typeof v === 'number' ? v : 0), 0);
+  const recentBoost = Date.now() - new Date(title.unlockedAt).getTime() < 24 * 60 * 60 * 1000 ? 1 : 0;
+  return (rarityRank[title.rarity] || 0) * 10 + bonusSum * 2 + recentBoost;
+}
+
+export function getTopTitlesForHero(hero: Hero, topN: number): Title[] {
+  return [...(hero.titles || [])]
+    .map(t => ({ t, s: scoreTitleForHero(t, hero) }))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, Math.max(0, topN))
+    .map(x => x.t);
+}
+
+export function getRecommendedTitleByClass(hero: Hero): Title | undefined {
+  const weights: Record<string, Partial<HeroAttributes>> = {
+    guerreiro: { forca: 1, constituicao: 0.8 },
+    mago: { inteligencia: 1, sabedoria: 0.8 },
+    ladino: { destreza: 1, carisma: 0.6 },
+    clerigo: { sabedoria: 1, carisma: 0.6 },
+    patrulheiro: { destreza: 1, sabedoria: 0.6 },
+    paladino: { forca: 1, carisma: 0.8 },
+    arqueiro: { destreza: 1, inteligencia: 0.6 },
+    bardo: { carisma: 1, sabedoria: 0.6 },
+    monge: { destreza: 1, sabedoria: 0.6 },
+    assassino: { destreza: 1, forca: 0.6 },
+    barbaro: { forca: 1, constituicao: 0.8 },
+    lanceiro: { destreza: 1, forca: 0.8 },
+    druida: { sabedoria: 1, inteligencia: 0.6 },
+    feiticeiro: { inteligencia: 1, carisma: 0.6 },
+  };
+  const w = weights[String(hero.class)] || {};
+  let best: { t: Title; s: number } | null = null;
+  for (const t of hero.titles || []) {
+    const bonus = getTitleAttributeBonus(t.id);
+    const s = Object.entries(w).reduce((acc, [attr, weight]) => {
+      const val = (bonus as any)[attr] || 0;
+      return acc + (Number(weight) * Number(val));
+    }, 0);
+    if (!best || s > best.s) best = { t, s };
+  }
+  return best?.t;
 }

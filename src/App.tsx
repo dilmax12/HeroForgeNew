@@ -1,9 +1,9 @@
-import { Routes, Route, Link } from 'react-router-dom'
+import { Routes, Route, Link, Navigate } from 'react-router-dom'
 import React, { Suspense } from 'react'
 import Layout from './components/Layout'
 import HeroList from './components/HeroList'
 import HeroForm from './components/HeroForm'
-import HeroDetail from './components/HeroDetail'
+const HeroDetailLazy = React.lazy(() => import('./components/HeroDetail'))
 // import TestComponent from './components/TestComponent'
 import HeroProgression from './components/HeroProgression'
 import GuildSystem from './components/GuildSystem'
@@ -31,6 +31,7 @@ import Dungeon20 from './components/Dungeon20'
 import HuntingMissions from './components/HuntingMissions'
 import Inventory from './components/Inventory'
 import PetsPanel from './components/PetsPanel'
+import ErrorBoundary from './components/ErrorBoundary'
 import MountsPanel from './components/MountsPanel'
 import { useEffect } from 'react'
 import { startPlaytimeHeartbeat, stopPlaytimeHeartbeat } from './services/progressService'
@@ -46,6 +47,17 @@ import PlayerRegistration from './components/PlayerRegistration'
 import Tavern from './components/Tavern'
 import Messenger from './components/Messenger'
 import HeroForge from './components/HeroForge'
+import PremiumCenter from './components/PremiumCenterSimple'
+import DuelArena from './components/DuelArena'
+import SocialEventsPage from './components/SocialEventsPage'
+import EventDetailPage from './components/EventDetailPage'
+import OrganizerDashboard from './components/OrganizerDashboard'
+import UserProfilePage from './components/UserProfilePage'
+import FriendsPage from './components/FriendsPage'
+import SocialNotificationsPage from './components/SocialNotificationsPage'
+import UserEventsHistoryPage from './components/UserEventsHistoryPage'
+import MetricsDashboard from './components/MetricsDashboard'
+import StableHub from './components/StableHub'
 
 // Componente wrapper para HeroProgression que precisa do herói selecionado
 function HeroProgressionWrapper() {
@@ -346,12 +358,17 @@ function App() {
         'https://*.vercel.live',
         'wss://*.vercel.live'
       ].filter(Boolean).join(' ');
+      const adsOrigins = [
+        'https://pagead2.googlesyndication.com',
+        'https://tpc.googlesyndication.com',
+        'https://googleads.g.doubleclick.net'
+      ];
       cspMeta.content = [
         "default-src 'self'",
-        "frame-src 'self' https://vercel.live https://*.vercel.live",
-        `connect-src ${connectSrc}`,
+        `frame-src 'self' https://vercel.live https://*.vercel.live ${adsOrigins.join(' ')}`,
+        `connect-src ${connectSrc} ${adsOrigins.join(' ')}`,
         "style-src 'self' 'unsafe-inline'",
-        "script-src 'self'",
+        `script-src 'self' ${adsOrigins.join(' ')}`,
         "img-src 'self' data: blob: https:"
       ].join('; ') + ';';
       document.head.appendChild(cspMeta);
@@ -420,8 +437,9 @@ function App() {
           <Route path="journey" element={<JourneyFlow />} />
           <Route path="intro" element={<IntroCinematic />} />
           <Route path="create" element={<HeroForm />} />
+          <Route path="heroes/new" element={<HeroForm />} />
           <Route path="gallery" element={<HeroList />} />
-          <Route path="hero/:id" element={<HeroDetail />} />
+          <Route path="hero/:id" element={<Suspense fallback={<div className="p-6">Carregando herói…</div>}><HeroDetailLazy /></Suspense>} />
           <Route path="progression" element={<HeroProgressionWrapper />} />
           <Route path="evolution" element={<EvolutionPanelWrapper />} />
           {/* Party agora aponta para PartySystem (inclui Lobby Online) */}
@@ -436,10 +454,19 @@ function App() {
           <Route path="dungeon-20" element={<Dungeon20 />} />
           <Route path="dungeon-infinita" element={<Dungeon20 />} />
           <Route path="hunting" element={<HuntingMissions />} />
-          {/* Centralização de modos de missão em um único hub */}
-          <Route path="quests" element={<Suspense fallback={<div className="p-6">Carregando...</div>}><MissionsHubLazy /></Suspense>} />
+          {/* Quadro de Missões (disponíveis, ativas e concluídas) */}
+          <Route path="quests" element={<QuestBoard />} />
           <Route path="daily-goals" element={<DailyGoalsWrapper />} />
           <Route path="events" element={<EventsPanel />} />
+          <Route path="social-events" element={<SocialEventsPage />} />
+          <Route path="//social-events" element={<SocialEventsPage />} />
+          <Route path="event/:id" element={<EventDetailPage />} />
+          <Route path="organizer" element={<OrganizerDashboard />} />
+          <Route path="profile" element={<UserProfilePage />} />
+          <Route path="friends" element={<FriendsPage />} />
+          <Route path="notifications" element={<SocialNotificationsPage />} />
+          <Route path="events-history" element={<UserEventsHistoryPage />} />
+          <Route path="metrics" element={<MetricsDashboard />} />
           <Route path="activities" element={<ActivityFeed />} />
           {/* Cadastro básico de jogador (herói, itens e missão opcional) */}
           <Route path="cadastro" element={<PlayerRegistration />} />
@@ -459,11 +486,20 @@ function App() {
           <Route path="quick-mission" element={<QuickMissionWrapper />} />
           <Route path="admin" element={<Suspense fallback={<div className="p-6">Carregando...</div>}><AdminDashboardLazy /></Suspense>} />
           <Route path="shop" element={<Shop />} />
+          <Route path="premium" element={<PremiumCenter />} />
+          {/* Estábulo com sub-rotas para Mascotes e Montarias */}
+          <Route path="stable" element={<StableHub />}>
+            <Route index element={<Navigate to="/stable/pets" replace />} />
+            <Route path="pets" element={<ErrorBoundary fallback={<div className="p-6 rounded bg-red-900/40 border border-red-700 text-red-200">Falha ao carregar Mascotes</div>}><PetsPanel /></ErrorBoundary>} />
+            <Route path="mounts" element={<MountsPanel />} />
+          </Route>
+          <Route path="duel-arena" element={<DuelArena />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="hero-forge" element={<HeroForge />} />
           <Route path="training" element={<Training />} />
-          <Route path="pets" element={<PetsPanel />} />
-          <Route path="mounts" element={<MountsPanel />} />
+          {/* Redirecionar rotas antigas para novo hub */}
+          <Route path="pets" element={<Navigate to="/stable/pets" replace />} />
+          <Route path="mounts" element={<Navigate to="/stable/mounts" replace />} />
           <Route path="world-state-demo" element={<WorldStateDemo />} />
         </Route>
       </Routes>

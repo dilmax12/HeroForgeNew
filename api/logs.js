@@ -2,15 +2,32 @@ import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const ADMIN_API_TOKEN = process.env.ADMIN_API_TOKEN || '';
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+const ADMIN_USER_IDS = (process.env.ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+
+async function isAdminRequest(req) {
+  const authHeader = req.headers['authorization'] || '';
+  const tokenHeader = req.headers['x-admin-token'] || '';
+  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (ADMIN_API_TOKEN && (bearer === ADMIN_API_TOKEN || tokenHeader === ADMIN_API_TOKEN)) return true;
+  if (!bearer || !SUPABASE_URL) return false;
+  try {
+    const resp = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { Authorization: `Bearer ${bearer}` } });
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    const email = String(data?.email || '').toLowerCase();
+    const id = String(data?.id || '');
+    if (ADMIN_EMAILS.length && ADMIN_EMAILS.includes(email)) return true;
+    if (ADMIN_USER_IDS.length && ADMIN_USER_IDS.includes(id)) return true;
+    return false;
+  } catch { return false; }
+}
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
-    const ADMIN_API_TOKEN = process.env.ADMIN_API_TOKEN || '';
-    const authHeader = req.headers['authorization'] || '';
-    const tokenHeader = req.headers['x-admin-token'] || '';
-    const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-    const isAuth = ADMIN_API_TOKEN && (bearer === ADMIN_API_TOKEN || tokenHeader === ADMIN_API_TOKEN);
-    if (!isAuth) return res.status(401).json({ error: 'Unauthorized' });
+    const ok = await isAdminRequest(req);
+    if (!ok) return res.status(401).json({ error: 'Unauthorized' });
     const action = (req.query?.action || '').toString();
     if (action === 'get') {
       const name = (req.query?.name || '').toString();

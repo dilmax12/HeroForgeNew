@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useHeroStore, calculateDerivedAttributes } from '../store/heroStore';
 import { notificationBus } from './NotificationSystem';
-import { useHeroStore } from '../store/heroStore';
 import { Hero } from '../types/hero';
 import { getOrRunDailyResult } from '../services/idleBattleService';
 import { calculateXPForLevel, LEVEL_CAP } from '../utils/progression';
@@ -115,6 +115,14 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
   const setActiveMount = useHeroStore(s => s.setActiveMount);
   const evolveMountForSelected = useHeroStore(s => s.evolveMountForSelected);
   const refineCompanion = useHeroStore(s => s.refineCompanion);
+  const availableQuests = useHeroStore(s => s.availableQuests);
+  const acceptQuest = useHeroStore(s => s.acceptQuest);
+  const suggested = React.useMemo(() => {
+    const list = availableQuests || [];
+    return list.find((q: any) => q.isGuildQuest && q.sticky && String(q.id).startsWith('companion-'));
+  }, [availableQuests]);
+  const trainMountForSelected = useHeroStore(s => s.trainMountForSelected);
+  React.useEffect(() => { const onKey = (e: KeyboardEvent) => { const favs = hero.favoriteMountIds || []; if (e.key === '1' && favs[0]) setActiveMount(favs[0]); if (e.key === '2' && favs[1]) setActiveMount(favs[1]); if (e.key === '3' && favs[2]) setActiveMount(favs[2]); }; window.addEventListener('keydown', onKey as any); return () => window.removeEventListener('keydown', onKey as any); }, [hero.favoriteMountIds])
   const bestMountId = React.useMemo(() => {
     const mounts = hero.mounts || [];
     if (!mounts.length) return undefined as string | undefined;
@@ -226,6 +234,9 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
   }, [hero.progression.achievements.length]);
 
   const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-gray-700' : 'border-gray-700';
+  const powerValue = typeof hero.derivedAttributes.power === 'number' 
+    ? hero.derivedAttributes.power 
+    : calculateDerivedAttributes(hero.attributes, hero.class, hero.progression.level, hero.inventory, hero.activeTitle).power;
   const activePet = (hero.pets || []).find(p => p.id === hero.activePetId);
   const costMap: Record<string, number> = { 'Instinto Feral': 8, 'Pulso Arcano': 10, 'Aura Sagrada': 9, 'Sussurro Sombrio': 12 };
   const petSkillReady = activePet?.exclusiveSkill ? ((activePet.energy || 0) >= (costMap[activePet.exclusiveSkill] || 8)) : false;
@@ -243,7 +254,7 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
             <div className="text-gray-400 text-[10px] md:text-xs">{hero.class}</div>
           </div>
         </div>
-        <div className="text-amber-400 text-base md:text-lg">⚡</div>
+        <div className="px-2 py-1 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] md:text-xs">Poder {powerValue}</div>
       </div>
 
       {/* Mascote Ativo */}
@@ -289,6 +300,8 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
                     <span className="text-amber-300">
                       {m.stage}
                       {typeof m.refineLevel === 'number' && m.refineLevel > 0 ? ` • +${m.refineLevel}` : ''}
+                      {typeof m.mastery === 'number' && m.mastery > 0 ? ` • Maestria ${m.mastery}` : ''}
+                      {(() => { const ms = Math.max(0, m.mastery||0); return ms>=30 ? ' • Mestre' : ms>=20 ? ' • Perito' : ms>=10 ? ' • Adepto' : '' })()}
                     </span>
                   );
                 })()}
@@ -299,6 +312,7 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
               {bestMountId && bestMountId !== hero.activeMountId && (
                 <button onClick={() => setActiveMount(bestMountId)} className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-[11px]">Ativar melhor</button>
               )}
+              <button onClick={() => trainMountForSelected()} className="px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-[11px]">Treinar</button>
               {(() => {
                 const m = (hero.mounts || []).find(mm => mm.id === hero.activeMountId);
                 if (!m) return null;
@@ -334,6 +348,15 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
                 );
               })()}
             </div>
+            {(() => {
+              const mb = hero.mountBuff;
+              if (!mb?.speedBonus) return null;
+              const end = mb.expiresAt ? new Date(mb.expiresAt).getTime() : 0;
+              const rem = Math.max(0, end - Date.now());
+              const mins = Math.floor(rem / 60000);
+              const secs = Math.floor((rem % 60000) / 1000);
+              return <div className="mt-2 text-[11px] text-emerald-300">Buff de velocidade +{mb.speedBonus} • expira em {String(mins).padStart(2,'0')}:{String(secs).padStart(2,'0')}</div>;
+            })()}
             {(() => {
               const active = (hero.mounts || []).find(mm => mm.id === hero.activeMountId)
               const best = (hero.mounts || []).find(mm => mm.id === bestMountId)
@@ -394,7 +417,12 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
       <div className="mb-2 md:mb-3">
         <div className="flex justify-between items-center mb-1">
           <span className="text-emerald-300 text-xs font-medium">Companheiros</span>
-          <Link to="/mounts" className="text-[11px] text-emerald-300 hover:text-emerald-200">Abrir</Link>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1 text-[11px] text-gray-300">
+              <input type="checkbox" defaultChecked={(() => { try { return localStorage.getItem('auto_accept_companion_mission') === '1'; } catch { return false; } })()} onChange={e => { try { localStorage.setItem('auto_accept_companion_mission', e.target.checked ? '1' : '0'); } catch {} }} /> Auto-aceitar
+            </label>
+            <Link to="/mounts" className="text-[11px] text-emerald-300 hover:text-emerald-200">Abrir</Link>
+          </div>
         </div>
         <div className="w-full bg-gray-700 rounded p-2 grid grid-cols-3 gap-2">
           <div className="text-center">
@@ -409,6 +437,39 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
             <div className="text-white text-xs md:text-sm font-medium">Pergaminhos</div>
             <div className="text-purple-300 text-[11px] md:text-xs">{hero.inventory.items['pergaminho-montaria'] || 0}</div>
           </div>
+        </div>
+        <div className="mt-1 text-[11px] text-gray-300">
+          {(() => {
+            const ids = hero.activeQuests || [];
+            const count = (availableQuests || []).filter((q: any) => ids.includes(q.id) && q.isGuildQuest).length;
+            return <Link to="/quests?companions=1" className="text-emerald-300 hover:text-emerald-200">Companheiros ativos: {count}</Link>;
+          })()}
+        </div>
+        {suggested && (
+          <div className="mt-1 text-[11px] flex items-center gap-2">
+            <span className="px-2 py-1 rounded bg-emerald-800/40 text-emerald-200 border border-emerald-600/40">🐾 Missão sugerida: {suggested.title}</span>
+            <button onClick={() => acceptQuest(hero.id, suggested.id)} className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white">Aceitar</button>
+            <Link to="/quests?companions=1" className="text-emerald-300 hover:text-emerald-200">Ver</Link>
+          </div>
+        )}
+      </div>
+      <div className="mb-2 md:mb-3">
+        <div className="flex justify-between items-center mb-1">
+          <span className="text-amber-300 text-xs font-medium">Ofertas Diárias</span>
+          <Link to="/premium-center#daily" className="text-[11px] text-amber-300 hover:text-amber-200">Abrir</Link>
+        </div>
+        <div className="w-full bg-gray-700 rounded p-2 text-[11px] text-gray-300">
+          {(() => {
+            try {
+              const dateStr = new Date().toDateString();
+              let count = 0;
+              for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i) || '';
+                if (k.startsWith(`daily_offer_purchased:${dateStr}:`)) count++;
+              }
+              return <span>Compradas hoje: {count}</span>;
+            } catch { return <span>Compradas hoje: 0</span>; }
+          })()}
         </div>
       </div>
 
@@ -436,6 +497,7 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
             <Link to="/hunting" className="text-[11px] text-indigo-300 hover:text-indigo-200">Caça</Link>
             <Link to="/dungeon-infinita" className="text-[11px] text-indigo-300 hover:text-indigo-200">Dungeon</Link>
             <Link to="/shop" className="text-[11px] text-indigo-300 hover:text-indigo-200">Loja</Link>
+            <Link to="/duel-arena" className="text-[11px] text-indigo-300 hover:text-indigo-200">Arena</Link>
           </div>
         </div>
         {(() => {

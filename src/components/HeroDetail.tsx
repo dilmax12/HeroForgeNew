@@ -1,11 +1,12 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useMemo, useState, Suspense, lazy } from 'react';
 import { useHeroStore } from '../store/heroStore';
 import { SHOP_ITEMS, ITEM_SETS } from '../utils/shop';
-import NarrativeChapters from './NarrativeChapters';
 import { getAvailableRecipes } from '../utils/forging';
-import TalentPlanManager from './TalentPlanManager';
-import UpcomingSkills from './UpcomingSkills';
+
+const NarrativeChapters = lazy(() => import('./NarrativeChapters'));
+const TalentPlanManager = lazy(() => import('./TalentPlanManager'));
+const UpcomingSkills = lazy(() => import('./UpcomingSkills'));
 
 const HeroDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -38,30 +39,125 @@ const HeroDetail = () => {
     }
   };
   
-  // Helpers para exibir itens
+  // Helpers
   const getItemName = (itemId?: string) => {
     if (!itemId) return '-';
     const item = SHOP_ITEMS.find(i => i.id === itemId);
     return item ? item.name : itemId;
   };
-  const inventoryEntries = Object
-    .entries(hero.inventory.items || {})
-    .filter(([, qty]) => (qty as number) > 0);
-  const myInvites = getReferralInvitesForHero(hero.id);
 
-  // Detectar conjunto ativo
-  const equipped = [hero.inventory.equippedWeapon, hero.inventory.equippedArmor, hero.inventory.equippedAccessory].filter(Boolean);
-  const equippedSetIds = equipped
-    .map(itemId => SHOP_ITEMS.find(i => i.id === itemId)?.setId)
-    .filter((sid): sid is string => !!sid);
-  const activeSetId = equippedSetIds.length === 3 && new Set(equippedSetIds).size === 1 ? equippedSetIds[0] : null;
-  const activeSet = activeSetId ? ITEM_SETS[activeSetId] : null;
+  const inventoryEntries = useMemo(
+    () => Object
+      .entries(hero.inventory.items || {})
+      .filter(([, qty]) => (qty as number) > 0),
+    [hero.inventory.items]
+  );
+
+  const myInvites = useMemo(() => getReferralInvitesForHero(hero.id), [hero.id, getReferralInvitesForHero]);
+
+  // Detectar conjunto ativo (memo)
+  const activeSet = useMemo(() => {
+    const equipped = [hero.inventory.equippedWeapon, hero.inventory.equippedArmor, hero.inventory.equippedAccessory].filter(Boolean);
+    const equippedSetIds = equipped
+      .map(itemId => SHOP_ITEMS.find(i => i.id === itemId)?.setId)
+      .filter((sid): sid is string => !!sid);
+    const activeSetId = equippedSetIds.length === 3 && new Set(equippedSetIds).size === 1 ? equippedSetIds[0] : null;
+    return activeSetId ? ITEM_SETS[activeSetId] : null;
+  }, [hero.inventory.equippedWeapon, hero.inventory.equippedArmor, hero.inventory.equippedAccessory]);
+
+  const availableRecipes = useMemo(() => getAvailableRecipes(hero), [hero]);
+
+  // SEO: título e descrição dinâmicos
+  useEffect(() => {
+    const title = `${hero.name} • Forjador de Heróis`;
+    document.title = title;
+    const descText = `${hero.name}, ${hero.class} ${hero.race}. Nível ${hero.progression.level}, rank ${hero.rankData?.currentRank || 'F'}. Veja atributos, equipamentos e jornada.`;
+    let meta = document.head.querySelector('meta[name="description"]') as HTMLMetaElement | null;
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'description';
+      document.head.appendChild(meta);
+    }
+    meta.content = descText;
+    try {
+      const canonicalHref = window.location.href;
+      let link = Array.from(document.head.querySelectorAll('link[rel="canonical"]'))[0] as HTMLLinkElement | undefined;
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'canonical';
+        document.head.appendChild(link);
+      }
+      link.href = canonicalHref;
+      const ogPairs: Array<[string, string]> = [
+        ['og:title', title],
+        ['og:description', descText],
+        ['og:type', 'website'],
+        ['og:url', canonicalHref],
+        ['og:image', hero.image || '']
+      ];
+      ogPairs.forEach(([prop, val]) => {
+        if (!val) return;
+        let tag = document.head.querySelector(`meta[property="${prop}"]`) as HTMLMetaElement | null;
+        if (!tag) {
+          tag = document.createElement('meta');
+          tag.setAttribute('property', prop);
+          document.head.appendChild(tag);
+        }
+        tag.setAttribute('content', val);
+      });
+      const twPairs: Array<[string, string]> = [
+        ['twitter:card', 'summary_large_image'],
+        ['twitter:title', title],
+        ['twitter:description', descText],
+        ['twitter:image', hero.image || '']
+      ];
+      twPairs.forEach(([name, val]) => {
+        if (!val) return;
+        let tag = document.head.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
+        if (!tag) {
+          tag = document.createElement('meta');
+          tag.setAttribute('name', name);
+          document.head.appendChild(tag);
+        }
+        tag.setAttribute('content', val);
+      });
+      const ld = {
+        '@context': 'https://schema.org',
+        '@type': 'Person',
+        name: hero.name,
+        description: descText,
+        url: canonicalHref,
+        image: hero.image || undefined
+      } as any;
+      let ldEl = document.head.querySelector('script[type="application/ld+json"][data-hero="1"]');
+      if (!ldEl) {
+        ldEl = document.createElement('script');
+        ldEl.setAttribute('type', 'application/ld+json');
+        ldEl.setAttribute('data-hero', '1');
+        document.head.appendChild(ldEl);
+      }
+      ldEl.textContent = JSON.stringify(ld);
+
+      if ((hero.image || '').includes('image.pollinations.ai')) {
+        const urls = ['https://image.pollinations.ai'];
+        urls.forEach(href => {
+          const ensure = (selector: string, factory: () => HTMLLinkElement) => {
+            let el = document.head.querySelector(selector) as HTMLLinkElement | null;
+            if (!el) { el = factory(); document.head.appendChild(el); }
+            el.href = href;
+          };
+          ensure('link[rel="preconnect"][href="https://image.pollinations.ai"]', () => { const l = document.createElement('link'); l.rel = 'preconnect'; l.crossOrigin = 'anonymous'; return l; });
+          ensure('link[rel="dns-prefetch"][href="https://image.pollinations.ai"]', () => { const l = document.createElement('link'); l.rel = 'dns-prefetch'; return l; });
+        });
+      }
+    } catch {}
+  }, [hero.name, hero.class, hero.race, hero.progression.level, hero.rankData?.currentRank]);
 
   return (
-    <div className="container mx-auto p-4 sm:p-6">
+    <article className="container mx-auto p-4 sm:p-6" aria-labelledby="hero-title">
       <div className="max-w-full sm:max-w-5xl mx-auto space-y-6">
-        {/* Header minimalista */}
-        <div className="flex items-center justify-between bg-gray-800/70 border border-white/10 rounded-xl p-4 sm:p-6">
+        {/* Header */}
+        <header className="group flex items-center justify-between rounded-xl p-4 sm:p-6 border border-white/10 bg-gradient-to-r from-gray-800/80 via-gray-800/60 to-gray-700/40 shadow-sm">
           <div className="flex items-center gap-4">
             {hero.image && (
               <img
@@ -71,27 +167,53 @@ const HeroDetail = () => {
                       .replace('?n=1&', '&')
                   : hero.image}
                 alt={`Avatar de ${hero.name}`}
-                className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover border border-gray-700"
+                width={80}
+                height={80}
+                loading="eager"
+                decoding="async"
+                fetchpriority="high"
+                sizes="(min-width: 640px) 80px, 64px"
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover border border-gray-700 motion-safe:transition-transform motion-safe:duration-300 group-hover:scale-[1.03]"
                 onError={(e) => { (e.currentTarget as HTMLImageElement).src = 'https://placehold.co/160x160?text=Avatar'; }}
               />
             )}
             <div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-white">{hero.name}</h2>
-              <div className="text-sm text-gray-400">{hero.class} • {hero.race}</div>
+              <h1 id="hero-title" className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+                {hero.name}
+              </h1>
+              <p className="text-sm text-gray-300">{hero.class} • {hero.race}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            <span className="px-3 py-1 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 text-sm">Nível {hero.progression.level}</span>
-            <span className="px-3 py-1 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-sm">Rank {hero.rankData?.currentRank || 'F'}</span>
+            <span className="px-3 py-1 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-sm">Nível {hero.progression.level}</span>
+            <span className="px-3 py-1 rounded-md bg-indigo-500/20 text-indigo-200 border border-indigo-500/30 text-sm">Rank {hero.rankData?.currentRank || 'F'}</span>
           </div>
-        </div>
+        </header>
 
-        {/* Cards compactos */}
+        {/* Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="rounded-xl p-4 bg-gray-800/70 border border-white/10">
-            <h3 className="text-base sm:text-lg font-semibold text-white mb-3">Informações</h3>
+            <h2 className="text-base sm:text-lg font-semibold text-white mb-3">Informações</h2>
             <div className="grid grid-cols-2 gap-3 text-sm text-gray-300">
-              <div><span className="text-gray-400">Alinhamento</span><div className="text-white">{hero.alignment.split('-').map(w => w[0].toUpperCase()+w.slice(1)).join(' ')}</div></div>
+              <div>
+                <span className="text-gray-400">Alinhamento</span>
+                <div className="text-white">
+                  {hero.alignment.split('-').map(w => w[0].toUpperCase()+w.slice(1)).join(' ')}
+                </div>
+                <div className="mt-1 text-xs text-indigo-300" title="Impacto do alinhamento em combate e recompensas">
+                  {(() => {
+                    const [axis, moralRaw] = hero.alignment.split('-');
+                    const moral = moralRaw === 'puro' ? 'neutro' : moralRaw;
+                    const effects: string[] = [];
+                    if (axis === 'leal') effects.push('+10% acerto');
+                    if (axis === 'caotico') effects.push('+10% crítico', '-5% acerto');
+                    if (moral === 'bom') effects.push('+20% dano vs dark');
+                    if (moral === 'mal') effects.push('drena 20% HP');
+                    if (moral === 'neutro') effects.push('+4% loot bônus');
+                    return `Efeitos: ${effects.join(' • ')}`;
+                  })()}
+                </div>
+              </div>
               {hero.background && <div><span className="text-gray-400">Antecedente</span><div className="text-white">{hero.background[0].toUpperCase()+hero.background.slice(1)}</div></div>}
               <div><span className="text-gray-400">XP</span><div className="text-white">{hero.progression.xp}</div></div>
               <div><span className="text-gray-400">Ouro</span><div className="text-white">{hero.progression.gold}</div></div>
@@ -103,7 +225,7 @@ const HeroDetail = () => {
             </div>
           </div>
           <div className="rounded-xl p-4 bg-gray-800/70 border border-white/10">
-            <h3 className="text-base sm:text-lg font-semibold text-white mb-3">Equipamentos</h3>
+            <h2 className="text-base sm:text-lg font-semibold text-white mb-3">Equipamentos</h2>
             <div className="grid grid-cols-3 gap-3 text-sm">
               <div className="bg-gray-700/50 p-3 rounded-md">
                 <div className="text-gray-400">Arma</div>
@@ -134,7 +256,7 @@ const HeroDetail = () => {
             )}
           </div>
           <div className="rounded-xl p-4 bg-gray-800/70 border border-white/10">
-            <h3 className="text-base sm:text-lg font-semibold text-white mb-3">Companheiros</h3>
+            <h2 className="text-base sm:text-lg font-semibold text-white mb-3">Companheiros</h2>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="bg-gray-700/50 p-3 rounded-md">
                 <div className="text-gray-400">Mascote Ativo</div>
@@ -142,7 +264,7 @@ const HeroDetail = () => {
                 {hero.activePetId && (
                   <div className="text-xs text-gray-300 mt-1">Refino: +{((hero.pets||[]).find(p => p.id===hero.activePetId)?.refineLevel||0)}%</div>
                 )}
-                <Link to="/pets" className="mt-2 inline-block px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-xs">Gerenciar Mascotes</Link>
+            <Link to="/pets" className="mt-2 inline-block px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">Gerenciar Mascotes</Link>
               </div>
               <div className="bg-gray-700/50 p-3 rounded-md">
                 <div className="text-gray-400">Montaria Ativa</div>
@@ -150,21 +272,46 @@ const HeroDetail = () => {
                 {hero.activeMountId && (
                   <div className="text-xs text-gray-300 mt-1">Speed: +{((hero.mounts||[]).find(m => m.id===hero.activeMountId)?.speedBonus||0)} • Refino: +{((hero.mounts||[]).find(m => m.id===hero.activeMountId)?.refineLevel||0)}%</div>
                 )}
-                <Link to="/mounts" className="mt-2 inline-block px-3 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white text-xs">Gerenciar Montarias</Link>
+            <Link to="/mounts" className="mt-2 inline-block px-3 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400">Gerenciar Montarias</Link>
               </div>
             </div>
           </div>
         </div>
 
-        <TalentPlanManager />
-        <UpcomingSkills />
+        <Suspense fallback={<div className="rounded-xl p-4 bg-gray-800/70 border border-white/10">
+          <div className="animate-pulse space-y-3">
+            <div className="h-5 w-40 bg-gray-700 rounded" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="h-16 bg-gray-700 rounded" />
+              <div className="h-16 bg-gray-700 rounded" />
+            </div>
+          </div>
+        </div>}>
+          <section aria-label="Planejador de Talentos">
+            <TalentPlanManager />
+          </section>
+        </Suspense>
+        <Suspense fallback={<div className="rounded-xl p-4 bg-gray-800/70 border border-white/10">
+          <div className="animate-pulse space-y-3">
+            <div className="h-5 w-48 bg-gray-700 rounded" />
+            <div className="grid grid-cols-3 gap-3">
+              <div className="h-12 bg-gray-700 rounded" />
+              <div className="h-12 bg-gray-700 rounded" />
+              <div className="h-12 bg-gray-700 rounded" />
+            </div>
+          </div>
+        </div>}>
+          <section aria-label="Próximas Habilidades">
+            <UpcomingSkills />
+          </section>
+        </Suspense>
 
         {/* Atributos */}
-        <div className="rounded-xl p-4 bg-gray-800/70 border border-white/10">
-          <h3 className="text-base sm:text-lg font-semibold text-white mb-3">Atributos</h3>
+        <section className="rounded-xl p-4 bg-gray-800/70 border border-white/10" aria-labelledby="attr-title">
+          <h2 id="attr-title" className="text-base sm:text-lg font-semibold text-white mb-3">Atributos</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
             {Object.entries(hero.attributes).map(([key, value]) => (
-              <div key={key} className="bg-gray-700/50 p-3 rounded-md">
+              <div key={key} className="bg-gray-700/50 p-3 rounded-md motion-safe:transition-colors hover:bg-gray-700/70">
                 <div className="text-gray-400 capitalize">{key}</div>
                 <div className="text-white">{value}</div>
               </div>
@@ -172,17 +319,17 @@ const HeroDetail = () => {
           </div>
           <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             {Object.entries(hero.derivedAttributes).map(([key, value]) => (
-              <div key={key} className="bg-gray-700/50 p-3 rounded-md">
+              <div key={key} className="bg-gray-700/50 p-3 rounded-md motion-safe:transition-colors hover:bg-gray-700/70">
                 <div className="text-gray-400 capitalize">{key}</div>
                 <div className="text-white">{value as any}</div>
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
         {/* Inventário */}
-        <div className="rounded-xl p-4 bg-gray-800/70 border border-white/10">
-          <h3 className="text-base sm:text-lg font-semibold text-white mb-3">Inventário</h3>
+        <section className="rounded-xl p-4 bg-gray-800/70 border border-white/10" aria-labelledby="inv-title">
+          <h2 id="inv-title" className="text-base sm:text-lg font-semibold text-white mb-3">Inventário</h2>
           {inventoryEntries.length === 0 && (
             <div className="text-sm text-gray-400">Sem itens no inventário.</div>
           )}
@@ -191,7 +338,7 @@ const HeroDetail = () => {
               {inventoryEntries.map(([itemId, qty]) => {
                 const item = SHOP_ITEMS.find(i => i.id === itemId);
                 return (
-                  <div key={itemId} className="bg-gray-700/50 p-3 rounded-md">
+                  <div key={itemId} className="bg-gray-700/50 p-3 rounded-md motion-safe:transition-transform hover:translate-y-0.5">
                     <div className="text-white font-medium">{item ? item.name : itemId}</div>
                     <div className="text-xs text-gray-400">Qtd: {qty}</div>
                     {item?.rarity && <div className="text-xs mt-1 text-gray-300">Raridade: {item.rarity}</div>}
@@ -204,42 +351,54 @@ const HeroDetail = () => {
 
           {/* Forja Simples */}
           <div className="mt-4">
-            <h4 className="text-sm font-semibold text-white mb-2">Forja Simples</h4>
+            <h3 className="text-sm font-semibold text-white mb-2">Forja Simples</h3>
             <div className="mb-2">
-              <Link to="/hero-forge" className="inline-flex items-center gap-2 px-2 py-1 rounded bg-amber-600 text-white text-xs hover:bg-amber-700">Ir à Forja ⚒️</Link>
+               <Link to="/hero-forge" className="inline-flex items-center gap-2 px-2 py-1 rounded bg-amber-600 text-white text-xs hover:bg-amber-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">Ir à Forja ⚒️</Link>
             </div>
-            {(() => {
-              const recipes = getAvailableRecipes(hero);
-              if (recipes.length === 0) return (<div className="text-xs text-gray-400">Nenhuma receita disponível com seus materiais e rank atual.</div>);
-              return (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {recipes.map(r => (
-                    <div key={r.id} className="bg-gray-700/50 p-3 rounded-md flex items-center justify-between">
-                      <div>
-                        <div className="text-white text-sm font-medium">{r.name}</div>
-                        <div className="text-xs text-gray-300">Insumos: {r.inputs.map(i => `${i.qty}x ${SHOP_ITEMS.find(s => s.id === i.id)?.name || i.id}`).join(', ')}</div>
-                      </div>
-                      <button
-                        onClick={() => craftItem(hero.id, r.id)}
-                        className="px-3 py-1 rounded bg-emerald-600 text-white text-xs hover:bg-emerald-700"
-                      >
-                        Forjar
-                      </button>
+            {availableRecipes.length === 0 && (
+              <div className="text-xs text-gray-400">Nenhuma receita disponível com seus materiais e rank atual.</div>
+            )}
+            {availableRecipes.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {availableRecipes.map(r => (
+                  <div key={r.id} className="bg-gray-700/50 p-3 rounded-md flex items-center justify-between">
+                    <div>
+                      <div className="text-white text-sm font-medium">{r.name}</div>
+                      <div className="text-xs text-gray-300">Insumos: {r.inputs.map(i => `${i.qty}x ${SHOP_ITEMS.find(s => s.id === i.id)?.name || i.id}`).join(', ')}</div>
                     </div>
-                  ))}
-                </div>
-              );
-            })()}
+                    <button
+                      onClick={() => craftItem(hero.id, r.id)}
+                      className="px-3 py-1 rounded bg-emerald-600 text-white text-xs hover:bg-emerald-700"
+                    >
+                      Forjar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
+        </section>
 
         {/* Capítulos da Jornada */}
-        <NarrativeChapters />
+        <Suspense fallback={<div className="rounded-xl p-4 bg-gray-800/70 border border-white/10">
+          <div className="animate-pulse space-y-3">
+            <div className="h-5 w-32 bg-gray-700 rounded" />
+            <div className="space-y-2">
+              <div className="h-10 bg-gray-700 rounded" />
+              <div className="h-10 bg-gray-700 rounded" />
+              <div className="h-10 bg-gray-700 rounded" />
+            </div>
+          </div>
+        </div>}>
+          <section aria-label="Capítulos da Jornada">
+            <NarrativeChapters />
+          </section>
+        </Suspense>
 
         {/* Convites e Compartilhamento */}
-        <div className="rounded-xl p-4 bg-gray-800/70 border border-white/10">
+        <section className="rounded-xl p-4 bg-gray-800/70 border border-white/10" aria-labelledby="invite-title">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-base sm:text-lg font-semibold text-white">Convidar Amigos</h3>
+            <h2 id="invite-title" className="text-base sm:text-lg font-semibold text-white">Convidar Amigos</h2>
             <button
               disabled={creatingInvite}
               onClick={() => {
@@ -275,7 +434,7 @@ const HeroDetail = () => {
                         console.warn('Compartilhamento nativo cancelado/indisponível:', err);
                       }
                     }}
-                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-md text-sm font-semibold"
+                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-md text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                   >
                     Compartilhar
                   </button>
@@ -290,7 +449,7 @@ const HeroDetail = () => {
                       if (ok) window.open(shareLink, '_blank');
                     }
                   }}
-                  className="px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded-md text-sm font-semibold"
+                  className="px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded-md text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
                 >
                   Copiar
                 </button>
@@ -299,7 +458,7 @@ const HeroDetail = () => {
           )}
 
           <div className="mt-4">
-            <h4 className="text-sm font-semibold text-gray-200 mb-2">Seus convites</h4>
+            <h3 className="text-sm font-semibold text-gray-200 mb-2">Seus convites</h3>
             {myInvites.length === 0 && (
               <div className="text-sm text-gray-400">Nenhum convite criado ainda.</div>
             )}
@@ -320,25 +479,25 @@ const HeroDetail = () => {
               </div>
             )}
           </div>
-        </div>
+        </section>
 
         {/* Ações */}
-        <div className="flex justify-between">
+        <footer className="flex justify-between" aria-label="Ações da página">
           <Link 
             to="/" 
-            className="px-4 sm:px-6 py-2 sm:py-3 bg-gray-700 hover:bg-gray-600 rounded-md font-bold transition-colors text-sm sm:text-base"
+            className="px-4 sm:px-6 py-2 sm:py-3 bg-gray-700 hover:bg-gray-600 rounded-md font-bold transition-colors text-sm sm:text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
           >
             Voltar
           </Link>
           <button
             onClick={handleDelete}
-            className="px-4 sm:px-6 py-2 sm:py-3 bg-red-600 hover:bg-red-700 rounded-md font-bold transition-colors text-sm sm:text-base"
+            className="px-4 sm:px-6 py-2 sm:py-3 bg-red-600 hover:bg-red-700 rounded-md font-bold transition-colors text-sm sm:text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
           >
             Deletar Herói
           </button>
-        </div>
+        </footer>
       </div>
-    </div>
+    </article>
   );
 };
 

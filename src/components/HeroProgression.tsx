@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Hero } from '../types/hero';
-import { useHeroStore } from '../store/heroStore';
+import { useHeroStore, calculateDerivedAttributes } from '../store/heroStore';
 import { SHOP_ITEMS } from '../utils/shop';
 import AchievementsList from './AchievementsList';
 import ReputationPanel from './ReputationPanel';
@@ -103,6 +103,7 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
     const t = setTimeout(() => setHighlightDerived(false), 1400);
     return () => clearTimeout(t);
   }, [derivedKey]);
+  const powerValue = typeof hero.derivedAttributes.power === 'number' ? hero.derivedAttributes.power : calculateDerivedAttributes(hero.attributes, hero.class, hero.progression.level, hero.inventory, hero.activeTitle).power;
 
   // Se houver hash na URL, rolar suavemente para a seção correspondente
   useEffect(() => {
@@ -282,6 +283,10 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
                     {hero.derivedAttributes.armorClass}
                     {totalBonuses.defense > 0 && <span className="text-blue-600"> (+{totalBonuses.defense})</span>}
                   </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-900">Poder</span>
+                  <span className="font-medium text-gray-900">{powerValue}</span>
                 </div>
               </div>
           </div>
