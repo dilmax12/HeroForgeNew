@@ -1,5 +1,6 @@
 // Servidor Express local para desenvolvimento
 import express from 'express';
+import Stripe from 'stripe';
 import dotenv from 'dotenv';
 import { InferenceClient } from '@huggingface/inference';
 import { createClient as createSbClient } from '@supabase/supabase-js';
@@ -72,6 +73,7 @@ const tavernRerollUsage = new Map();
 // === Lobby Online (Party) em memória ===
 // Estrutura para multiplayer assíncrono simples
 const activeParties = new Map(); // partyId -> party
+const chatSubscribersByParty = new Map();
 
 function partyToPublic(p) {
   if (!p) return null;
@@ -180,6 +182,32 @@ app.get('/api/party/chat', (req, res) => {
   }
 });
 
+app.get('/api/party/chat/stream', (req, res) => {
+  try {
+    const partyId = String(req.query.partyId || '');
+    const party = activeParties.get(partyId);
+    if (!party) return res.status(404).json({ error: 'Party não encontrada' });
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+    const init = Array.isArray(party.messages) ? party.messages.slice(-50) : [];
+    res.write('event: init\n');
+    res.write(`data: ${JSON.stringify(init)}\n\n`);
+    const subs = chatSubscribersByParty.get(partyId) || new Set();
+    subs.add(res);
+    chatSubscribersByParty.set(partyId, subs);
+    req.on('close', () => {
+      const s = chatSubscribersByParty.get(partyId);
+      if (s) s.delete(res);
+      try { res.end(); } catch {}
+    });
+  } catch (err) {
+    console.error('party chat stream error:', err);
+    try { res.end(); } catch {}
+  }
+});
+
 app.post('/api/party/chat', (req, res) => {
   try {
     const { partyId, playerId, text } = req.body || {};
@@ -193,6 +221,15 @@ app.post('/api/party/chat', (req, res) => {
     };
     party.messages = party.messages || [];
     party.messages.push(msg);
+    const subs = chatSubscribersByParty.get(partyId);
+    if (subs) {
+      for (const s of subs) {
+        try {
+          s.write('event: message\n');
+          s.write(`data: ${JSON.stringify(msg)}\n\n`);
+        } catch {}
+      }
+    }
     return res.json({ ok: true, message: msg });
   } catch (err) {
     console.error('party chat send error:', err);
@@ -465,6 +502,29 @@ app.get('/api/events/list', (req, res) => {
   }
 });
 
+app.get('/api/events/recommendations', (req, res) => {
+  try {
+    const viewerId = String(req.query.viewerId || '');
+    const interests = String(req.query.interests || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit || 50)));
+    const offset = Math.max(0, Number(req.query.offset || 0));
+    const all = Array.from(activeEvents.values()).filter(e => {
+      if (e.deleted) return false;
+      if (e.ownerId === viewerId) return false;
+      if (e.privacy !== 'public') return false;
+      const count = Object.values(e.attendees || {}).filter(v => v === 'yes').length;
+      if (count >= e.capacity) return false;
+      if (!interests.length) return true;
+      const etags = (Array.isArray(e.tags) ? e.tags : []).map(t => String(t).toLowerCase());
+      return interests.some(t => etags.includes(t));
+    });
+    const slice = all.slice(offset, offset + limit).map(e => eventPublicView(e, viewerId));
+    return res.json({ events: slice, pagination: { total: all.length, offset, limit, hasMore: offset + limit < all.length } });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao recomendar eventos' });
+  }
+});
+
 app.get('/api/events/:id', (req, res) => {
   try {
     const viewerId = String(req.query.viewerId || '');
@@ -663,28 +723,6 @@ app.post('/api/events/:id/rate', async (req, res) => {
   }
 });
 
-app.get('/api/events/recommendations', (req, res) => {
-  try {
-    const viewerId = String(req.query.viewerId || '');
-    const interests = String(req.query.interests || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
-    const limit = Math.max(1, Math.min(100, Number(req.query.limit || 50)));
-    const offset = Math.max(0, Number(req.query.offset || 0));
-    const all = Array.from(activeEvents.values()).filter(e => {
-      if (e.deleted) return false;
-      if (e.ownerId === viewerId) return false;
-      if (e.privacy !== 'public') return false;
-      const count = Object.values(e.attendees || {}).filter(v => v === 'yes').length;
-      if (count >= e.capacity) return false;
-      if (!interests.length) return true;
-      const etags = (Array.isArray(e.tags) ? e.tags : []).map(t => String(t).toLowerCase());
-      return interests.some(t => etags.includes(t));
-    });
-    const slice = all.slice(offset, offset + limit).map(e => eventPublicView(e, viewerId));
-    return res.json({ events: slice, pagination: { total: all.length, offset, limit, hasMore: offset + limit < all.length } });
-  } catch (err) {
-    return res.status(500).json({ error: 'Erro ao recomendar eventos' });
-  }
-});
 
 app.get('/api/events/export', (req, res) => {
   try {
@@ -1786,7 +1824,37 @@ app.get('/api/monetization/config', async (_req, res) => {
 app.post('/api/payments/create-checkout-session', (req, res) => {
   try {
     const { productId } = req.body || {};
-    // Em dev, retornamos uma sessão fake
+    const secretKey = process.env.STRIPE_SECRET_KEY || '';
+    if (secretKey) {
+      const stripe = new Stripe(secretKey, { apiVersion: '2023-10-16' });
+      const forwardedProto = (req.headers['x-forwarded-proto'] && String(req.headers['x-forwarded-proto'])) || '';
+      const forwardedHost = (req.headers['x-forwarded-host'] && String(req.headers['x-forwarded-host'])) || '';
+      const publicOrigin = process.env.PUBLIC_ORIGIN || '';
+      const hdrOrigin = (req.headers.origin && String(req.headers.origin)) || '';
+      const origin = publicOrigin || (forwardedHost ? `${forwardedProto || 'https'}://${forwardedHost}` : (hdrOrigin || 'http://localhost:4173'));
+      const priceMap = {
+        'remove-ads': process.env.STRIPE_PRICE_REMOVE_ADS || '',
+        'season-pass': process.env.STRIPE_PRICE_SEASON_PASS || ''
+      };
+      let priceId = (priceMap[productId] || '');
+      if (!priceId && productId && productId.startsWith('frame-')) priceId = process.env.STRIPE_PRICE_FRAME || '';
+      if (!priceId && productId && productId.startsWith('theme-')) priceId = process.env.STRIPE_PRICE_THEME || '';
+      if (priceId) {
+        stripe.checkout.sessions.create({
+          mode: 'payment',
+          line_items: [{ price: priceId, quantity: 1 }],
+          success_url: `${origin}/premium?checkout=success&p=${encodeURIComponent(productId || '')}&sid={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${origin}/premium?checkout=cancel`
+        }).then(session => {
+          return res.json({ ok: true, sessionId: session.id, redirectUrl: session.url });
+        }).catch(err => {
+          console.error('stripe checkout error:', err?.message || String(err));
+          const sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+          return res.json({ ok: true, sessionId });
+        });
+        return;
+      }
+    }
     const sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
     return res.json({ ok: true, sessionId });
   } catch (err) {
@@ -1799,10 +1867,109 @@ app.post('/api/payments/verify', (req, res) => {
   try {
     const { sessionId } = req.body || {};
     if (!sessionId) return res.status(400).json({ ok: false, error: 'sessionId requerido' });
+    const secretKey = process.env.STRIPE_SECRET_KEY || '';
+    if (secretKey && sessionId.startsWith('cs_')) {
+      const stripe = new Stripe(secretKey, { apiVersion: '2023-10-16' });
+      stripe.checkout.sessions.retrieve(String(sessionId)).then(sess => {
+        const paid = sess.payment_status === 'paid' || sess.status === 'complete';
+        return res.json({ ok: paid });
+      }).catch(err => {
+        console.error('stripe verify error:', err?.message || String(err));
+        return res.json({ ok: false });
+      });
+      return;
+    }
     return res.json({ ok: true });
   } catch (err) {
     console.error('payments verify error:', err);
     return res.status(500).json({ ok: false });
+  }
+});
+
+app.post('/api/metrics/ingest', rateLimit(60000, 60), async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const id = `metrics-${Date.now()}-${Math.random().toString(36).slice(2,9)}`;
+    try {
+      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        try { await supabase.storage.createBucket('metrics', { public: false }); } catch {}
+        const buf = Buffer.from(JSON.stringify({ id, ts: new Date().toISOString(), payload }), 'utf-8');
+        await supabase.storage.from('metrics').upload(`${id}.json`, buf, { contentType: 'application/json', upsert: true });
+      }
+    } catch {}
+    return res.json({ id });
+  } catch (err) {
+    return res.status(500).json({ error: 'Falha ao ingerir métricas' });
+  }
+});
+
+app.get('/api/metrics/daily', async (_req, res) => {
+  try {
+    const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+    const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return res.json({ days: [] });
+    const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    try { await supabase.storage.createBucket('metrics', { public: false }); } catch {}
+    const { data: files, error } = await supabase.storage.from('metrics').list('', { limit: 1000 });
+    if (error) return res.status(500).json({ error: error.message });
+    const daysMap = new Map();
+    for (const f of (files || [])) {
+      try {
+        const { data: blob } = await supabase.storage.from('metrics').download(f.name);
+        if (!blob) continue;
+        const txt = await blob.text();
+        const json = JSON.parse(txt || '{}');
+        const ts = json?.ts || new Date().toISOString();
+        const day = ts.split('T')[0];
+        const kpi = json?.payload?.kpi || json?.kpi || {};
+        const installs = json?.payload?.installs || json?.installs || 0;
+        const purchases = json?.payload?.purchases || json?.purchases || 0;
+        const cur = daysMap.get(day) || { day, installs: 0, purchases: 0, sessions: 0, dau: 0, revenue: 0, themeSwitches: 0, frameSwitches: 0 };
+        cur.installs += Number(installs || 0);
+        cur.purchases += Number(purchases || 0);
+        cur.sessions += Number(kpi?.overview?.totalSessions || 0);
+        cur.dau = Math.max(Number(kpi?.engagement?.dailyActiveUsers || 0), cur.dau);
+        const cust = json?.payload?.customizations || json?.customizations || {};
+        cur.themeSwitches += Number(cust?.themeSwitches || 0);
+        cur.frameSwitches += Number(cust?.frameSwitches || 0);
+        daysMap.set(day, cur);
+      } catch {}
+    }
+    const days = Array.from(daysMap.values()).sort((a,b) => a.day.localeCompare(b.day)).slice(-30);
+    return res.json({ days });
+  } catch (err) {
+    return res.status(500).json({ error: 'Falha ao agregar métricas' });
+  }
+});
+
+app.get('/api/metrics/summary', async (_req, res) => {
+  try {
+    const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+    const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return res.json({ installs: 0, purchases: 0, revenue: 0 });
+    const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    try { await supabase.storage.createBucket('metrics', { public: false }); } catch {}
+    const { data: files } = await supabase.storage.from('metrics').list('', { limit: 1000 });
+    let installs = 0, purchases = 0;
+    for (const f of (files || [])) {
+      try {
+        const { data: blob } = await supabase.storage.from('metrics').download(f.name);
+        if (!blob) continue;
+        const txt = await blob.text();
+        const json = JSON.parse(txt || '{}');
+        installs += Number((json?.payload?.installs ?? json?.installs) || 0);
+        purchases += Number((json?.payload?.purchases ?? json?.purchases) || 0);
+      } catch {}
+    }
+    // Estimar receita por compra usando preço padrão
+    const defaultPrice = Number(process.env.DEFAULT_PURCHASE_PRICE || '4.99');
+    const revenue = Number((purchases * defaultPrice).toFixed(2));
+    return res.json({ installs, purchases, revenue });
+  } catch (err) {
+    return res.status(500).json({ error: 'Falha ao sumarizar métricas' });
   }
 });
 
@@ -1952,4 +2119,23 @@ app.get('/api/backup', async (_req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor IA rodando na porta ${PORT}`);
   scheduleAutoBackup();
+});
+app.post('/api/logs', rateLimit(60000, 100), async (req, res) => {
+  try {
+    const id = `log-${Date.now()}-${Math.random().toString(36).slice(2,9)}`;
+    const payload = req.body || {};
+    try {
+      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        try { await supabase.storage.createBucket('client_logs', { public: false }); } catch {}
+        const buf = Buffer.from(JSON.stringify({ id, ts: new Date().toISOString(), payload }), 'utf-8');
+        await supabase.storage.from('client_logs').upload(`${id}.json`, buf, { contentType: 'application/json', upsert: true });
+      }
+    } catch {}
+    return res.json({ id });
+  } catch (err) {
+    return res.status(500).json({ error: 'Falha ao registrar log' });
+  }
 });

@@ -28,6 +28,8 @@ export default function Dungeon20() {
   const hero = useHeroStore(s => s.getSelectedHero());
   const gainXP = useHeroStore(s => s.gainXP);
   const gainGold = useHeroStore(s => s.gainGold);
+  const gainGlory = useHeroStore(s => s.gainGlory);
+  const gainArcaneEssence = useHeroStore(s => s.gainArcaneEssence);
   const updateHero = useHeroStore(s => s.updateHero);
   const getHeroParty = useHeroStore(s => s.getHeroParty);
   const addItemToInventory = useHeroStore(s => s.addItemToInventory);
@@ -204,9 +206,13 @@ export default function Dungeon20() {
       const bossRewardMult = boss ? 1.5 : 1;
       const xp = Math.round(baseXp * mult * bossRewardMult);
       const gold = Math.round(baseGold * mult * bossRewardMult);
+      const glory = Math.round(gold * 0.5);
+      const essence = boss ? Math.round(1 * mult) : 0;
 
       gainXP(hero.id, xp);
       gainGold(hero.id, gold);
+      if (glory > 0) gainGlory(hero.id, glory);
+      if (essence > 0) gainArcaneEssence(hero.id, essence);
 
       const result: FloorResult = {
         floor: currentFloor,
@@ -362,7 +368,11 @@ export default function Dungeon20() {
           // Gerar loot de baú com suporte a 'comum'
           const items = generateChestLoot(tier as any);
           const gold = Math.round((tier === 'comum' ? 10 : tier === 'raro' ? 25 : tier === 'epico' ? 60 : 150) * mult * bossRewardMult);
+          const gloryChest = Math.round((tier === 'comum' ? 2 : tier === 'raro' ? 4 : tier === 'epico' ? 8 : 15) * bossRewardMult);
+          const essenceChest = tier === 'raro' ? 1 : tier === 'epico' ? 1 : tier === 'lendario' ? 2 : 0;
           gainGold(hero.id, gold);
+          if (gloryChest > 0) gainGlory(hero.id, gloryChest);
+          if (essenceChest > 0) gainArcaneEssence(hero.id, essenceChest);
           // Conceder itens ao inventário
           if (items.length) {
             items.forEach(it => {
@@ -375,7 +385,7 @@ export default function Dungeon20() {
           }
           const itemNames = items.map(i => i.name);
           const itemIds = items.map(i => i.id);
-          const result: FloorResult = { floor: currentFloor, success: true, event: 'chest', xpGained: 0, goldGained: gold, narrative: `Baú antigo: ${tier.toUpperCase()} • +${gold} ouro${items.length ? ' • Itens raros' : ''}` };
+          const result: FloorResult = { floor: currentFloor, success: true, event: 'chest', xpGained: 0, goldGained: gold, narrative: `Baú antigo: ${tier.toUpperCase()} • +${gold} ouro • +${gloryChest} glória${essenceChest>0?` • +${essenceChest} essência`:''}${items.length ? ' • Itens raros' : ''}` };
           if (itemNames.length) {
             result.itemsAwarded = itemNames;
             result.itemIdsAwarded = itemIds;
@@ -700,7 +710,7 @@ export default function Dungeon20() {
                         const isEquipped = !!hero && (
                           (item?.type === 'weapon' && hero.inventory.equippedWeapon === itemId) ||
                           (item?.type === 'armor' && hero.inventory.equippedArmor === itemId) ||
-                          (item?.type === 'accessory' && hero.inventory.equippedAccessory === itemId)
+                          (item?.type === 'accessory' && (hero.inventory.equippedAccessories || []).includes(itemId))
                         );
                         const bonusParts: string[] = [];
                         if (item?.bonus) {
@@ -789,10 +799,14 @@ export default function Dungeon20() {
           const bossRewardMult = boss ? 1.5 : 1;
             const xp = Math.round((res.xpGained || 0) * mult * bossRewardMult);
             const gold = Math.round((res.goldGained || 0) * mult * bossRewardMult);
+            const glory = Math.round(gold * 0.5);
+            const essence = boss ? 1 : 0;
 
             // Aplicar recompensas e dano
             gainXP(hero.id, xp);
             gainGold(hero.id, gold);
+            if (glory > 0) gainGlory(hero.id, glory);
+            if (essence > 0) gainArcaneEssence(hero.id, essence);
             const curHp = hero.derivedAttributes.currentHp ?? (hero.derivedAttributes.hp || 0);
             const newHp = Math.max(0, curHp - (res.damage || 0));
             updateHero(hero.id, { derivedAttributes: { ...hero.derivedAttributes, currentHp: newHp } });

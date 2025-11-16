@@ -1,14 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { useHeroStore } from '../store/heroStore';
 import { SHOP_ITEMS } from '../utils/shop';
 import { useMonetizationStore } from '../store/monetizationStore';
 import { seasonalThemes } from '../styles/medievalTheme';
+import { Jewel } from '../types/jewel';
 
 type ItemType = 'todos' | 'consumable' | 'weapon' | 'armor' | 'accessory' | 'material';
 type ItemRarity = 'todas' | 'comum' | 'incomum' | 'raro' | 'epico' | 'lendario';
 
 const Inventory: React.FC = () => {
-  const { getSelectedHero, equipItem, sellItem, useItem, unequipItem, upgradeItem } = useHeroStore();
+  const { getSelectedHero, equipItem, sellItem, useItem, unequipItem, upgradeItem, socketJewel, removeJewel, fuseJewels } = useHeroStore();
   const hero = getSelectedHero();
   const { activeSeasonalTheme } = useMonetizationStore();
   const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-gray-200' : 'border-gray-200';
@@ -18,6 +19,93 @@ const Inventory: React.FC = () => {
   const [search, setSearch] = useState('');
   const [qtyByItem, setQtyByItem] = useState<Record<string, number>>({});
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const weaponCapacity = 2;
+  const armorCapacity = 4;
+  const accessoryCapacity = 9;
+
+  const equippedWeapons = hero?.inventory.equippedWeapons || [];
+  const equippedArmorSlots = hero?.inventory.equippedArmorSlots || [];
+  const equippedAccessories = hero?.inventory.equippedAccessories || [];
+
+  const rarityClass = useCallback((rarity?: string) => {
+    switch (rarity) {
+      case 'lendario': return 'border-yellow-400 bg-yellow-50';
+      case 'epico': return 'border-purple-400 bg-purple-50';
+      case 'raro': return 'border-blue-400 bg-blue-50';
+      case 'incomum': return 'border-green-400 bg-green-50';
+      default: return 'border-gray-300 bg-gray-50';
+    }
+  }, []);
+
+  const getMaxSlotsForItem = (itemId?: string) => {
+    if (!itemId) return 0;
+    const item = SHOP_ITEMS.find(i => i.id === itemId);
+    if (!item) return 0;
+    if (item.type === 'weapon') return 2;
+    if (item.type === 'armor') return 3;
+    if (item.type === 'accessory') return 1;
+    return 0;
+  };
+
+  const getJewelLabel = (jewelKey: string) => {
+    const [_, tipo, nivelStr] = jewelKey.split(':');
+    const j = new Jewel(crypto.randomUUID(), tipo as any, Number(nivelStr));
+    const b = j.getBonus();
+    const parts: string[] = [];
+    if (b.forca) parts.push(`+${b.forca} Força`);
+    if (b.inteligencia) parts.push(`+${b.inteligencia} Inteligência`);
+    if (b.destreza) parts.push(`+${b.destreza} Destreza`);
+    if (b.constituicao) parts.push(`+${b.constituicao} Constituição`);
+    if (b.armorClass) parts.push(`+${b.armorClass} Defesa`);
+    return `${tipo.toUpperCase()} Nv.${j.nivel} • ${parts.join(' / ')}`;
+  };
+
+  const buildTooltip = (itemId: string) => {
+    const item = SHOP_ITEMS.find(i => i.id === itemId);
+    if (!item) return '';
+    const parts: string[] = [item.name];
+    if (item.bonus) {
+      const b = item.bonus as any;
+      const map: Record<string,string> = { forca: 'Força', destreza: 'Destreza', constituicao: 'Constituição', inteligencia: 'Inteligência', sabedoria: 'Sabedoria', carisma: 'Carisma' };
+      for (const k of Object.keys(b)) { parts.push(`+${b[k]} ${map[k] || k}`); }
+    }
+    if (item.effects) {
+      const e = item.effects as any;
+      if (e.hp) parts.push(`+${e.hp} HP`);
+      if (e.mp) parts.push(`+${e.mp} MP`);
+      if (e.special) parts.push(`${e.special}`);
+    }
+    return parts.join(' • ');
+  };
+
+  const onDragStart = (ev: React.DragEvent, itemId: string) => {
+    ev.dataTransfer.setData('text/plain', itemId);
+  };
+  const onJewelDragStart = (ev: React.DragEvent, jewelKey: string) => {
+    ev.dataTransfer.setData('application/jewel', jewelKey);
+  };
+  const makeDropHandler = (slot: 'mainHand'|'offHand'|'helm'|'chest'|'belt'|'gloves'|'boots'|'cape'|'ringLeft'|'ringRight'|'necklace'|'earringLeft'|'earringRight') => (ev: React.DragEvent) => {
+    ev.preventDefault();
+    const itemId = ev.dataTransfer.getData('text/plain');
+    const item = SHOP_ITEMS.find(i => i.id === itemId);
+    if (!hero || !item) return;
+    if (slot === 'mainHand' && item.type !== 'weapon') return;
+    if (slot === 'offHand' && item.type !== 'weapon') return;
+    if (slot === 'helm' && !(item.type === 'armor' && item.slot === 'helm')) return;
+    if (slot === 'chest' && !(item.type === 'armor' && (!item.slot || item.slot === 'chest'))) return;
+    if (slot === 'belt' && !(item.type === 'armor' && item.slot === 'belt')) return;
+    if (slot === 'gloves' && !(item.type === 'armor' && item.slot === 'gloves')) return;
+    if (slot === 'boots' && !(item.type === 'armor' && item.slot === 'boots')) return;
+    if (slot === 'cape' && !(item.type === 'armor' && item.slot === 'cape')) return;
+    if (slot === 'necklace' && !(item.type === 'accessory' && item.slot === 'necklace')) return;
+    if ((slot === 'ringLeft' || slot === 'ringRight') && !(item.type === 'accessory' && (item.slot === 'ring' || !item.slot))) return;
+    if ((slot === 'earringLeft' || slot === 'earringRight') && !(item.type === 'accessory' && item.slot === 'earring')) return;
+    const ok = equipItem(hero.id, itemId);
+    if (ok) setFeedback({ message: `Equipado: ${item.name}`, type: 'success' }); else setFeedback({ message: `Não foi possível equipar ${item.name}.`, type: 'error' });
+    setTimeout(() => setFeedback(null), 1500);
+  };
+  const onDragOver = (ev: React.DragEvent) => ev.preventDefault();
 
   const inventoryEntries = useMemo(() => {
     if (!hero) return [] as Array<[string, number]>;
@@ -85,6 +173,174 @@ const Inventory: React.FC = () => {
         )}
       </div>
 
+      {/* Equipamentos (slots específicos) */}
+      <div className={`bg-white p-6 rounded-lg border ${seasonalBorder} mt-6 text-gray-800`}>
+        <h2 className="text-xl font-bold mb-4">⚙️ Equipamentos</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <div className="font-semibold mb-2">Armas</div>
+            <div className="grid grid-cols-2 gap-2">
+              {(['mainHand','offHand'] as const).map((slot) => {
+                const id = slot === 'mainHand' ? hero.inventory.equippedMainHand : hero.inventory.equippedOffHand;
+                const item = id ? SHOP_ITEMS.find(i => i.id === id) : undefined;
+                return (
+                  <div key={slot} onDrop={makeDropHandler(slot)} onDragOver={onDragOver}
+                       className={`h-20 rounded border flex items-center justify-center text-sm ${id ? rarityClass(item?.rarity) : 'border-dashed border-gray-300 bg-gray-50'}`}
+                       title={id ? buildTooltip(id) : (slot === 'mainHand' ? 'Arraste arma (mão principal)' : 'Arraste arma (mão secundária)')}>
+                    {id ? (
+                      <button onClick={() => { const ok = unequipItem(hero.id, id!); if (ok) setFeedback({ message: 'Desequipado.', type: 'success' }); }} className="px-2 py-1 bg-gray-700 text-white rounded">
+                        {item?.icon} {item?.name}
+                      </button>
+                    ) : (
+                      <span className="text-gray-500">{slot === 'mainHand' ? 'Mão Principal' : 'Mão Secundária'}</span>
+                    )}
+                    {id && (
+                      <div className="mt-1 w-full px-2">
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: getMaxSlotsForItem(id) }).map((_, idx) => {
+                            const eq = hero.inventory.equippedJewelsByItemId?.[id] || [];
+                            const jewelKey = eq[idx];
+                            return (
+                              <div key={idx}
+                                   onDrop={(ev) => { ev.preventDefault(); const key = ev.dataTransfer.getData('application/jewel'); if (key) { const ok = socketJewel(hero.id, id!, key); setFeedback(ok ? { message: 'Joia engastada.', type: 'success' } : { message: 'Não foi possível engastar.', type: 'error' }); setTimeout(() => setFeedback(null), 1500); } }}
+                                   onDragOver={onDragOver}
+                                   className={`h-6 w-6 rounded-full border ${jewelKey ? 'border-indigo-600 bg-indigo-50' : 'border-gray-300 bg-white'} flex items-center justify-center text-[10px]`}
+                                   title={jewelKey ? getJewelLabel(jewelKey) : 'Solte joia aqui'}>
+                                {jewelKey ? (
+                                  <button onClick={() => { const ok = removeJewel(hero.id, id!, idx); setFeedback(ok ? { message: 'Joia removida.', type: 'success' } : { message: 'Falha ao remover.', type: 'error' }); setTimeout(() => setFeedback(null), 1200); }} className="text-gray-700">
+                                    ×
+                                  </button>
+                                ) : (
+                                  <span className="text-gray-400">•</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <div className="font-semibold mb-2">Armadura</div>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                ['helm', hero.inventory.equippedHelm, 'Helmo'],
+                ['chest', hero.inventory.equippedChest, 'Armadura'],
+                ['belt', hero.inventory.equippedBelt, 'Cintura'],
+                ['gloves', hero.inventory.equippedGloves, 'Luvas'],
+                ['boots', hero.inventory.equippedBoots, 'Botas'],
+                ['cape', hero.inventory.equippedCape, 'Asa/Capa']
+              ] as const).map(([slot, id, label]) => {
+                const item = id ? SHOP_ITEMS.find(i => i.id === id) : undefined;
+                return (
+                  <div key={slot} onDrop={makeDropHandler(slot as any)} onDragOver={onDragOver}
+                       className={`h-20 rounded border flex items-center justify-center text-sm ${id ? rarityClass(item?.rarity) : 'border-dashed border-gray-300 bg-gray-50'}`}
+                       title={id ? buildTooltip(id!) : `Arraste ${label} aqui`}>
+                    {id ? (
+                      <button onClick={() => { const ok = unequipItem(hero.id, id!); if (ok) setFeedback({ message: 'Desequipado.', type: 'success' }); }} className="px-2 py-1 bg-gray-700 text-white rounded">
+                        {item?.icon} {item?.name}
+                      </button>
+                    ) : (
+                      <span className="text-gray-500">{label}</span>
+                    )}
+                    {id && (
+                      <div className="mt-1 w-full px-2">
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: getMaxSlotsForItem(id) }).map((_, idx) => {
+                            const eq = hero.inventory.equippedJewelsByItemId?.[id] || [];
+                            const jewelKey = eq[idx];
+                            return (
+                              <div key={idx}
+                                   onDrop={(ev) => { ev.preventDefault(); const key = ev.dataTransfer.getData('application/jewel'); if (key) { const ok = socketJewel(hero.id, id!, key); setFeedback(ok ? { message: 'Joia engastada.', type: 'success' } : { message: 'Não foi possível engastar.', type: 'error' }); setTimeout(() => setFeedback(null), 1500); } }}
+                                   onDragOver={onDragOver}
+                                   className={`h-6 w-6 rounded-full border ${jewelKey ? 'border-indigo-600 bg-indigo-50' : 'border-gray-300 bg-white'} flex items-center justify-center text-[10px]`}
+                                   title={jewelKey ? getJewelLabel(jewelKey) : 'Solte joia aqui'}>
+                                {jewelKey ? (
+                                  <button onClick={() => { const ok = removeJewel(hero.id, id!, idx); setFeedback(ok ? { message: 'Joia removida.', type: 'success' } : { message: 'Falha ao remover.', type: 'error' }); setTimeout(() => setFeedback(null), 1200); }} className="text-gray-700">
+                                    ×
+                                  </button>
+                                ) : (
+                                  <span className="text-gray-400">•</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <div className="font-semibold mb-2">Acessórios</div>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                ['ringLeft', hero.inventory.equippedRingLeft, 'Anel (esq.)'],
+                ['ringRight', hero.inventory.equippedRingRight, 'Anel (dir.)'],
+                ['necklace', hero.inventory.equippedNecklace, 'Colar'],
+                ['earringLeft', hero.inventory.equippedEarringLeft, 'Brinco (esq.)'],
+                ['earringRight', hero.inventory.equippedEarringRight, 'Brinco (dir.)']
+              ] as const).map(([slot, id, label]) => {
+                const item = id ? SHOP_ITEMS.find(i => i.id === id) : undefined;
+                return (
+                  <div key={slot} onDrop={makeDropHandler(slot as any)} onDragOver={onDragOver}
+                       className={`h-20 rounded border flex items-center justify-center text-xs ${id ? rarityClass(item?.rarity) : 'border-dashed border-gray-300 bg-gray-50'}`}
+                       title={id ? buildTooltip(id!) : `Arraste ${label} aqui`}>
+                    {id ? (
+                      <button onClick={() => { const ok = unequipItem(hero.id, id!); if (ok) setFeedback({ message: 'Desequipado.', type: 'success' }); }} className="px-2 py-1 bg-gray-700 text-white rounded">
+                        {item?.icon} {item?.name}
+                      </button>
+                    ) : (
+                      <span className="text-gray-500">{label}</span>
+                    )}
+                    {id && (
+                      <div className="mt-1 w-full px-2">
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: getMaxSlotsForItem(id) }).map((_, idx) => {
+                            const eq = hero.inventory.equippedJewelsByItemId?.[id] || [];
+                            const jewelKey = eq[idx];
+                            return (
+                              <div key={idx}
+                                   onDrop={(ev) => { ev.preventDefault(); const key = ev.dataTransfer.getData('application/jewel'); if (key) { const ok = socketJewel(hero.id, id!, key); setFeedback(ok ? { message: 'Joia engastada.', type: 'success' } : { message: 'Não foi possível engastar.', type: 'error' }); setTimeout(() => setFeedback(null), 1500); } }}
+                                   onDragOver={onDragOver}
+                                   className={`h-6 w-6 rounded-full border ${jewelKey ? 'border-indigo-600 bg-indigo-50' : 'border-gray-300 bg-white'} flex items-center justify-center text-[10px]`}
+                                   title={jewelKey ? getJewelLabel(jewelKey) : 'Solte joia aqui'}>
+                                {jewelKey ? (
+                                  <button onClick={() => { const ok = removeJewel(hero.id, id!, idx); setFeedback(ok ? { message: 'Joia removida.', type: 'success' } : { message: 'Falha ao remover.', type: 'error' }); setTimeout(() => setFeedback(null), 1200); }} className="text-gray-700">
+                                    ×
+                                  </button>
+                                ) : (
+                                  <span className="text-gray-400">•</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="h-16 rounded border border-gray-300 bg-gray-50 flex items-center justify-center text-xs" title="Mascote ativo">
+                <span>Mascote: {(hero as any).pets?.find((p: any) => p.id === (hero as any).activePetId)?.name || '-'}</span>
+              </div>
+              <div className="h-16 rounded border border-gray-300 bg-gray-50 flex items-center justify-center text-xs" title="Montaria ativa">
+                <span>Montaria: {(hero as any).mounts?.find((m: any) => m.id === (hero as any).activeMountId)?.name || '-'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="text-xs text-gray-500 mt-3">Arraste itens da lista e solte nos slots compatíveis.</div>
+      </div>
+
       {/* Filtros */}
       <div className={`bg-white p-4 rounded-lg border ${seasonalBorder} text-gray-800`}>
         <div className="flex flex-wrap items-center gap-3">
@@ -144,12 +400,12 @@ const Inventory: React.FC = () => {
               const unitSell = Math.floor(item.price * 0.6);
               const sellQty = qtyByItem[itemId] ?? 1;
               const isEquipped =
-                (item.type === 'weapon' && hero.inventory.equippedWeapon === itemId) ||
-                (item.type === 'armor' && hero.inventory.equippedArmor === itemId) ||
-                (item.type === 'accessory' && hero.inventory.equippedAccessory === itemId);
+                (item.type === 'weapon' && [hero.inventory.equippedMainHand, hero.inventory.equippedOffHand].includes(itemId)) ||
+                (item.type === 'armor' && [hero.inventory.equippedHelm, hero.inventory.equippedChest, hero.inventory.equippedBelt, hero.inventory.equippedGloves, hero.inventory.equippedBoots, hero.inventory.equippedCape].includes(itemId)) ||
+                (item.type === 'accessory' && [hero.inventory.equippedRingLeft, hero.inventory.equippedRingRight, hero.inventory.equippedNecklace, hero.inventory.equippedEarringLeft, hero.inventory.equippedEarringRight].includes(itemId));
 
               return (
-                <div key={itemId} className="flex items-center justify-between bg-gray-50 p-3 rounded">
+                <div key={itemId} className="flex items-center justify-between bg-gray-50 p-3 rounded" draggable onDragStart={(e) => onDragStart(e, itemId)} title={buildTooltip(itemId)}>
                   <div className="flex items-center space-x-4">
                     <div className="text-2xl">{item.icon}</div>
                     <div>
@@ -169,22 +425,22 @@ const Inventory: React.FC = () => {
                   <div className="flex items-center space-x-3">
                     {/* Equipar / Usar */}
                     {item.type === 'consumable' ? (
-                      <button
-                        onClick={() => {
-                          const ok = useItem(hero.id, itemId);
-                          if (ok) {
-                            setFeedback({ message: `Consumido: ${item.name}. Efeito aplicado.`, type: 'success' });
-                          } else {
-                            setFeedback({ message: `Não foi possível consumir ${item.name}.`, type: 'error' });
-                          }
-                          setTimeout(() => setFeedback(null), 1800);
-                        }}
-                        disabled={qty <= 0}
-                        className={`px-3 py-2 rounded text-white ${qty <= 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
-                      >
-                        Usar
-                      </button>
-                    ) : (
+                        <button
+                          onClick={() => {
+                            const ok = useItem(hero.id, itemId);
+                            if (ok) {
+                              setFeedback({ message: `Consumido: ${item.name}. Efeito aplicado.`, type: 'success' });
+                            } else {
+                              setFeedback({ message: `Não foi possível consumir ${item.name}.`, type: 'error' });
+                            }
+                            setTimeout(() => setFeedback(null), 1800);
+                          }}
+                          disabled={qty <= 0}
+                          className={`px-3 py-2 rounded text-white ${qty <= 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
+                        >
+                          Usar
+                        </button>
+                      ) : (
                       isEquipped ? (
                         <>
                           <button
@@ -277,6 +533,29 @@ const Inventory: React.FC = () => {
             <p>Nenhum item corresponde aos filtros.</p>
           </div>
         )}
+      </div>
+
+      {/* Joias */}
+      <div className={`bg-white p-6 rounded-lg border ${seasonalBorder} mt-6 text-gray-800`}>
+        <h2 className="text-xl font-bold mb-3">💎 Joias</h2>
+        {Object.entries(hero.inventory.jewels || {}).length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {Object.entries(hero.inventory.jewels || {}).map(([key, qty]) => (
+              <div key={key} className="flex items-center justify-between bg-gray-50 p-2 rounded" draggable onDragStart={(e) => onJewelDragStart(e, key)} title={getJewelLabel(key)}>
+                <div className="text-sm">
+                  <div className="font-semibold">{getJewelLabel(key)}</div>
+                  <div className="text-gray-600">Qtd: {qty}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => { const ok = fuseJewels(hero.id, key); setFeedback(ok ? { message: 'Fusão realizada.', type: 'success' } : { message: 'Falha na fusão.', type: 'error' }); setTimeout(() => setFeedback(null), 1600); }} className="px-3 py-1 rounded bg-purple-600 text-white hover:bg-purple-700" disabled={(qty || 0) < 2}>Fundir</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-gray-500">Nenhuma joia. Obtenha joias e arraste sobre os sockets dos itens equipados.</div>
+        )}
+        <div className="text-xs text-gray-500 mt-2">Arraste uma joia para um equipamento equipado para engastar. Funda 2 joias iguais para subir de nível.</div>
       </div>
     </div>
   );

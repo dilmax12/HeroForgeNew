@@ -8,6 +8,8 @@ import type { EnhancedQuestChoice } from '../types/hero';
 import { generateQuestBoard, QUEST_ACHIEVEMENTS } from '../utils/quests';
 import { resolveCombat, autoResolveCombat } from '../utils/combat';
 import { purchaseItem, sellItem, equipItem, useConsumable, SHOP_ITEMS, ITEM_SETS, generateProceduralItem } from '../utils/shop';
+import { Jewel } from '../types/jewel';
+import type { JewelType } from '../types/jewel';
 import { RECIPES } from '../utils/forging';
 import { updateHeroReputation, generateReputationEvents, inferQuestFactionChanges } from '../utils/reputationSystem';
 import { generateAllLeaderboards, getHeroRanking, calculateTotalScore } from '../utils/leaderboardSystem';
@@ -38,6 +40,7 @@ interface HeroState {
   guilds: Guild[];
   parties: Party[];
   referralInvites: ReferralInvite[];
+  dmOverrideLine?: string;
   // Mascotes e Ovos
   generateEggForSelected: (rarity?: import('../types/hero').EggRarity) => boolean;
   identifyEggForSelected: (eggId: string) => boolean;
@@ -65,6 +68,8 @@ interface HeroState {
   // === SISTEMA DE PROGRESSÃO ===
   gainXP: (heroId: string, xp: number) => void;
   gainGold: (heroId: string, gold: number) => void;
+  gainGlory: (heroId: string, glory: number) => void;
+  gainArcaneEssence: (heroId: string, essence: number) => void;
   addItemToInventory: (heroId: string, itemId: string, quantity?: number) => void;
   checkAchievements: (heroId: string) => Achievement[];
   // Pontos de atributo
@@ -75,6 +80,12 @@ interface HeroState {
   setActiveMount: (mountId?: string) => void;
   setFavoriteMount: (mountId?: string) => void;
   toggleFavoriteMount: (mountId: string) => void;
+
+  // Joias
+  addJewel: (heroId: string, tipo: JewelType, nivel: number, qty?: number) => boolean;
+  socketJewel: (heroId: string, itemId: string, jewelKey: string) => boolean;
+  removeJewel: (heroId: string, itemId: string, socketIndex: number) => boolean;
+  fuseJewels: (heroId: string, jewelKey: string) => boolean;
   toggleLockMount: (mountId: string) => boolean;
   generateMountForSelected: (type?: import('../types/hero').Mount['type'], rarity?: import('../types/hero').MountRarity) => boolean;
   renameMountForSelected: (mountId: string, newName: string) => boolean;
@@ -174,6 +185,10 @@ interface HeroState {
   updateReferralInvite: (inviteId: string, updates: Partial<Pick<ReferralInvite, 'inviterTag' | 'personalizedSlug' | 'expiresAt'>>) => boolean;
   renewReferralInvite: (inviteId: string, extraDays?: number) => boolean;
   getReferralInviteByCode: (code: string) => ReferralInvite | undefined;
+
+  // === NARRATIVA ===
+  setDMOverrideLine: (line?: string) => void;
+  appendJourneyNarrativeForSelected: (summary: string, title?: string) => boolean;
 }
 
 // === VALIDAÇÃO E CÁLCULOS ===
@@ -209,9 +224,22 @@ const calculateTotalAttributes = (
   
   // Aplicar bônus dos equipamentos
   const equippedItems = [
-    inventory.equippedWeapon,
-    inventory.equippedArmor,
-    inventory.equippedAccessory
+    inventory.equippedMainHand,
+    inventory.equippedOffHand,
+    inventory.equippedHelm,
+    inventory.equippedChest,
+    inventory.equippedBelt,
+    inventory.equippedGloves,
+    inventory.equippedBoots,
+    inventory.equippedCape,
+    inventory.equippedRingLeft,
+    inventory.equippedRingRight,
+    inventory.equippedNecklace,
+    inventory.equippedEarringLeft,
+    inventory.equippedEarringRight,
+    ...(Array.isArray(inventory.equippedWeapons) ? inventory.equippedWeapons : [inventory.equippedWeapon].filter(Boolean) as string[]),
+    ...(Array.isArray(inventory.equippedArmorSlots) ? inventory.equippedArmorSlots : [inventory.equippedArmor].filter(Boolean) as string[]),
+    ...(Array.isArray(inventory.equippedAccessories) ? inventory.equippedAccessories : [inventory.equippedAccessory].filter(Boolean) as string[])
   ].filter(Boolean);
   
   equippedItems.forEach(itemId => {
@@ -226,26 +254,63 @@ const calculateTotalAttributes = (
         }
       });
     }
+    const jewels = (inventory.equippedJewelsByItemId || {})[itemId!];
+    if (Array.isArray(jewels) && jewels.length > 0) {
+      const cap = item?.type === 'weapon' ? 10 : item?.type === 'armor' ? 15 : item?.type === 'accessory' ? 8 : 0;
+      let attrAdds: Partial<HeroAttributes> = {};
+      let sum = 0;
+      jewels.forEach(jk => {
+        const parts = jk.split(':');
+        if (parts.length === 3) {
+          const tipo = parts[1] as import('../types/jewel').JewelType;
+          const nivel = Number(parts[2]);
+          const j = new Jewel(crypto.randomUUID(), tipo, nivel);
+          const b = j.getBonus();
+          if (b.forca) { attrAdds.forca = (attrAdds.forca || 0) + b.forca; sum += b.forca; }
+          if (b.inteligencia) { attrAdds.inteligencia = (attrAdds.inteligencia || 0) + b.inteligencia; sum += b.inteligencia; }
+          if (b.destreza) { attrAdds.destreza = (attrAdds.destreza || 0) + b.destreza; sum += b.destreza; }
+          if (b.constituicao) { attrAdds.constituicao = (attrAdds.constituicao || 0) + b.constituicao; sum += b.constituicao; }
+        }
+      });
+      const scale = cap > 0 && sum > cap ? (cap / sum) : 1;
+      Object.entries(attrAdds).forEach(([attr, val]) => {
+        if (val && (attr as keyof HeroAttributes) in totalAttributes) {
+          const add = Math.max(0, Math.floor(val * scale));
+          totalAttributes[attr as keyof HeroAttributes] += add;
+        }
+      });
+    }
   });
 
   // Aplicar bônus de conjunto (arma + armadura + acessório do mesmo conjunto)
-  const equippedSetIds = [
-    inventory.equippedWeapon,
-    inventory.equippedArmor,
-    inventory.equippedAccessory
-  ]
-    .map(id => {
+  const weaponSetIds = ([inventory.equippedMainHand, inventory.equippedOffHand] as (string | undefined)[])
+    .filter(Boolean)
+    .map((id) => {
+      const base = id ? SHOP_ITEMS.find(i => i.id === id) : undefined;
+      const custom = id && inventory.customItems ? inventory.customItems[id] : undefined;
+      return (base || custom)?.setId;
+    })
+    .filter((sid): sid is string => !!sid);
+  const armorSetIds = ([inventory.equippedHelm, inventory.equippedChest, inventory.equippedBelt, inventory.equippedGloves, inventory.equippedBoots, inventory.equippedCape] as (string | undefined)[])
+    .filter(Boolean)
+    .map((id) => {
+      const base = id ? SHOP_ITEMS.find(i => i.id === id) : undefined;
+      const custom = id && inventory.customItems ? inventory.customItems[id] : undefined;
+      return (base || custom)?.setId;
+    })
+    .filter((sid): sid is string => !!sid);
+  const accessorySetIds = ([inventory.equippedRingLeft, inventory.equippedRingRight, inventory.equippedNecklace, inventory.equippedEarringLeft, inventory.equippedEarringRight] as (string | undefined)[])
+    .filter(Boolean)
+    .map((id) => {
       const base = id ? SHOP_ITEMS.find(i => i.id === id) : undefined;
       const custom = id && inventory.customItems ? inventory.customItems[id] : undefined;
       return (base || custom)?.setId;
     })
     .filter((sid): sid is string => !!sid);
 
-  if (equippedSetIds.length === 3) {
-    const unique = new Set(equippedSetIds);
-    if (unique.size === 1) {
-      const activeSetId = equippedSetIds[0];
-      const activeSet = ITEM_SETS[activeSetId];
+  for (const w of weaponSetIds) {
+    if (armorSetIds.includes(w) && accessorySetIds.includes(w)) {
+      const activeSet = ITEM_SETS[w];
       if (activeSet?.bonus) {
         Object.entries(activeSet.bonus).forEach(([attr, bonus]) => {
           if (bonus && (attr as keyof HeroAttributes) in totalAttributes) {
@@ -253,6 +318,7 @@ const calculateTotalAttributes = (
           }
         });
       }
+      break;
     }
   }
   
@@ -272,9 +338,9 @@ export const calculateDerivedAttributes = (
     String(level),
     JSON.stringify(attributes),
     inventory ? JSON.stringify({
-      ew: inventory.equippedWeapon?.id || '',
-      ea: inventory.equippedArmor?.id || '',
-      ex: inventory.equippedAccessory?.id || '',
+      ew: [inventory.equippedMainHand, inventory.equippedOffHand, ...(Array.isArray(inventory.equippedWeapons) ? inventory.equippedWeapons : [])].filter(Boolean).join(','),
+      ea: [inventory.equippedHelm, inventory.equippedChest, inventory.equippedBelt, inventory.equippedGloves, inventory.equippedBoots, inventory.equippedCape, ...(Array.isArray(inventory.equippedArmorSlots) ? inventory.equippedArmorSlots : [])].filter(Boolean).join(','),
+      ex: [inventory.equippedRingLeft, inventory.equippedRingRight, inventory.equippedNecklace, inventory.equippedEarringLeft, inventory.equippedEarringRight, ...(Array.isArray(inventory.equippedAccessories) ? inventory.equippedAccessories : [])].filter(Boolean).join(','),
       ic: Object.keys(inventory.items || {}).length
     }) : 'noinv',
     activeTitleId || '',
@@ -338,7 +404,28 @@ export const calculateDerivedAttributes = (
   const hp = hpBase + Math.floor(totalAttributes.constituicao / 2) * level;
   const mp = mpBase + Math.floor(totalAttributes.inteligencia / 2) * level;
   const initiative = Math.floor(totalAttributes.destreza / 2);
-  const armorClass = 10 + Math.floor(totalAttributes.destreza / 4);
+  let armorClass = 10 + Math.floor(totalAttributes.destreza / 4);
+  if (inventory) {
+    const eq = inventory.equippedJewelsByItemId || {};
+    let acBonus = 0;
+    Object.entries(eq).forEach(([itemId, list]) => {
+      const item = SHOP_ITEMS.find(i => i.id === itemId) || (inventory.customItems ? inventory.customItems[itemId] : undefined);
+      const cap = item?.type === 'armor' ? 6 : item?.type === 'weapon' ? 2 : item?.type === 'accessory' ? 2 : 0;
+      let acc = 0;
+      list.forEach(jk => {
+        const parts = jk.split(':');
+        if (parts.length === 3) {
+          const tipo = parts[1] as import('../types/jewel').JewelType;
+          const nivel = Number(parts[2]);
+          const j = new Jewel(crypto.randomUUID(), tipo, nivel);
+          const b = j.getBonus();
+          if (b.armorClass) acc += b.armorClass;
+        }
+      });
+      acBonus += Math.min(cap, acc);
+    });
+    armorClass += Math.max(0, Math.floor(acBonus));
+  }
   const luck = Math.max(0, Math.floor((totalAttributes.carisma + totalAttributes.sabedoria) / 2));
   const mountSpeed = (() => {
     try {
@@ -469,6 +556,7 @@ export const useHeroStore = create<HeroState>()(
       guilds: [],
       parties: [],
       referralInvites: [],
+      dmOverrideLine: undefined,
       
       // === AÇÕES BÁSICAS ===
       
@@ -482,12 +570,40 @@ export const useHeroStore = create<HeroState>()(
         
         const initialInventory = {
           items: {
-            'pocao-pequena': 2 // Poções iniciais
+            'pocao-pequena': 2,
+            'espada-aprendiz': 1,
+            'armadura-novato': 1,
+            'capacete-ferro': 1,
+            'cinto-couro': 1,
+            'luvas-couro': 1,
+            'botas-caminhante': 1,
+            'capa-iniciante': 1,
+            'anel-bronze': 1,
+            'anel-vitalidade': 1,
+            'colar-madeira': 1
           },
-          equippedWeapon: undefined,
-          equippedArmor: undefined,
-          equippedAccessory: undefined,
+          equippedMainHand: 'espada-aprendiz',
+          equippedOffHand: undefined,
+          equippedHelm: 'capacete-ferro',
+          equippedChest: 'armadura-novato',
+          equippedBelt: 'cinto-couro',
+          equippedGloves: 'luvas-couro',
+          equippedBoots: 'botas-caminhante',
+          equippedCape: 'capa-iniciante',
+          equippedRingLeft: 'anel-bronze',
+          equippedRingRight: 'anel-vitalidade',
+          equippedNecklace: 'colar-madeira',
+          equippedEarringLeft: undefined,
+          equippedEarringRight: undefined,
           upgrades: {}
+          ,jewels: {
+            'jewel:vermelha:1': 2,
+            'jewel:azul:1': 2,
+            'jewel:verde:1': 2,
+            'jewel:amarela:1': 2,
+            'jewel:roxa:1': 2
+          }
+          ,equippedJewelsByItemId: {}
         };
         
         const newHero: Hero = {
@@ -1652,6 +1768,30 @@ export const useHeroStore = create<HeroState>()(
       selectHero: (id) => {
         set({ selectedHeroId: id });
       },
+
+      // === NARRATIVA ===
+      setDMOverrideLine: (line) => {
+        set({ dmOverrideLine: line });
+      },
+      appendJourneyNarrativeForSelected: (summary, title) => {
+        const hero = get().getSelectedHero();
+        if (!hero) return false;
+        const now = new Date().toISOString();
+        const existing = hero.journeyChapters || [];
+        const index = (existing.length || 0) + 1;
+        const chapter = {
+          id: `custom-${hero.id}-${index}-${Math.random().toString(36).slice(2)}`,
+          index,
+          title: title || `Crônica ${index}`,
+          summary,
+          createdAt: now,
+          levelMilestone: hero.progression?.level || 1,
+          locked: false,
+          relatedQuests: hero.completedQuests || []
+        } as any;
+        get().updateHero(hero.id, { journeyChapters: [...existing, chapter] });
+        return true;
+      },
       
       // === SISTEMA DE MISSÕES ===
       
@@ -1814,6 +1954,8 @@ export const useHeroStore = create<HeroState>()(
         
         get().gainXP(heroId, (quest.rewards?.xp || 0) + (combatResult?.xpGained || 0));
         get().gainGold(heroId, (quest.rewards?.gold || 0) + (combatResult?.goldGained || 0));
+        if (quest.rewards?.glory) { get().gainGlory(heroId, quest.rewards.glory); }
+        if (quest.rewards?.arcaneEssence) { get().gainArcaneEssence(heroId, quest.rewards.arcaneEssence); }
         
         // Adicionar itens das recompensas
         if (quest.rewards?.items) {
@@ -2206,8 +2348,8 @@ export const useHeroStore = create<HeroState>()(
           });
         }
         
-        // Track XP gained metrics
-        trackMetric.xpGained(heroId, effectiveXP);
+      // Track XP gained metrics
+      trackMetric.xpGained(heroId, effectiveXP);
       },
       
       gainGold: (heroId: string, gold: number) => {
@@ -2247,6 +2389,38 @@ export const useHeroStore = create<HeroState>()(
         // Track gold gained metrics
         if (gold > 0) {
           trackMetric.goldGained(heroId, gold);
+        }
+      },
+      
+      gainGlory: (heroId: string, glory: number) => {
+        const hero = get().heroes.find(h => h.id === heroId);
+        if (!hero) return;
+        
+        get().updateHero(heroId, {
+          progression: {
+            ...hero.progression,
+            glory: Math.max(0, (hero.progression.glory || 0) + glory)
+          }
+        });
+        
+        if (glory > 0) {
+          try { eventManager.updateEventProgress(heroId, 'glory-earned', glory); } catch {}
+        }
+      },
+      
+      gainArcaneEssence: (heroId: string, essence: number) => {
+        const hero = get().heroes.find(h => h.id === heroId);
+        if (!hero) return;
+        
+        get().updateHero(heroId, {
+          progression: {
+            ...hero.progression,
+            arcaneEssence: Math.max(0, (hero.progression.arcaneEssence || 0) + essence)
+          }
+        });
+        
+        if (essence > 0) {
+          try { eventManager.updateEventProgress(heroId, 'arcane-essence-earned', essence); } catch {}
         }
       },
       
@@ -2412,18 +2586,53 @@ export const useHeroStore = create<HeroState>()(
           const item = SHOP_ITEMS.find(i => i.id === itemId);
           if (!item) return false;
           
-          const updatedInventory = { ...hero.inventory };
-          
-          switch (item.type) {
-            case 'weapon':
-              updatedInventory.equippedWeapon = itemId;
-              break;
-            case 'armor':
-              updatedInventory.equippedArmor = itemId;
-              break;
-            case 'accessory':
-              updatedInventory.equippedAccessory = itemId;
-              break;
+          const updatedInventory = { ...hero.inventory } as HeroInventory;
+          if (item.type === 'weapon') {
+            const prefer = item.slot === 'offHand' ? 'offHand' : 'mainHand';
+            if (prefer === 'mainHand') {
+              if (!updatedInventory.equippedMainHand) updatedInventory.equippedMainHand = itemId;
+              else if (!updatedInventory.equippedOffHand) updatedInventory.equippedOffHand = itemId;
+              else return false;
+            } else {
+              if (!updatedInventory.equippedOffHand) updatedInventory.equippedOffHand = itemId;
+              else if (!updatedInventory.equippedMainHand) updatedInventory.equippedMainHand = itemId;
+              else return false;
+            }
+            updatedInventory.equippedWeapon = undefined;
+            updatedInventory.equippedWeapons = [];
+          } else if (item.type === 'armor') {
+            const s = item.slot;
+            if (!s) {
+              if (!updatedInventory.equippedChest) updatedInventory.equippedChest = itemId; else return false;
+            } else if (s === 'helm') { if (!updatedInventory.equippedHelm) updatedInventory.equippedHelm = itemId; else return false; }
+            else if (s === 'chest') { if (!updatedInventory.equippedChest) updatedInventory.equippedChest = itemId; else return false; }
+            else if (s === 'belt') { if (!updatedInventory.equippedBelt) updatedInventory.equippedBelt = itemId; else return false; }
+            else if (s === 'gloves') { if (!updatedInventory.equippedGloves) updatedInventory.equippedGloves = itemId; else return false; }
+            else if (s === 'boots') { if (!updatedInventory.equippedBoots) updatedInventory.equippedBoots = itemId; else return false; }
+            else if (s === 'cape') { if (!updatedInventory.equippedCape) updatedInventory.equippedCape = itemId; else return false; }
+            updatedInventory.equippedArmor = undefined;
+            updatedInventory.equippedArmorSlots = [];
+          } else if (item.type === 'accessory') {
+            const s = item.slot;
+            if (!s) {
+              if (!updatedInventory.equippedRingLeft) updatedInventory.equippedRingLeft = itemId;
+              else if (!updatedInventory.equippedRingRight) updatedInventory.equippedRingRight = itemId;
+              else if (!updatedInventory.equippedNecklace) updatedInventory.equippedNecklace = itemId;
+              else if (!updatedInventory.equippedEarringLeft) updatedInventory.equippedEarringLeft = itemId;
+              else if (!updatedInventory.equippedEarringRight) updatedInventory.equippedEarringRight = itemId;
+              else return false;
+            } else if (s === 'necklace') { if (!updatedInventory.equippedNecklace) updatedInventory.equippedNecklace = itemId; else return false; }
+            else if (s === 'ring') {
+              if (!updatedInventory.equippedRingLeft) updatedInventory.equippedRingLeft = itemId;
+              else if (!updatedInventory.equippedRingRight) updatedInventory.equippedRingRight = itemId;
+              else return false;
+            } else if (s === 'earring') {
+              if (!updatedInventory.equippedEarringLeft) updatedInventory.equippedEarringLeft = itemId;
+              else if (!updatedInventory.equippedEarringRight) updatedInventory.equippedEarringRight = itemId;
+              else return false;
+            }
+            updatedInventory.equippedAccessory = undefined;
+            updatedInventory.equippedAccessories = [];
           }
           
           // Atualizar inventário e forçar recálculo dos atributos derivados
@@ -2436,6 +2645,21 @@ export const useHeroStore = create<HeroState>()(
             computeCompanionBonus(hero)
           );
           get().updateHero(heroId, { inventory: updatedInventory, derivedAttributes: derived });
+          try {
+            supabase.auth.getUser().then(({ data }: any) => {
+              const userId = data?.user?.id;
+              if (userId) saveHero(userId, useHeroStore.getState().heroes.find(h => h.id === hero.id));
+            });
+          } catch {}
+          try {
+            const snapshot = {
+              weapons: (updatedInventory.equippedWeapons || []),
+              armor: (updatedInventory.equippedArmorSlots || []),
+              accessories: (updatedInventory.equippedAccessories || []),
+              updatedAt: new Date().toISOString()
+            };
+            localStorage.setItem(`hfn:equipmentBackup:${hero.id}`, JSON.stringify(snapshot));
+          } catch {}
         }
         
         return result.success;
@@ -2523,7 +2747,11 @@ export const useHeroStore = create<HeroState>()(
         const hero = state.heroes.find(h => h.id === heroId);
         if (!hero) return false;
         const inv = hero.inventory;
-        const equippedId = slot === 'weapon' ? inv.equippedWeapon : slot === 'armor' ? inv.equippedArmor : inv.equippedAccessory;
+        const equippedId = (() => {
+          if (slot === 'weapon') return inv.equippedMainHand || inv.equippedOffHand || inv.equippedWeapon || (inv.equippedWeapons || [])[0];
+          if (slot === 'armor') return inv.equippedChest || inv.equippedArmor || (inv.equippedArmorSlots || [])[0];
+          return inv.equippedNecklace || inv.equippedRingLeft || inv.equippedRingRight || inv.equippedAccessory || (inv.equippedAccessories || [])[0];
+        })();
         if (!equippedId) return false;
 
         const baseItem = SHOP_ITEMS.find(i => i.id === equippedId) || (inv.customItems ? inv.customItems[equippedId] : undefined);
@@ -2614,13 +2842,164 @@ export const useHeroStore = create<HeroState>()(
         return true;
       },
 
+      addJewel: (heroId: string, tipo: JewelType, nivel: number, qty: number = 1) => {
+        const state = get();
+        const hero = state.heroes.find(h => h.id === heroId);
+        if (!hero) return false;
+        const key = `jewel:${tipo}:${Math.max(1, Math.min(10, nivel))}`;
+        const inv = hero.inventory;
+        const nextJewels = { ...(inv.jewels || {}) } as Record<string, number>;
+        nextJewels[key] = (nextJewels[key] || 0) + Math.max(1, qty);
+        hero.inventory.jewels = nextJewels;
+        set({ heroes: state.heroes.map(h => h.id === heroId ? { ...hero, updatedAt: new Date().toISOString() } : h) });
+        return true;
+      },
+
+      socketJewel: (heroId: string, itemId: string, jewelKey: string) => {
+        const state = get();
+        const hero = state.heroes.find(h => h.id === heroId);
+        if (!hero) return false;
+        const inv = hero.inventory;
+        const qty = inv.jewels?.[jewelKey] || 0;
+        if (qty <= 0) return false;
+        const baseItem = SHOP_ITEMS.find(i => i.id === itemId) || (inv.customItems ? inv.customItems[itemId] : undefined);
+        if (!baseItem) return false;
+        const maxSlots = baseItem.type === 'weapon' ? 2 : baseItem.type === 'armor' ? 3 : baseItem.type === 'accessory' ? 1 : 0;
+        if (maxSlots <= 0) return false;
+        const parts = jewelKey.split(':');
+        if (parts.length !== 3) return false;
+        const tipo = parts[1] as JewelType;
+        const nivel = Number(parts[2]);
+        const reqLevel = Jewel.minHeroLevelToEquip(nivel);
+        const heroLevel = hero.progression.level || hero.level || 1;
+        if (heroLevel < reqLevel) return false;
+        const current = { ...(inv.equippedJewelsByItemId || {}) } as Record<string, string[]>;
+        const list = [...(current[itemId] || [])];
+        if (list.length >= maxSlots) return false;
+        list.push(jewelKey);
+        current[itemId] = list;
+        const nextJewels = { ...(inv.jewels || {}) } as Record<string, number>;
+        nextJewels[jewelKey] = Math.max(0, (nextJewels[jewelKey] || 0) - 1);
+        hero.inventory.equippedJewelsByItemId = current;
+        hero.inventory.jewels = nextJewels;
+        const derived = calculateDerivedAttributes(
+          hero.attributes,
+          hero.class,
+          hero.progression.level,
+          hero.inventory,
+          hero.activeTitle,
+          computeCompanionBonus(hero)
+        );
+        set({ heroes: state.heroes.map(h => h.id === heroId ? { ...hero, derivedAttributes: derived, updatedAt: new Date().toISOString() } : h) });
+        try {
+          const snapshot = {
+            jewels: hero.inventory.jewels,
+            equippedJewels: hero.inventory.equippedJewelsByItemId,
+            updatedAt: new Date().toISOString()
+          };
+          localStorage.setItem(`hfn:jewelState:${hero.id}`, JSON.stringify(snapshot));
+        } catch {}
+        try {
+          supabase.auth.getUser().then(({ data }: any) => {
+            const userId = data?.user?.id;
+            if (userId) saveHero(userId, useHeroStore.getState().heroes.find(h => h.id === hero.id));
+          });
+        } catch {}
+        return true;
+      },
+
+      removeJewel: (heroId: string, itemId: string, socketIndex: number) => {
+        const state = get();
+        const hero = state.heroes.find(h => h.id === heroId);
+        if (!hero) return false;
+        const inv = hero.inventory;
+        const current = { ...(inv.equippedJewelsByItemId || {}) } as Record<string, string[]>;
+        const list = [...(current[itemId] || [])];
+        if (socketIndex < 0 || socketIndex >= list.length) return false;
+        const jewelKey = list[socketIndex];
+        list.splice(socketIndex, 1);
+        current[itemId] = list;
+        const nextJewels = { ...(inv.jewels || {}) } as Record<string, number>;
+        nextJewels[jewelKey] = (nextJewels[jewelKey] || 0) + 1;
+        hero.inventory.equippedJewelsByItemId = current;
+        hero.inventory.jewels = nextJewels;
+        const derived = calculateDerivedAttributes(
+          hero.attributes,
+          hero.class,
+          hero.progression.level,
+          hero.inventory,
+          hero.activeTitle,
+          computeCompanionBonus(hero)
+        );
+        set({ heroes: state.heroes.map(h => h.id === heroId ? { ...hero, derivedAttributes: derived, updatedAt: new Date().toISOString() } : h) });
+        try {
+          const snapshot = {
+            jewels: hero.inventory.jewels,
+            equippedJewels: hero.inventory.equippedJewelsByItemId,
+            updatedAt: new Date().toISOString()
+          };
+          localStorage.setItem(`hfn:jewelState:${hero.id}`, JSON.stringify(snapshot));
+        } catch {}
+        try {
+          supabase.auth.getUser().then(({ data }: any) => {
+            const userId = data?.user?.id;
+            if (userId) saveHero(userId, useHeroStore.getState().heroes.find(h => h.id === hero.id));
+          });
+        } catch {}
+        return true;
+      },
+
+      fuseJewels: (heroId: string, jewelKey: string) => {
+        const state = get();
+        const hero = state.heroes.find(h => h.id === heroId);
+        if (!hero) return false;
+        const inv = hero.inventory;
+        const qty = inv.jewels?.[jewelKey] || 0;
+        if (qty < 2) return false;
+        const parts = jewelKey.split(':');
+        if (parts.length !== 3) return false;
+        const tipo = parts[1] as JewelType;
+        const nivel = Number(parts[2]);
+        if (nivel >= 10) return false;
+        const a = new Jewel(crypto.randomUUID(), tipo, nivel);
+        const b = new Jewel(crypto.randomUUID(), tipo, nivel);
+        const fused = Jewel.fuse(a, b);
+        if (!fused) return false;
+        const nextKey = `jewel:${tipo}:${nivel + 1}`;
+        const nextJewels = { ...(inv.jewels || {}) } as Record<string, number>;
+        nextJewels[jewelKey] = Math.max(0, qty - 2);
+        nextJewels[nextKey] = (nextJewels[nextKey] || 0) + 1;
+        hero.inventory.jewels = nextJewels;
+        set({ heroes: state.heroes.map(h => h.id === heroId ? { ...hero, updatedAt: new Date().toISOString() } : h) });
+        try {
+          const log = { ts: new Date().toISOString(), from: jewelKey, to: nextKey };
+          const snapshot = {
+            jewels: hero.inventory.jewels,
+            lastFusion: log,
+            updatedAt: new Date().toISOString()
+          };
+          localStorage.setItem(`hfn:jewelState:${hero.id}`, JSON.stringify(snapshot));
+        } catch {}
+        try {
+          supabase.auth.getUser().then(({ data }: any) => {
+            const userId = data?.user?.id;
+            if (userId) saveHero(userId, useHeroStore.getState().heroes.find(h => h.id === hero.id));
+          });
+        } catch {}
+        return true;
+      },
+
       // === FORJA: Encantamento aplicado ao item equipado ===
       enchantEquippedItem: (heroId: string, slot: 'weapon' | 'armor' | 'accessory', enchant: 'lifesteal') => {
         const state = get();
         const hero = state.heroes.find(h => h.id === heroId);
         if (!hero) return false;
         const inv = hero.inventory;
-        const equippedId = slot === 'weapon' ? inv.equippedWeapon : slot === 'armor' ? inv.equippedArmor : inv.equippedAccessory;
+        const equippedId = (() => {
+          if (slot === 'weapon') return inv.equippedMainHand || inv.equippedOffHand || inv.equippedWeapon || (inv.equippedWeapons || [])[0];
+          if (slot === 'armor') return inv.equippedChest || inv.equippedArmor || (inv.equippedArmorSlots || [])[0];
+          return inv.equippedNecklace || inv.equippedRingLeft || inv.equippedRingRight || inv.equippedAccessory || (inv.equippedAccessories || [])[0];
+        })();
         if (!equippedId) return false;
 
         const costEssence = 50;
@@ -2642,29 +3021,32 @@ export const useHeroStore = create<HeroState>()(
         const item = SHOP_ITEMS.find(i => i.id === itemId);
         if (!item) return false;
 
-        const updatedInventory = { ...hero.inventory };
+        const updatedInventory = { ...hero.inventory } as HeroInventory;
         let changed = false;
-        switch (item.type) {
-          case 'weapon':
-            if (updatedInventory.equippedWeapon === itemId) {
-              updatedInventory.equippedWeapon = undefined;
-              changed = true;
-            }
-            break;
-          case 'armor':
-            if (updatedInventory.equippedArmor === itemId) {
-              updatedInventory.equippedArmor = undefined;
-              changed = true;
-            }
-            break;
-          case 'accessory':
-            if (updatedInventory.equippedAccessory === itemId) {
-              updatedInventory.equippedAccessory = undefined;
-              changed = true;
-            }
-            break;
-          default:
-            return false;
+        if (item.type === 'weapon') {
+          if (updatedInventory.equippedMainHand === itemId) { updatedInventory.equippedMainHand = undefined; changed = true; }
+          if (updatedInventory.equippedOffHand === itemId) { updatedInventory.equippedOffHand = undefined; changed = true; }
+          updatedInventory.equippedWeapon = undefined;
+          updatedInventory.equippedWeapons = [];
+        } else if (item.type === 'armor') {
+          if (updatedInventory.equippedHelm === itemId) { updatedInventory.equippedHelm = undefined; changed = true; }
+          if (updatedInventory.equippedChest === itemId) { updatedInventory.equippedChest = undefined; changed = true; }
+          if (updatedInventory.equippedBelt === itemId) { updatedInventory.equippedBelt = undefined; changed = true; }
+          if (updatedInventory.equippedGloves === itemId) { updatedInventory.equippedGloves = undefined; changed = true; }
+          if (updatedInventory.equippedBoots === itemId) { updatedInventory.equippedBoots = undefined; changed = true; }
+          if (updatedInventory.equippedCape === itemId) { updatedInventory.equippedCape = undefined; changed = true; }
+          updatedInventory.equippedArmor = undefined;
+          updatedInventory.equippedArmorSlots = [];
+        } else if (item.type === 'accessory') {
+          if (updatedInventory.equippedRingLeft === itemId) { updatedInventory.equippedRingLeft = undefined; changed = true; }
+          if (updatedInventory.equippedRingRight === itemId) { updatedInventory.equippedRingRight = undefined; changed = true; }
+          if (updatedInventory.equippedNecklace === itemId) { updatedInventory.equippedNecklace = undefined; changed = true; }
+          if (updatedInventory.equippedEarringLeft === itemId) { updatedInventory.equippedEarringLeft = undefined; changed = true; }
+          if (updatedInventory.equippedEarringRight === itemId) { updatedInventory.equippedEarringRight = undefined; changed = true; }
+          updatedInventory.equippedAccessory = undefined;
+          updatedInventory.equippedAccessories = [];
+        } else {
+          return false;
         }
 
         if (!changed) return false;
@@ -2677,6 +3059,21 @@ export const useHeroStore = create<HeroState>()(
           computeCompanionBonus(hero)
         );
         get().updateHero(heroId, { inventory: updatedInventory, derivedAttributes: derived });
+        try {
+          supabase.auth.getUser().then(({ data }: any) => {
+            const userId = data?.user?.id;
+            if (userId) saveHero(userId, useHeroStore.getState().heroes.find(h => h.id === hero.id));
+          });
+        } catch {}
+        try {
+          const snapshot = {
+            weapons: (updatedInventory.equippedWeapons || []),
+            armor: (updatedInventory.equippedArmorSlots || []),
+            accessories: (updatedInventory.equippedAccessories || []),
+            updatedAt: new Date().toISOString()
+          };
+          localStorage.setItem(`hfn:equipmentBackup:${hero.id}`, JSON.stringify(snapshot));
+        } catch {}
         return true;
       },
       
@@ -3695,7 +4092,9 @@ export const useHeroStore = create<HeroState>()(
             progression: {
               ...hero.progression,
               xp: hero.progression.xp + rewards.xp,
-              gold: hero.progression.gold + rewards.gold
+              gold: hero.progression.gold + rewards.gold,
+              glory: (hero.progression.glory || 0) + (rewards as any).glory || (hero.progression.glory || 0),
+              arcaneEssence: (hero.progression.arcaneEssence || 0) + (rewards as any).arcaneEssence || (hero.progression.arcaneEssence || 0)
             },
             dailyGoals: hero.dailyGoals.map((g, idx) => idx === goalIndex ? { ...g, claimed: true } : g)
           } as Hero;

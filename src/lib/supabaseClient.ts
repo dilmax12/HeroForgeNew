@@ -3,7 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 // Leitura obrigatória das variáveis de ambiente do Vite.
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-export const supabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+const supabaseDisabled = String(import.meta.env.VITE_SUPABASE_DISABLE || '').toLowerCase() === 'true';
+export const supabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey) && !supabaseDisabled;
 
 // Pequeno fetch com retry/backoff para reduzir falhas de rede intermitentes
 async function fetchWithRetry(input: RequestInfo | URL, init?: RequestInit, retries = 2, baseDelayMs = 300): Promise<Response> {
@@ -70,6 +71,6 @@ function createDisabledClient() {
   return client;
 }
 
-export const supabase: any = (supabaseUrl && supabaseAnonKey)
+export const supabase: any = (supabaseConfigured)
   ? createClient(supabaseUrl as string, supabaseAnonKey as string, { global: { fetch: fetchWithRetry as any } })
   : createDisabledClient();

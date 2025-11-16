@@ -1,0 +1,39 @@
+{
+  "name": "Forjador de Heróis",
+  "short_name": "Heróis",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "id": "heroforgenew",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "description": "Crie, evolua e aventure-se com seu herói em um RPG moderno na web.",
+  "categories": ["games", "role-playing", "adventure"],
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "Jornada", "url": "journey", "description": "Ir para a jornada do herói" },
+    { "name": "Loja", "url": "shop", "description": "Abrir a Loja do Aventureiro" },
+    { "name": "Premium", "url": "premium", "description": "Ofertas premium e cosméticos" },
+    { "name": "Eventos", "url": "social-events", "description": "Ver eventos e comunidade" }
+  ]
+}

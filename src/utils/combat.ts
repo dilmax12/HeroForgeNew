@@ -695,8 +695,8 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
         const floor = opts.floor || 1;
         const floorBias = (dungeonConfig.rarityIncreasePerFloor || 0) * floor; // % acumulado
         const partyBonus = opts.partyBonusPercent || 0;
-        const accId = hero.inventory?.equippedAccessory;
-        const ringBonus = accId && /anel|ring/i.test(accId) ? 2 : 0; // +2% se acessório aparenta ser anel
+        const accList = [hero.inventory?.equippedRingLeft, hero.inventory?.equippedRingRight, hero.inventory?.equippedNecklace, hero.inventory?.equippedEarringLeft, hero.inventory?.equippedEarringRight].filter(Boolean) as string[];
+        const ringBonus = accList.some(id => /anel|ring/i.test(String(id))) ? 2 : 0;
         let bonusChance = Math.min(0.05 + (floorBias + partyBonus + ringBonus) / 100, 0.35);
         if ((hero.alignment || '').includes('neutro')) {
           bonusChance = Math.min(0.45, bonusChance + 0.04);
@@ -863,8 +863,8 @@ export function autoResolveCombat(hero: Hero, enemies: QuestEnemy[], isGuildQues
         // Aplicar também bônus adaptativo em auto-resolve com viés reduzido
         const eligibleTypes = new Set(['weapon', 'armor', 'accessory']);
         const rarityOrder: Array<'comum' | 'incomum' | 'raro' | 'epico' | 'lendario'> = ['comum', 'incomum', 'raro', 'epico', 'lendario'];
-        const accId = hero.inventory?.equippedAccessory;
-        const ringBonus = accId && /anel|ring/i.test(accId) ? 2 : 0;
+        const accList2 = [hero.inventory?.equippedRingLeft, hero.inventory?.equippedRingRight, hero.inventory?.equippedNecklace, hero.inventory?.equippedEarringLeft, hero.inventory?.equippedEarringRight].filter(Boolean) as string[];
+        const ringBonus = accList2.some(id => /anel|ring/i.test(String(id))) ? 2 : 0;
         const baseBias = (dungeonConfig.rarityIncreasePerFloor || 0);
         const minIndex = baseBias >= 20 ? 2 : baseBias >= 10 ? 1 : 0;
         const bonusChance = Math.min(0.03 + (baseBias + ringBonus) / 100, 0.25);

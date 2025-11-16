@@ -4,6 +4,7 @@ import { useHeroStore } from '../store/heroStore';
 import { medievalTheme, seasonalThemes, getSeasonalButtonGradient } from '../styles/medievalTheme';
 import { useMonetizationStore } from '../store/monetizationStore';
 import NarrativeChapters from './NarrativeChapters';
+import { getAltharionLore } from '../utils/story';
 import { recommendEvents } from '../services/socialEventsService';
 import { getProfile } from '../services/userService';
 import { getOrRunDailyResult } from '../services/idleBattleService';
@@ -24,6 +25,7 @@ const StepCard: React.FC<{
   const navigate = useNavigate();
   const { activeSeasonalTheme } = useMonetizationStore();
   const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-white/20' : 'border-white/20';
+  const shortLore = useMemo(() => getAltharionLore('short'), []);
   return (
     <div
       className={`rounded-xl p-6 border transition-all duration-300 ${
@@ -293,6 +295,8 @@ const JourneyFlow: React.FC = () => {
     });
   }, [onbCounts.completed, onbStep]);
 
+  const shortLore = useMemo(() => getAltharionLore('short'), []);
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-8 text-center">
@@ -309,6 +313,21 @@ const JourneyFlow: React.FC = () => {
           })()}
         </div>
         <p className="text-gray-300 italic">Comece, personalize e avance com clareza.</p>
+      </div>
+
+      <div className={`rounded-xl p-6 mb-8 bg-amber-900/10 border border-amber-500/30`}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm text-amber-300 font-semibold">Forjador de Heróis — Introdução</div>
+          <div className="flex items-center gap-2">
+            <Link to="/intro?version=game_intro" className="px-3 py-1 rounded bg-amber-600 text-black text-xs">Ver Narração</Link>
+            <Link to="/intro?version=cinematic" className="px-3 py-1 rounded bg-indigo-600 text-white text-xs">Ver Trailer</Link>
+          </div>
+        </div>
+        <div className="space-y-2 text-sm text-gray-200">
+          {shortLore.paragraphs.map((p, i) => (
+            <p key={i}>{p}</p>
+          ))}
+        </div>
       </div>
 
       <div className={`rounded-xl p-4 mb-8 bg-white/10 border ${seasonalBorder}`}>

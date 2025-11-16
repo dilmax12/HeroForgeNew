@@ -360,10 +360,7 @@ export const PetsPanel: React.FC = () => {
                 return null;
               })()}
             </div>
-            <button onClick={handleGenerateEgg} disabled={eggs.length >= 30} className={`px-3 py-2 rounded text-white text-sm ${eggs.length >= 30 ? 'bg-gray-700 cursor-not-allowed' : `bg-gradient-to-r ${getSeasonalButtonGradient(useMonetizationStore.getState().activeSeasonalTheme as any)} hover:brightness-110 flex items-center gap-2`}`}>
-              {eggs.length < 30 ? (((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.accents?.[0]) || '') : ''}
-              <span>➕ Gerar Ovo Aleatório</span>
-            </button>
+            
           </div>
           <div className="flex justify-end mb-2">
             {(() => {

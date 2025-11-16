@@ -69,14 +69,13 @@ class AIService {
   private loadConfig(): AIConfig {
     // Força configuração consistente: texto via Groq proxy backend e imagem via rota backend
     const provider: AIProvider = 'groq';
-    const isDev = typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.DEV;
     return {
       provider,
       apiKey: '',
       model: 'llama-3.1-8b-instant',
       imageModel: 'stabilityai/sd-turbo',
-      // Em dev usamos o proxy Express 
-      baseURL: isDev ? '/api/groq-openai' : '/api/groq-chat',
+      // Sempre usar o proxy Express compatível com OpenAI
+      baseURL: '/api/groq-openai',
       maxTokens: 2000,
       temperature: 0.7
     };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useHeroStore } from '../store/heroStore';
 import { Quest, QuestDifficulty, Hero } from '../types/hero';
 import { generateQuestBoard } from '../utils/quests';
@@ -6,6 +6,8 @@ import { SHOP_ITEMS } from '../utils/shop';
 import { getClassIcon } from '../styles/medievalTheme';
 import { ELEMENT_INFO } from '../utils/elementSystem';
 import { getElementInfoSafe } from '../utils/elementSystem';
+import { worldStateManager } from '../utils/worldState';
+import { computeRewardMultiplier } from '../utils/dungeonConfig';
 
 // Componente para seleção de herói
 const HeroSelector: React.FC<{ 
@@ -91,6 +93,11 @@ const QuestBoard: React.FC = () => {
     refreshQuests, 
     acceptQuest, 
     completeQuest,
+    gainXP,
+    gainGold,
+    addItemToInventory,
+    updateHero,
+    updateDailyGoalProgress,
     selectHero,
     heroes
   } = useHeroStore();
@@ -206,6 +213,193 @@ const QuestBoard: React.FC = () => {
       console.log('✅ Completando missão:', questId, 'para herói:', selectedHero.name);
       completeQuest(selectedHero.id, questId);
     }
+  };
+
+  const ActiveMissionRunner: React.FC<{ hero: Hero; quest: Quest }> = ({ hero, quest }) => {
+    const [running, setRunning] = useState(false);
+    const [finished, setFinished] = useState(false);
+    const [phaseIndex, setPhaseIndex] = useState(0);
+    const [log, setLog] = useState<Array<{ phase: number; success: boolean; xp: number; gold: number; narrative: string; itemsAwarded?: { id: string; name?: string }[] }>>([]);
+    const [autoRun, setAutoRun] = useState(false);
+    const [npcIntegrity, setNpcIntegrity] = useState<number | null>(quest.categoryHint === 'escolta' ? 100 : null);
+    const [anyLoot, setAnyLoot] = useState(false);
+    const [streak, setStreak] = useState(0);
+    const [error, setError] = useState<string | null>(null);
+
+    const phasesTotal = useMemo(() => Math.max(2, quest.phasesHint || (quest.difficulty === 'epica' ? 4 : 3)), [quest.phasesHint, quest.difficulty]);
+    const staminaCostPerPhase = useMemo(() => (quest.difficulty === 'rapida' ? 2 : 3), [quest.difficulty]);
+    const biome = quest.biomeHint || 'Floresta Nebulosa';
+    const category = quest.categoryHint || (quest.type === 'caca' ? 'controle' : 'controle');
+
+    const start = () => {
+      if ((hero.stamina?.current || 0) < staminaCostPerPhase) { setError('Stamina insuficiente para iniciar.'); return; }
+      setRunning(true);
+      setFinished(false);
+      setPhaseIndex(0);
+      setLog([]);
+      setError(null);
+      setStreak(0);
+      setNpcIntegrity(category === 'escolta' ? 100 : null);
+      setAnyLoot(false);
+    };
+
+    const resolvePhase = () => {
+      if (finished) return;
+      const extraPhaseCost = phaseIndex >= 2 ? 1 : 0;
+      const totalCost = staminaCostPerPhase + extraPhaseCost;
+      if ((hero.stamina?.current || 0) < totalCost) { setError('Stamina insuficiente para prosseguir.'); setRunning(false); return; }
+      worldStateManager.consumeStamina(hero, totalCost);
+      updateHero(hero.id, { stamina: hero.stamina });
+      const base = quest.difficulty === 'epica' ? 0.45 : quest.difficulty === 'dificil' ? 0.6 : quest.difficulty === 'medio' ? 0.7 : 0.8;
+      const riskStep = 0.06;
+      const attr = hero.attributes;
+      const classBonus = category === 'controle' ? (attr.destreza || 0) * 0.01 : category === 'coleta' ? (attr.inteligencia || 0) * 0.01 : category === 'escolta' ? (attr.constituicao || 0) * 0.008 : (attr.forca || 0) * 0.008;
+      const floor = 0.2;
+      const successChance = Math.max(floor, Math.min(0.95, (base - phaseIndex * riskStep) + classBonus));
+      const roll = Math.random();
+      const success = roll < successChance;
+      const mult = computeRewardMultiplier(streak);
+      const xpBase = (quest.baseRewardsHint?.xp || 25);
+      const goldBase = (quest.baseRewardsHint?.gold || 25);
+      const boss = category === 'especial' && phaseIndex + 1 === phasesTotal;
+      const bossMult = boss ? 1.5 : 1;
+      const xp = Math.round((success ? xpBase : Math.round(xpBase * 0.5)) * mult * bossMult);
+      const gold = Math.round((success ? goldBase : Math.round(goldBase * 0.3)) * mult * bossMult);
+      gainXP(hero.id, xp);
+      gainGold(hero.id, gold);
+
+      const lootTier = boss ? 'epico' : phaseIndex >= 2 ? 'raro' : phaseIndex >= 1 ? 'incomum' : 'comum';
+      const itemsEquip = Math.random() < (success ? 0.5 : 0.25) ? [] : [];
+      itemsEquip.forEach(it => addItemToInventory(hero.id, (it as any).id || '', 1));
+
+      const categoryPools: Record<string, string[]> = {
+        controle: ['pele-lobo-sombrio','colmilho-vampirico','osso-antigo'],
+        coleta: ['erva-sangue','essencia-lunar','cristal-runico'],
+        escolta: ['pergaminho-protecao','pergaminho-velocidade'],
+        especial: boss ? ['lamina-alpha','armadura-pedra-rachada'] : []
+      };
+      const ids = categoryPools[category] || [];
+      const extraIds: string[] = [];
+      if (ids.length) {
+        const dropChance = boss ? 1 : success ? 0.7 : 0.4;
+        const hour = new Date().getHours();
+        const isNight = hour < 6 || hour >= 18;
+        const isDay = hour >= 8 && hour < 17;
+        const eligible = ids.filter(id => {
+          if (id === 'essencia-lunar') return isNight;
+          if (id === 'erva-sangue') return isDay;
+          if (id === 'cristal-runico') return biome === 'Caverna Antiga' || biome === 'Ruínas Antigas';
+          return true;
+        });
+        if (eligible.length && Math.random() < dropChance) {
+          const pickId = eligible[Math.floor(Math.random() * eligible.length)];
+          addItemToInventory(hero.id, pickId, 1);
+          extraIds.push(pickId);
+        }
+      }
+
+      const ENEMIES_BY_BIOME: Record<string, string[]> = {
+        'Colinas de Boravon': ['Lobo Sombrio','Bandido'],
+        'Rio Marfim': ['Slime Ácido','Serpente do Rio'],
+        'Floresta Nebulosa': ['Morcego Vampiro','Bruxa da Névoa'],
+        'Ruínas Antigas': ['Golem Rachado','Esqueleto'],
+        'Floresta Umbral': ['Bruxa da Névoa','Lobo Sombrio'],
+        'Caverna Antiga': ['Troll de Pedra','Slime Ácido']
+      };
+      const baseAmbush = category === 'escolta' ? 0.25 : 0.15;
+      const ambush = Math.random() < (baseAmbush + (quest.difficulty === 'dificil' ? 0.05 : quest.difficulty === 'epica' ? 0.1 : 0));
+      let ambushText = '';
+      if (ambush) {
+        const enemies = ENEMIES_BY_BIOME[biome] || ['Inimigos'];
+        const foe = enemies[Math.floor(Math.random() * enemies.length)];
+        const ambushDamageBase = Math.round((hero.derivedAttributes.hp || 20) * 0.1);
+        const curHp2 = hero.derivedAttributes.currentHp ?? (hero.derivedAttributes.hp || 0);
+        const newHp2 = Math.max(0, curHp2 - ambushDamageBase);
+        updateHero(hero.id, { derivedAttributes: { ...hero.derivedAttributes, currentHp: newHp2 } });
+        ambushText = ` • Emboscada: ${foe} causa dano.`;
+        if (npcIntegrity !== null) setNpcIntegrity(Math.max(0, npcIntegrity - 10));
+        const maxHp2 = hero.derivedAttributes.hp || 1;
+        if ((newHp2 / maxHp2) < 0.2) { setAutoRun(false); setError('HP baixo, auto desativado.'); }
+      }
+
+      if (!success) {
+        const maxHp = hero.derivedAttributes.hp || 1;
+        const curHp = hero.derivedAttributes.currentHp ?? maxHp;
+        const damageBase = Math.round(maxHp * 0.1);
+        const newHp = Math.max(0, curHp - damageBase);
+        const newFatigue = Math.min(100, (hero.progression.fatigue || 0) + 6);
+        updateHero(hero.id, { derivedAttributes: { ...hero.derivedAttributes, currentHp: newHp }, progression: { ...hero.progression, fatigue: newFatigue } });
+        if (npcIntegrity !== null) setNpcIntegrity(Math.max(0, npcIntegrity - 15));
+        const maxHp2 = hero.derivedAttributes.hp || 1;
+        if ((newHp / maxHp2) < 0.2) { setAutoRun(false); setError('HP baixo, auto desativado.'); }
+      }
+
+      const mapName = (id: string) => SHOP_ITEMS.find(i => i.id === id)?.name || id;
+      const result = { phase: phaseIndex + 1, success, xp, gold, narrative: (success ? `Progresso na fase ${phaseIndex + 1}.` : `Revés na fase ${phaseIndex + 1}.`) + ambushText, itemsAwarded: [...itemsEquip.map((i: any) => ({ id: i.id, name: i.name })), ...extraIds.map(id => ({ id, name: mapName(id) }))] };
+      const newLog = [...log, result];
+      setLog(newLog);
+      if ((itemsEquip.length > 0) || (extraIds.length > 0)) setAnyLoot(true);
+      setStreak(s => s + (success ? 1 : 0));
+      const nextPhase = phaseIndex + 1;
+      setPhaseIndex(nextPhase);
+      if ((npcIntegrity !== null && npcIntegrity <= 0) || (nextPhase >= phasesTotal)) {
+        setFinished(true);
+        setRunning(false);
+        updateDailyGoalProgress(hero.id, 'quest-completed', 1);
+        if ((quest.difficulty === 'rapida') && !anyLoot) {
+          const consolation = category === 'coleta' ? 'erva-sangue' : 'osso-antigo';
+          addItemToInventory(hero.id, consolation, 1);
+        }
+      }
+    };
+
+    useEffect(() => {
+      if (running && autoRun && !finished) {
+        const t = setTimeout(() => { resolvePhase(); }, 500);
+        return () => clearTimeout(t);
+      }
+    }, [running, autoRun, finished, phaseIndex]);
+
+    return (
+      <div className="mt-4 p-4 border rounded bg-gray-800 border-gray-700">
+        <div className="text-white font-semibold">Execução da Missão — {biome}</div>
+        <div className="text-gray-300 text-sm">Fases: {phasesTotal} • Dificuldade: {quest.difficulty}</div>
+        {!running && !finished && (
+          <div className="mt-3">
+            <button onClick={start} className="px-3 py-2 rounded bg-green-600 text-white hover:bg-green-700">Iniciar</button>
+            <button onClick={() => setAutoRun(v => !v)} className={`ml-2 px-3 py-2 rounded ${autoRun ? 'bg-teal-600' : 'bg-teal-700'} text-white hover:bg-teal-500`}>{autoRun ? 'Auto: ON' : 'Auto: OFF'}</button>
+            {error && <div className="mt-2 text-sm text-red-300">{error}</div>}
+          </div>
+        )}
+        {running && (
+          <div className="mt-3">
+            <div className="text-gray-200">Fase {phaseIndex + 1} de {phasesTotal}</div>
+            {npcIntegrity !== null && <div className="text-gray-400 text-xs">Integridade do NPC: {npcIntegrity}%</div>}
+            <div className="mt-2 flex gap-2">
+              <button onClick={resolvePhase} className="px-3 py-2 rounded bg-purple-600 text-white hover:bg-purple-700">Prosseguir</button>
+              <button onClick={() => setAutoRun(v => !v)} className={`px-3 py-2 rounded ${autoRun ? 'bg-teal-600' : 'bg-teal-700'} text-white hover:bg-teal-500`}>{autoRun ? 'Auto: ON' : 'Auto: OFF'}</button>
+            </div>
+            <div className="mt-2 text-sm text-gray-400">Multiplicador atual: x{computeRewardMultiplier(streak).toFixed(2)}</div>
+          </div>
+        )}
+        {log.length > 0 && (
+          <div className="mt-4">
+            <div className="text-white font-semibold">Registro</div>
+            <ul className="mt-2 text-sm text-gray-300 list-disc pl-5">
+              {log.map(r => (
+                <li key={r.phase}>Fase {r.phase}: {r.narrative} • +{r.xp} XP, +{r.gold} ouro{r.itemsAwarded && r.itemsAwarded.length ? ` • Loot` : ''}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {finished && (
+          <div className="mt-3">
+            <div className="text-sm text-gray-200">Missão finalizada.</div>
+            <button onClick={() => handleCompleteQuest(quest.id)} className="mt-2 px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Concluir Oficialmente</button>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const renderQuestCard = (quest: Quest, isActive = false, isCompleted = false) => (
@@ -324,7 +518,10 @@ const QuestBoard: React.FC = () => {
             {canAcceptQuest(quest) ? 'Aceitar Missão' : 'Requisitos não atendidos'}
           </button>
         )}
-        {isActive && (
+        {isActive && (quest.type === 'caca' || quest.categoryHint === 'escolta') && (
+          <span className="px-2 py-1 rounded-md text-xs font-medium bg-green-900/30 text-green-300 border border-green-600/30">Execução por fases</span>
+        )}
+        {isActive && !(quest.type === 'caca' || quest.categoryHint === 'escolta') && (
           <button
             onClick={() => handleCompleteQuest(quest.id)}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md font-medium transition-colors"
@@ -422,7 +619,14 @@ const QuestBoard: React.FC = () => {
         {selectedTab === 'active' && selectedHero.activeQuests
           .map(id => availableQuests.find(q => q.id === id))
           .filter((q): q is Quest => !!q)
-          .map(q => renderQuestCard(q, true))}
+          .map(q => (
+            <div key={q.id}>
+              {renderQuestCard(q, true)}
+              {(q.type === 'caca' || q.categoryHint === 'escolta') && selectedHero && (
+                <ActiveMissionRunner hero={selectedHero} quest={q} />
+              )}
+            </div>
+          ))}
         {selectedTab === 'completed' && selectedHero.completedQuests
           .map(id => availableQuests.find(q => q.id === id))
           .filter((q): q is Quest => !!q)

@@ -64,8 +64,9 @@ export default function HuntingMissions() {
   const start = () => {
     if (!hero || !mission) return
     if (!canEnter) { setError('Rank insuficiente para esta missão de caça.'); return }
-    const needed = staminaCostPerPhase
-    if ((hero.stamina || 0) < needed) { setError('Stamina insuficiente para iniciar a caçada.'); return }
+    const needed = worldStateManager.computeEffectiveStaminaCost(hero, staminaCostPerPhase)
+    const currentStamina = (hero.stamina as any)?.current ?? (hero.stamina as any) ?? 0
+    if (currentStamina < needed) { setError('Stamina insuficiente para iniciar a caçada.'); return }
     setRunning(true)
     setFinished(false)
     setPhaseIndex(0)
@@ -100,14 +101,17 @@ export default function HuntingMissions() {
   const estimatedTotalStamina = useMemo(() => {
     if (!mission) return 0
     const extra = Math.max(0, mission.phases - 2)
-    return staminaCostPerPhase * mission.phases + extra
+    const baseTotal = staminaCostPerPhase * mission.phases + extra
+    return worldStateManager.computeEffectiveStaminaCost(hero as any, baseTotal)
   }, [mission?.phases, staminaCostPerPhase])
 
   const resolvePhase = () => {
     if (!hero || !mission || finished) return
     const extraPhaseCost = mission.rankRequired === 'F' ? 0 : (phaseIndex >= 2 ? 1 : 0)
     const totalCost = staminaCostPerPhase + extraPhaseCost
-    if ((hero.stamina || 0) < totalCost) { setError('Stamina insuficiente para prosseguir.'); setRunning(false); return }
+    const needed = worldStateManager.computeEffectiveStaminaCost(hero, totalCost)
+    const currentStamina = (hero.stamina as any)?.current ?? (hero.stamina as any) ?? 0
+    if (currentStamina < needed) { setError('Stamina insuficiente para prosseguir.'); setRunning(false); return }
     worldStateManager.consumeStamina(hero, totalCost)
     updateHero(hero.id, { stamina: hero.stamina })
     const base = mission.difficulty === 'epica' ? 0.45 : mission.difficulty === 'dificil' ? 0.6 : mission.difficulty === 'medio' ? 0.7 : 0.8
@@ -128,7 +132,12 @@ export default function HuntingMissions() {
     const boss = mission.category === 'especial' && phaseIndex + 1 === mission.phases
     const bossMult = boss ? 1.5 : 1
     const xp = Math.round((success ? xpBase : Math.round(xpBase * 0.5)) * mult * bossMult)
-    const gold = Math.round((success ? goldBase : Math.round(goldBase * 0.3)) * mult * bossMult)
+    let gold = Math.round((success ? goldBase : Math.round(goldBase * 0.3)) * mult * bossMult)
+    const mountRed = worldStateManager.getMountStaminaReduction(hero as any)
+    if (mountRed > 0) {
+      const rewardBoost = 1 + Math.min(0.3, mountRed * 0.5)
+      gold = Math.round(gold * rewardBoost)
+    }
     gainXP(hero.id, xp)
     gainGold(hero.id, gold)
     const lootTier = boss ? 'epico' : phaseIndex >= 2 ? 'raro' : phaseIndex >= 1 ? 'incomum' as any : 'comum'
@@ -343,6 +352,14 @@ export default function HuntingMissions() {
                 <div className="text-emerald-300 text-xs">Bônus Novato ativo para {mission.category}.</div>
               )}
               <div className="text-gray-400 text-xs">Custo estimado de stamina: {staminaCostPerPhase} × {mission.phases} + {Math.max(0, mission.phases - 2)} = {staminaCostPerPhase * mission.phases + Math.max(0, mission.phases - 2)}</div>
+              {(() => {
+                const red = worldStateManager.getMountStaminaReduction(hero as any);
+                if (!red) return null;
+                const pct = Math.round(red * 100);
+                const baseTotal = staminaCostPerPhase * mission.phases + Math.max(0, mission.phases - 2)
+                const effTotal = worldStateManager.computeEffectiveStaminaCost(hero as any, baseTotal)
+                return <div className="text-emerald-300 text-xs">Montaria ativa reduz custo em {pct}% • Efetivo: {effTotal}</div>
+              })()}
               {estimatedSuccess !== null && (
                 <div className="text-gray-400 text-xs">Chance inicial estimada de sucesso (fase 1): {estimatedSuccess}%</div>
               )}
@@ -352,6 +369,12 @@ export default function HuntingMissions() {
               {estimatedTotals && (
                 <div className="text-gray-300 text-sm mt-1">Estimativa bruta de recompensa: ~ +{estimatedTotals.xp} XP, +{estimatedTotals.gold} ouro</div>
               )}
+              {(() => {
+                const red = worldStateManager.getMountStaminaReduction(hero as any)
+                if (!red) return null
+                const boostPct = Math.round(Math.min(0.3, red * 0.5) * 100)
+                return <div className="text-emerald-300 text-xs">Bônus de ouro por montaria: +{boostPct}%</div>
+              })()}
               <div className="text-gray-400 text-xs">Dica: atributo que ajuda nesta missão: {mission.category === 'controle' ? 'Destreza' : mission.category === 'coleta' ? 'Inteligência' : mission.category === 'escolta' ? 'Constituição' : 'Força'}</div>
               <div className="text-gray-300 text-sm">Requer Rank: {mission.rankRequired}</div>
               {mission.classHint && <div className="text-gray-400 text-xs">{mission.classHint}</div>}
@@ -367,8 +390,8 @@ export default function HuntingMissions() {
               <button onClick={reroll} disabled={!hero || running} className="ml-2 px-3 py-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50">Nova Missão</button>
               <button onClick={() => setShowDetails(v => !v)} className="ml-2 px-3 py-2 rounded bg-gray-700 text-white hover:bg-gray-600">{showDetails ? 'Ocultar Detalhes' : 'Detalhes da Missão'}</button>
               {!canEnter && <div className="mt-2 text-sm text-red-300">Rank insuficiente para esta missão.</div>}
-              {hero && (hero.stamina || 0) < staminaCostPerPhase && <div className="mt-2 text-sm text-amber-300">Stamina insuficiente para iniciar. Restaure energia antes de prosseguir.</div>}
-              {hero && estimatedTotalStamina > (hero.stamina || 0) && <div className="mt-2 text-sm text-amber-300">Atenção: stamina atual pode não ser suficiente para todas as fases.</div>}
+              {hero && (((hero.stamina as any)?.current ?? (hero.stamina as any) ?? 0) < worldStateManager.computeEffectiveStaminaCost(hero as any, staminaCostPerPhase)) && <div className="mt-2 text-sm text-amber-300">Stamina insuficiente para iniciar. Restaure energia antes de prosseguir.</div>}
+              {hero && estimatedTotalStamina > (((hero.stamina as any)?.current ?? (hero.stamina as any) ?? 0)) && <div className="mt-2 text-sm text-amber-300">Atenção: stamina atual pode não ser suficiente para todas as fases.</div>}
               {canEnter && mission.rankRequired === 'F' && <div className="mt-2 text-sm text-emerald-300">Missão inicial liberada para Novatos (Rank F).</div>}
               {error && <div className="mt-2 text-sm text-red-300">{error}</div>}
             </div>
@@ -377,6 +400,13 @@ export default function HuntingMissions() {
             <div className="mt-3">
               <div className="text-gray-200">Fase {phaseIndex + 1} de {phasesTotal}</div>
               {npcIntegrity !== null && <div className="text-gray-400 text-xs">Integridade do NPC: {npcIntegrity}%</div>}
+              {(() => {
+                const extraPhaseCost = mission?.rankRequired === 'F' ? 0 : (phaseIndex >= 2 ? 1 : 0)
+                const baseNext = staminaCostPerPhase + extraPhaseCost
+                const effNext = worldStateManager.computeEffectiveStaminaCost(hero as any, baseNext)
+                const redPct = Math.round(worldStateManager.getMountStaminaReduction(hero as any) * 100)
+                return <div className="text-emerald-300 text-xs">Custo desta fase: base {baseNext} • efetivo {effNext}{redPct?` • redução ${redPct}%`:''}</div>
+              })()}
               <div className="mt-2 flex gap-2">
                 <button onClick={resolvePhase} className="px-3 py-2 rounded bg-purple-600 text-white hover:bg-purple-700">Prosseguir</button>
                 <button onClick={retreat} className="px-3 py-2 rounded bg-amber-600 text-black hover:bg-amber-500">Recuar e guardar loot</button>

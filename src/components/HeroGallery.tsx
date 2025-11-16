@@ -45,6 +45,8 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
   const prefetchRef = useRef<number>(0);
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const [itemHeight, setItemHeight] = useState<number>(320);
+  const virtStateRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+  const virtTickingRef = useRef<boolean>(false);
   const [virtStart, setVirtStart] = useState<number>(0);
   const [virtEnd, setVirtEnd] = useState<number>(0);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -96,29 +98,38 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
         if (el) {
           const rect = el.getBoundingClientRect();
           const h = Math.max(200, Math.floor(rect.height));
-          setItemHeight(h);
+          if (h !== itemHeight) setItemHeight(h);
         }
       } catch {}
     };
-    measure();
-    const onScroll = () => {
+    const computeRange = () => {
       const y = window.scrollY || window.pageYOffset || 0;
       const vh = window.innerHeight || 800;
       const buffer = 10;
       const start = Math.max(0, Math.floor(y / Math.max(1, itemHeight)) - buffer);
       const end = Math.min(visibleHeroes.length, Math.ceil((y + vh) / Math.max(1, itemHeight)) + buffer);
-      setVirtStart(start);
-      setVirtEnd(end);
+      if (virtStateRef.current.start !== start) setVirtStart(start);
+      if (virtStateRef.current.end !== end) setVirtEnd(end);
+      virtStateRef.current = { start, end };
     };
-    const onResize = () => { measure(); onScroll(); };
+    const onScroll = () => {
+      if (virtTickingRef.current) return;
+      virtTickingRef.current = true;
+      requestAnimationFrame(() => {
+        computeRange();
+        virtTickingRef.current = false;
+      });
+    };
+    const onResize = () => { measure(); computeRange(); };
+    measure();
+    computeRange();
     window.addEventListener('scroll', onScroll, { passive: true } as any);
     window.addEventListener('resize', onResize);
-    onScroll();
     return () => {
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
     };
-  }, [useVirtualization, itemHeight, visibleHeroes.length]);
+  }, [useVirtualization, visibleHeroes.length, itemHeight]);
 
   const loadMore = useCallback(async () => {
     if (isLoadingMore) return;
@@ -384,12 +395,6 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
             )}
 
             {/* Ações rápidas */}
-            <button
-              onClick={handleAddExample}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-md font-bold transition-colors text-sm"
-            >
-              Adicionar Exemplo
-            </button>
             <button
               onClick={handleAddStatic}
               className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-md font-bold transition-colors text-sm"

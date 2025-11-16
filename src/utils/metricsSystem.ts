@@ -66,6 +66,59 @@ export class MetricsManager {
     this.checkAlerts(metric);
 
     this.saveMetrics();
+
+    try {
+      const g = (window as any).gtag
+      if (g && import.meta.env.PROD) {
+        const map: Record<MetricEventType, string> = {
+          'purchase-initiated': 'begin_checkout',
+          'purchase-completed': 'purchase',
+          'ad-impression': 'ad_impression',
+          'ad-click': 'ad_click',
+          'rewarded-ad-completed': 'earn_virtual_currency',
+          'page-visited': 'page_view',
+          'hero-created': 'hero_created',
+          'level-up': 'level_up',
+          'xp-gained': 'xp_gained',
+          'gold-gained': 'gold_gained',
+          'attribute-increased': 'attribute_increased',
+          'quest-started': 'quest_started',
+          'quest-completed': 'quest_completed',
+          'quest-failed': 'quest_failed',
+          'epic-quest-completed': 'epic_quest_completed',
+          'combat-started': 'combat_started',
+          'combat-won': 'combat_won',
+          'combat-lost': 'combat_lost',
+          'enemy-defeated': 'enemy_defeated',
+          'achievement-unlocked': 'achievement_unlocked',
+          'title-earned': 'title_earned',
+          'daily-goal-completed': 'daily_goal_completed',
+          'event-completed': 'event_completed',
+          'item-acquired': 'item_acquired',
+          'item-used': 'item_used',
+          'session-started': 'session_started',
+          'session-ended': 'session_ended',
+          'feature-used': 'feature_used',
+          'tutorial-started': 'tutorial_started',
+          'tutorial-completed': 'tutorial_completed',
+          'onboarding-completed': 'onboarding_completed',
+          'activity-liked': 'activity_liked',
+          'activity-commented': 'activity_commented',
+          'activity-shared': 'activity_shared',
+          'guild-joined': 'guild_joined',
+          'guild-left': 'guild_left'
+        }
+        const name = map[eventType]
+        if (name) {
+          const params: Record<string, any> = { hero_id: heroId, session_id: metric.sessionId, user_id: metric.userId, ...data }
+          if (eventType === 'purchase-completed') {
+            params.transaction_id = data.receiptId || `txn-${Date.now()}`
+            params.items = [{ item_id: data.productId }]
+          }
+          g('event', name, params)
+        }
+      }
+    } catch {}
   }
 
   // Inicializar sessão
@@ -668,6 +721,8 @@ export const trackMetric = {
   
   featureUsed: (heroId: string, feature: string) => 
     metricsManager.trackEvent('feature-used', heroId, { feature }),
+  featureUsedData: (heroId: string, feature: string, data: Record<string, any>) =>
+    metricsManager.trackEvent('feature-used', heroId, { feature, ...data }),
 
   attributePointsAllocated: (heroId: string, data: { totalSpent: number; allocations: Record<string, number> }) =>
     metricsManager.trackEvent('attribute-increased', heroId, data),
@@ -680,6 +735,8 @@ export const trackMetric = {
     metricsManager.trackEvent('ad-impression', heroId, { placement }),
   adClick: (heroId: string, placement: string) =>
     metricsManager.trackEvent('ad-click', heroId, { placement }),
+  itemAcquired: (heroId: string, data: any) =>
+    metricsManager.trackEvent('item-acquired', heroId, data),
   rewardedAdCompleted: (heroId: string, reward: string) =>
     metricsManager.trackEvent('rewarded-ad-completed', heroId, { reward })
 };
@@ -687,4 +744,25 @@ export const trackMetric = {
 // Finalizar sessão quando a página é fechada
 window.addEventListener('beforeunload', () => {
   metricsManager.endSession();
+  try {
+    const kpi = metricsManager.getKPIDashboard();
+    const events = metricsManager.getEvents();
+    const featureEvents = events.filter(e => e.eventType === 'feature-used');
+    const installs = featureEvents.filter(e => String(e.data?.feature) === 'pwa-installed').length;
+    const purchases = events.filter(e => e.eventType === 'purchase-completed').length;
+    const themeSwitches = featureEvents.filter(e => String(e.data?.feature) === 'theme-switch').length;
+    const frameSwitches = featureEvents.filter(e => String(e.data?.feature) === 'frame-switch').length;
+    const body = { kpi, installs, purchases };
+    (body as any).customizations = { themeSwitches, frameSwitches };
+    const apiBase = (import.meta as any)?.env?.DEV ? '' : 'http://localhost:3001';
+    const url = `${apiBase}/api/metrics/ingest`;
+    try {
+      if (navigator && typeof navigator.sendBeacon === 'function') {
+        const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
+        navigator.sendBeacon(url, blob);
+      } else {
+        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {});
+      }
+    } catch {}
+  } catch {}
 });

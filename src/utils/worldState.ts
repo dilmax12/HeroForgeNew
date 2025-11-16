@@ -349,26 +349,49 @@ export class WorldStateManager {
     }
   }
 
-  /**
-   * Verifica se o herói tem stamina suficiente para uma missão
-   */
   canAcceptQuest(hero: Hero, staminaCost: number): boolean {
     this.updateStamina(hero);
-    return (hero.stamina?.current || 100) >= staminaCost;
+    const effective = this.computeEffectiveStaminaCost(hero, staminaCost);
+    return (hero.stamina?.current || 100) >= effective;
   }
 
-  /**
-   * Consome stamina para uma missão
-   */
   consumeStamina(hero: Hero, amount: number): boolean {
     if (!this.canAcceptQuest(hero, amount)) {
       return false;
     }
 
     if (hero.stamina) {
-      hero.stamina.current -= amount;
+      const effective = this.computeEffectiveStaminaCost(hero, amount);
+      hero.stamina.current -= effective;
     }
     return true;
+  }
+ 
+  getMountStaminaReduction(hero: Hero): number {
+    try {
+      const m = (hero.mounts || []).find(mm => mm.id === hero.activeMountId);
+      if (!m) return 0;
+      const base = Math.max(0, m.speedBonus || 0);
+      const buff = (() => {
+        const mb = hero.mountBuff;
+        if (!mb?.speedBonus) return 0;
+        if (mb.expiresAt && Date.now() > new Date(mb.expiresAt).getTime()) return 0;
+        return Math.max(0, mb.speedBonus || 0);
+      })();
+      const refine = Math.max(0, m.refineLevel || 0);
+      const mastery = Math.max(0, m.mastery || 0);
+      const masteryStep = Math.floor(mastery / 10); // cada 10 níveis de maestria
+      const reduction = (base + buff) * 0.01 + refine * 0.005 + masteryStep * 0.02;
+      return Math.max(0, Math.min(0.4, reduction));
+    } catch {
+      return 0;
+    }
+  }
+
+  computeEffectiveStaminaCost(hero: Hero, baseCost: number): number {
+    const red = this.getMountStaminaReduction(hero);
+    const eff = Math.round(baseCost * (1 - red));
+    return Math.max(1, eff);
   }
 }
 

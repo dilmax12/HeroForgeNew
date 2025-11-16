@@ -23,7 +23,7 @@ const QUEST_TEMPLATES: QuestTemplate[] = [
     titleTemplate: 'Entrega para {location}',
     descriptionTemplate: 'Leve esta {item} para {npc} em {location}. Cuidado com {threat} no caminho.',
     type: 'contrato',
-    baseReward: { gold: 30, xp: 20 },
+    baseReward: { gold: 30, xp: 20, glory: 2 },
     modifiers: ['neblina', 'bandidos', 'tempo-ruim']
   },
   {
@@ -31,7 +31,7 @@ const QUEST_TEMPLATES: QuestTemplate[] = [
     titleTemplate: 'Escolta de {npc}',
     descriptionTemplate: 'Proteja {npc} durante a viagem até {location}. Há relatos de {threat} na região.',
     type: 'contrato',
-    baseReward: { gold: 50, xp: 35 },
+    baseReward: { gold: 50, xp: 35, glory: 3 },
     enemies: [{ type: 'Bandido', count: 2 }]
   },
 
@@ -41,7 +41,7 @@ const QUEST_TEMPLATES: QuestTemplate[] = [
     titleTemplate: 'Perigo na {location}',
     descriptionTemplate: 'Uma matilha de {enemy} está aterrorizando {location}. Derrote {count} deles.',
     type: 'caca',
-    baseReward: { gold: 40, xp: 30 },
+    baseReward: { gold: 40, xp: 30, glory: 2 },
     enemies: [{ type: 'Lobo', count: 3 }]
   },
   {
@@ -49,7 +49,7 @@ const QUEST_TEMPLATES: QuestTemplate[] = [
     titleTemplate: 'Invasão Goblin',
     descriptionTemplate: 'Goblins estão saqueando {location}. Elimine {count} invasores.',
     type: 'caca',
-    baseReward: { gold: 60, xp: 45 },
+    baseReward: { gold: 60, xp: 45, glory: 3 },
     enemies: [{ type: 'Goblin', count: 4 }]
   },
 
@@ -59,7 +59,7 @@ const QUEST_TEMPLATES: QuestTemplate[] = [
     titleTemplate: 'Artefato Perdido',
     descriptionTemplate: 'Encontre o {artifact} perdido nas {location}. Dizem que está guardado por {guardian}.',
     type: 'exploracao',
-    baseReward: { gold: 80, xp: 60, items: [{ id: 'pocao-media', qty: 1 }] },
+    baseReward: { gold: 80, xp: 60, glory: 4, arcaneEssence: 1, items: [{ id: 'pocao-media', qty: 1 }] },
     enemies: [{ type: 'Esqueleto', count: 2 }]
   },
   {
@@ -67,7 +67,7 @@ const QUEST_TEMPLATES: QuestTemplate[] = [
     titleTemplate: 'Mapeamento de {location}',
     descriptionTemplate: 'Explore e mapeie a região de {location}. Registre pontos de interesse e perigos.',
     type: 'exploracao',
-    baseReward: { gold: 70, xp: 50 }
+    baseReward: { gold: 70, xp: 50, glory: 3 }
   },
 
   // HISTÓRIA (Ramificada)
@@ -76,7 +76,7 @@ const QUEST_TEMPLATES: QuestTemplate[] = [
     titleTemplate: 'Mistério em {location}',
     descriptionTemplate: 'Estranhos eventos ocorrem em {location}. Investigue e descubra a verdade.',
     type: 'historia',
-    baseReward: { gold: 100, xp: 80, items: [{ id: 'pergaminho-xp', qty: 1 }] }
+    baseReward: { gold: 100, xp: 80, glory: 5, arcaneEssence: 1, items: [{ id: 'pergaminho-xp', qty: 1 }] }
   }
 ];
 
@@ -87,21 +87,21 @@ const COMPANION_GUILD_TEMPLATES: QuestTemplate[] = [
     titleTemplate: 'Treinar o Mascote com {npc}',
     descriptionTemplate: 'Participe de treinos supervisionados em {location} com {npc}. Aumente a experiência do seu mascote.',
     type: 'caca',
-    baseReward: { gold: 40, xp: 35, items: [{ id: 'racao-basica', qty: 2 }, { id: 'pedra-alma', qty: 1 }] }
+    baseReward: { gold: 40, xp: 35, glory: 3, items: [{ id: 'racao-basica', qty: 2 }, { id: 'pedra-alma', qty: 1 }] }
   },
   {
     id: 'guild-capturar-criatura',
     titleTemplate: 'Capturar uma Criatura Jovem em {location}',
     descriptionTemplate: 'Localize e capture uma criatura jovem com a ajuda de {npc}. Traga o espécime para estudo.',
     type: 'exploracao',
-    baseReward: { gold: 60, xp: 50, items: [{ id: 'essencia-vinculo', qty: 1 }] }
+    baseReward: { gold: 60, xp: 50, glory: 4, arcaneEssence: 1, items: [{ id: 'essencia-vinculo', qty: 1 }] }
   },
   {
     id: 'guild-acalmar-fera',
     titleTemplate: 'Acalmar uma Fera Selvagem perto de {location}',
     descriptionTemplate: 'Aproxime-se com cuidado e acalme a fera sob orientação de {npc}. Evite confrontos desnecessários.',
     type: 'caca',
-    baseReward: { gold: 70, xp: 55, items: [{ id: 'racao-deluxe', qty: 1 }] },
+    baseReward: { gold: 70, xp: 55, glory: 4, items: [{ id: 'racao-deluxe', qty: 1 }] },
     enemies: [{ type: 'Lobo', count: 1 }]
   },
   {
@@ -109,7 +109,7 @@ const COMPANION_GUILD_TEMPLATES: QuestTemplate[] = [
     titleTemplate: 'Encontrar a Essência Bestial em {location}',
     descriptionTemplate: 'Explore ruínas e cavernas antigas com {npc} para recuperar a Essência Bestial.',
     type: 'exploracao',
-    baseReward: { gold: 90, xp: 70, items: [{ id: 'essencia-bestial', qty: 1 }] }
+    baseReward: { gold: 90, xp: 70, glory: 5, arcaneEssence: 1, items: [{ id: 'essencia-bestial', qty: 1 }] }
   }
 ];
 
@@ -185,7 +185,9 @@ function applyDifficultyModifier(baseReward: QuestReward, difficulty: QuestDiffi
   return {
     gold: Math.floor(baseReward.gold * modifier.goldMultiplier),
     xp: Math.floor(baseReward.xp * modifier.xpMultiplier),
-    items: baseReward.items
+    items: baseReward.items,
+    glory: baseReward.glory ? Math.floor(baseReward.glory * modifier.goldMultiplier) : undefined,
+    arcaneEssence: baseReward.arcaneEssence ? Math.floor(baseReward.arcaneEssence * modifier.goldMultiplier) : undefined
   };
 }
 
@@ -238,7 +240,21 @@ export function generateQuest(
     rewards,
     repeatable: template.type === 'caca' || template.type === 'contrato',
     isGuildQuest,
-    failurePenalty: difficulty === 'epica' ? { gold: 20, reputation: -5 } : undefined
+    failurePenalty: difficulty === 'epica' ? { gold: 20, reputation: -5 } : undefined,
+    templateId: template.id,
+    categoryHint: template.id === 'contrato-escolta' ? 'escolta' : (template.type === 'caca' ? 'controle' : (template.type === 'exploracao' ? 'coleta' : undefined)),
+    biomeHint: (() => {
+      const loc = variables.location;
+      if (loc === 'Ruínas Antigas') return 'Ruínas Antigas';
+      if (loc === 'Cavernas Profundas') return 'Caverna Antiga';
+      if (loc === 'Floresta Encantada') return 'Floresta Nebulosa';
+      if (loc === 'Bosque Sombrio') return 'Floresta Umbral';
+      if (loc === 'Montanhas Geladas') return 'Colinas de Boravon';
+      if (loc === 'Porto dos Ventos' || loc === 'Rio Marfim') return 'Rio Marfim';
+      return 'Floresta Nebulosa';
+    })(),
+    phasesHint: difficulty === 'rapida' ? 2 : difficulty === 'epica' ? 4 : 3,
+    baseRewardsHint: { xp: rewards.xp, gold: rewards.gold }
   };
   
   if (isGuildQuest) {

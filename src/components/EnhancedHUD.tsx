@@ -289,29 +289,35 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
             <span className="text-amber-300 text-[11px] md:text-xs font-medium">Montaria Ativa</span>
             <span className="text-gray-300 text-[11px] md:text-xs">Velocidade +{(hero.mounts || []).find(m => m.id === hero.activeMountId)?.speedBonus || 0}</span>
           </div>
-          <div className="w-full bg-gray-800 rounded p-2">
-            <div className="flex items-center justify-between">
-              <div className="text-white text-xs md:text-sm font-medium">{(hero.mounts || []).find(m => m.id === hero.activeMountId)?.name}</div>
-              <div className="text-xs">
-                {(() => {
-                  const m = (hero.mounts || []).find(mm => mm.id === hero.activeMountId);
-                  if (!m) return null;
-                  return (
-                    <span className="text-amber-300">
-                      {m.stage}
-                      {typeof m.refineLevel === 'number' && m.refineLevel > 0 ? ` • +${m.refineLevel}` : ''}
-                      {typeof m.mastery === 'number' && m.mastery > 0 ? ` • Maestria ${m.mastery}` : ''}
-                      {(() => { const ms = Math.max(0, m.mastery||0); return ms>=30 ? ' • Mestre' : ms>=20 ? ' • Perito' : ms>=10 ? ' • Adepto' : '' })()}
-                    </span>
-                  );
-                })()}
+            <div className="w-full bg-gray-800 rounded p-2">
+              <div className="flex items-center justify-between">
+                <div className="text-white text-xs md:text-sm font-medium">{(hero.mounts || []).find(m => m.id === hero.activeMountId)?.name}</div>
+                <div className="text-xs">
+                  {(() => {
+                    const m = (hero.mounts || []).find(mm => mm.id === hero.activeMountId);
+                    if (!m) return null;
+                    return (
+                      <span className="text-amber-300">
+                        {m.stage}
+                        {typeof m.refineLevel === 'number' && m.refineLevel > 0 ? ` • +${m.refineLevel}` : ''}
+                        {typeof m.mastery === 'number' && m.mastery > 0 ? ` • Maestria ${m.mastery}` : ''}
+                        {(() => { const ms = Math.max(0, m.mastery||0); return ms>=30 ? ' • Mestre' : ms>=20 ? ' • Perito' : ms>=10 ? ' • Adepto' : '' })()}
+                      </span>
+                    );
+                  })()}
+                </div>
               </div>
-            </div>
-            <div className="mt-2 flex items-center gap-2">
-              <button onClick={() => setActiveMount(undefined)} className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-white text-[11px]">Desativar</button>
-              {bestMountId && bestMountId !== hero.activeMountId && (
-                <button onClick={() => setActiveMount(bestMountId)} className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-[11px]">Ativar melhor</button>
-              )}
+              {(() => {
+                const red = worldStateManager.getMountStaminaReduction(hero);
+                if (!red) return null;
+                const pct = Math.round(red * 100);
+                return <div className="mt-1 text-[11px] text-emerald-300">Redução de custo de stamina: {pct}%</div>
+              })()}
+              <div className="mt-2 flex items-center gap-2">
+                <button onClick={() => setActiveMount(undefined)} className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-white text-[11px]">Desativar</button>
+                {bestMountId && bestMountId !== hero.activeMountId && (
+                  <button onClick={() => setActiveMount(bestMountId)} className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-[11px]">Ativar melhor</button>
+                )}
               <button onClick={() => trainMountForSelected()} className="px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-[11px]">Treinar</button>
               {(() => {
                 const m = (hero.mounts || []).find(mm => mm.id === hero.activeMountId);

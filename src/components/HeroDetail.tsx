@@ -57,13 +57,16 @@ const HeroDetail = () => {
 
   // Detectar conjunto ativo (memo)
   const activeSet = useMemo(() => {
-    const equipped = [hero.inventory.equippedWeapon, hero.inventory.equippedArmor, hero.inventory.equippedAccessory].filter(Boolean);
-    const equippedSetIds = equipped
-      .map(itemId => SHOP_ITEMS.find(i => i.id === itemId)?.setId)
-      .filter((sid): sid is string => !!sid);
-    const activeSetId = equippedSetIds.length === 3 && new Set(equippedSetIds).size === 1 ? equippedSetIds[0] : null;
-    return activeSetId ? ITEM_SETS[activeSetId] : null;
-  }, [hero.inventory.equippedWeapon, hero.inventory.equippedArmor, hero.inventory.equippedAccessory]);
+    const weapons = (hero.inventory.equippedWeapons || []).map(id => SHOP_ITEMS.find(i => i.id === id)?.setId).filter(Boolean) as string[];
+    const armors = (hero.inventory.equippedArmorSlots || []).map(id => SHOP_ITEMS.find(i => i.id === id)?.setId).filter(Boolean) as string[];
+    const accessories = (hero.inventory.equippedAccessories || []).map(id => SHOP_ITEMS.find(i => i.id === id)?.setId).filter(Boolean) as string[];
+    for (const w of weapons) {
+      if (armors.includes(w) && accessories.includes(w)) {
+        return ITEM_SETS[w];
+      }
+    }
+    return null;
+  }, [hero.inventory.equippedWeapons, hero.inventory.equippedArmorSlots, hero.inventory.equippedAccessories]);
 
   const availableRecipes = useMemo(() => getAvailableRecipes(hero), [hero]);
 
@@ -228,16 +231,16 @@ const HeroDetail = () => {
             <h2 className="text-base sm:text-lg font-semibold text-white mb-3">Equipamentos</h2>
             <div className="grid grid-cols-3 gap-3 text-sm">
               <div className="bg-gray-700/50 p-3 rounded-md">
-                <div className="text-gray-400">Arma</div>
-                <div className="text-white">{getItemName(hero.inventory.equippedWeapon)}</div>
+                <div className="text-gray-400">Armas</div>
+                <div className="text-white">{(hero.inventory.equippedWeapons||[]).slice(0,2).map(getItemName).join(', ') || '-'}</div>
               </div>
               <div className="bg-gray-700/50 p-3 rounded-md">
-                <div className="text-gray-400">Armadura</div>
-                <div className="text-white">{getItemName(hero.inventory.equippedArmor)}</div>
+                <div className="text-gray-400">Armaduras</div>
+                <div className="text-white">{(hero.inventory.equippedArmorSlots||[]).slice(0,4).map(getItemName).join(', ') || '-'}</div>
               </div>
               <div className="bg-gray-700/50 p-3 rounded-md">
-                <div className="text-gray-400">Acessório</div>
-                <div className="text-white">{getItemName(hero.inventory.equippedAccessory)}</div>
+                <div className="text-gray-400">Acessórios</div>
+                <div className="text-white">{(hero.inventory.equippedAccessories||[]).slice(0,3).map(getItemName).join(', ') || '-'}</div>
               </div>
             </div>
             {activeSet && (

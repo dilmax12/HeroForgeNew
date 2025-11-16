@@ -13,6 +13,8 @@ export interface DailyGoalTemplate {
   baseRewards: {
     xp: number;
     gold: number;
+    glory?: number;
+    arcaneEssence?: number;
     items?: Item[];
   };
   difficulty: 'easy' | 'medium' | 'hard';
@@ -27,7 +29,7 @@ const DAILY_GOAL_TEMPLATES: DailyGoalTemplate[] = [
     description: 'Complete 1 missão',
     category: 'exploration',
     maxProgress: 1,
-    baseRewards: { xp: 50, gold: 25 },
+    baseRewards: { xp: 50, gold: 25, glory: 5 },
     difficulty: 'easy',
     levelRequirement: 1
   },
@@ -57,7 +59,7 @@ const DAILY_GOAL_TEMPLATES: DailyGoalTemplate[] = [
     description: 'Treine qualquer atributo 1 vez',
     category: 'progression',
     maxProgress: 1,
-    baseRewards: { xp: 40, gold: 30 },
+    baseRewards: { xp: 40, gold: 30, arcaneEssence: 1 },
     difficulty: 'easy',
     levelRequirement: 1
   },
@@ -67,7 +69,7 @@ const DAILY_GOAL_TEMPLATES: DailyGoalTemplate[] = [
     description: 'Chocar 1 mascote',
     category: 'collection',
     maxProgress: 1,
-    baseRewards: { xp: 60, gold: 40 },
+    baseRewards: { xp: 60, gold: 40, arcaneEssence: 1 },
     difficulty: 'easy',
     levelRequirement: 1
   },
@@ -89,7 +91,7 @@ const DAILY_GOAL_TEMPLATES: DailyGoalTemplate[] = [
     description: 'Complete 3 missões',
     category: 'exploration',
     maxProgress: 3,
-    baseRewards: { xp: 100, gold: 75 },
+    baseRewards: { xp: 100, gold: 75, glory: 10 },
     difficulty: 'medium',
     levelRequirement: 3
   },
@@ -99,7 +101,7 @@ const DAILY_GOAL_TEMPLATES: DailyGoalTemplate[] = [
     description: 'Derrote 5 inimigos',
     category: 'combat',
     maxProgress: 5,
-    baseRewards: { xp: 80, gold: 60 },
+    baseRewards: { xp: 80, gold: 60, arcaneEssence: 1 },
     difficulty: 'medium',
     levelRequirement: 3
   },
@@ -131,7 +133,7 @@ const DAILY_GOAL_TEMPLATES: DailyGoalTemplate[] = [
     description: 'Complete 1 missão épica',
     category: 'exploration',
     maxProgress: 1,
-    baseRewards: { xp: 200, gold: 150 },
+    baseRewards: { xp: 200, gold: 150, glory: 15 },
     difficulty: 'hard',
     levelRequirement: 5
   },
@@ -141,7 +143,7 @@ const DAILY_GOAL_TEMPLATES: DailyGoalTemplate[] = [
     description: 'Suba 1 nível',
     category: 'progression',
     maxProgress: 1,
-    baseRewards: { xp: 100, gold: 100 },
+    baseRewards: { xp: 100, gold: 100, glory: 10 },
     difficulty: 'hard',
     levelRequirement: 5
   },
@@ -161,7 +163,7 @@ const DAILY_GOAL_TEMPLATES: DailyGoalTemplate[] = [
     description: 'Complete todas as outras metas diárias',
     category: 'progression',
     maxProgress: 1,
-    baseRewards: { xp: 300, gold: 200 },
+    baseRewards: { xp: 300, gold: 200, glory: 20, arcaneEssence: 2 },
     difficulty: 'hard',
     levelRequirement: 3
   }
@@ -322,13 +324,15 @@ export function removeExpiredGoals(goals: DailyGoal[]): DailyGoal[] {
   return goals.filter(goal => goal.expiresAt > now);
 }
 
-export function getDailyGoalRewards(goal: DailyGoal): { xp: number; gold: number; items?: Item[] } {
+export function getDailyGoalRewards(goal: DailyGoal): { xp: number; gold: number; glory?: number; arcaneEssence?: number; items?: Item[] } {
   // Add bonus rewards based on difficulty
   const bonusMultiplier = goal.id.includes('perfect-day') ? 1.5 : 1;
   
   return {
     xp: Math.floor(goal.rewards.xp * bonusMultiplier),
     gold: Math.floor(goal.rewards.gold * bonusMultiplier),
+    glory: goal.rewards.glory ? Math.floor(goal.rewards.glory * bonusMultiplier) : undefined,
+    arcaneEssence: goal.rewards.arcaneEssence ? Math.floor(goal.rewards.arcaneEssence * bonusMultiplier) : undefined,
     items: goal.rewards.items
   };
 }

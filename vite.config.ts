@@ -10,15 +10,14 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
-    sourcemap: false,
+    sourcemap: true,
     emptyOutDir: true,
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'],
+          vendor: ['react', 'react-dom', 'zustand', 'use-sync-external-store'],
           router: ['react-router-dom'],
           motion: ['framer-motion'],
-          state: ['zustand'],
           supabase: ['@supabase/supabase-js']
         },
         assetFileNames: 'assets/[name]-[hash][extname]',

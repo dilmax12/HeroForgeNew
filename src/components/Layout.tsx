@@ -6,6 +6,7 @@ import NotificationSystem, { useNotifications, notificationBus } from './Notific
 import QuickNavigation from './QuickNavigation';
 import { medievalTheme, getClassIcon, seasonalThemes, getSeasonalButtonGradient } from '../styles/medievalTheme';
 import GoogleLoginButton from './GoogleLoginButton';
+import { useMonetizationStore } from '../store/monetizationStore';
 import { FlowProgress } from './FlowProgress';
 import { FlowControls } from './FlowControls';
 import DMNarrator from './DMNarrator';
@@ -13,11 +14,11 @@ import AdBanner from './AdBanner';
 import InterstitialAd from './InterstitialAd';
 import SeasonalDecor from './SeasonalDecor';
 import { FLOW_STEPS, getStepIndex } from '../utils/flow';
+import { trackMetric } from '../utils/metricsSystem';
 import { worldStateManager } from '../utils/worldState';
 import { supabase, supabaseConfigured } from '../lib/supabaseClient';
 import { ensurePlayerProfile } from '../services/playersService';
 import { getMonetizationConfig } from '../services/monetizationService';
-import { useMonetizationStore } from '../store/monetizationStore';
 import { listHeroesByUser, saveHero, sanitizeStoredHeroData } from '../services/heroesService';
 import { listQuestsByHero, saveQuest } from '../services/questsService';
 import { listNotifications } from '../services/userService';
@@ -41,6 +42,10 @@ const Layout = () => {
   const [playerProgress, setPlayerProgress] = useState<{ missions_completed: number; achievements_unlocked: number; playtime_minutes: number; last_login?: string | null } | null>(null);
   const [notifCount, setNotifCount] = useState<number>(0);
   const [organizerNearCount, setOrganizerNearCount] = useState<number>(0);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [installAvailable, setInstallAvailable] = useState<boolean>(false);
+  const [iosTipOpen, setIosTipOpen] = useState<boolean>(false);
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -63,6 +68,18 @@ const Layout = () => {
     });
     return () => { mounted = false; sub?.subscription.unsubscribe(); };
   }, []);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const handler = () => {
+      try {
+        addNotification({ id: `upd-${Date.now()}`, type: 'info', title: 'App atualizado', message: 'Uma nova versão foi instalada.', timeoutMs: 5000 });
+        trackMetric.featureUsed('system', 'app-updated');
+      } catch {}
+    };
+    navigator.serviceWorker.addEventListener('controllerchange', handler);
+    return () => { navigator.serviceWorker.removeEventListener('controllerchange', handler); };
+  }, [addNotification]);
 
   useEffect(() => {
     let timer: any = null;
@@ -225,6 +242,26 @@ const Layout = () => {
   }, [sbUserId]);
 
   useEffect(() => {
+    const onBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      setInstallAvailable(true);
+      try { trackMetric.featureUsedData('system', 'pwa-install-available', { device: navigator.userAgent }); } catch {}
+    };
+    const onInstalled = () => {
+      try { trackMetric.featureUsedData('system', 'pwa-installed', { device: navigator.userAgent }); } catch {}
+      setInstallAvailable(false);
+      setInstallPrompt(null);
+    };
+    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!supabaseConfigured) return;
     if (sbUserId) {
       fetchPlayerProgressHeader();
@@ -319,6 +356,15 @@ const Layout = () => {
       : `hover:text-amber-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded`;
   };
 
+  const groupButtonClass = (active: boolean) => {
+    const g = getSeasonalButtonGradient(useMonetizationStore.getState().activeSeasonalTheme as any);
+    return active
+      ? `px-2 py-1 rounded bg-gradient-to-r ${g} text-white font-semibold hover:brightness-110 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500`
+      : `px-2 py-1 rounded hover:text-amber-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500`;
+  };
+
+  const isAnyActive = (paths: string[]) => paths.some(p => isActive(p));
+
   const themeBg = activeThemeId === 'futurista'
     ? 'bg-gradient-to-br from-gray-900 via-cyan-900 to-black'
     : activeThemeId === 'noir'
@@ -334,36 +380,135 @@ const Layout = () => {
             </Link>
             <div className="flex items-center space-x-2 md:space-x-4">
               <GoogleLoginButton />
-              {sbEmail ? (
-                <span className="ml-1 text-xs md:text-sm text-gray-200">Supabase: {sbEmail}</span>
-              ) : (
-                <span className="ml-1 text-xs md:text-sm text-gray-400">Supabase: não logado</span>
+              {installAvailable && (
+                <button
+                  onClick={async () => {
+                    try { trackMetric.featureUsedData('system', 'pwa-install-click', { device: navigator.userAgent }); } catch {}
+                    if (!installPrompt) return;
+                    const r = await installPrompt.prompt();
+                    const outcome = r?.outcome || 'dismissed';
+                    try { trackMetric.featureUsedData('system', outcome === 'accepted' ? 'pwa-install-accepted' : 'pwa-install-dismissed', { device: navigator.userAgent }); } catch {}
+                    setInstallAvailable(false);
+                    setInstallPrompt(null);
+                  }}
+                  className={`px-2 py-1 rounded text-xs bg-gradient-to-r ${getSeasonalButtonGradient(useMonetizationStore.getState().activeSeasonalTheme as any)} text-white hover:brightness-110`}
+                  title="Instalar o app"
+                >
+                  ⬇️ Instalar
+                </button>
               )}
-              {syncing && (
-                <span className="ml-2 text-xs text-amber-300">Sincronizando...</span>
-              )}
-              {playerProgress?.last_login && (() => {
-                const d = new Date(playerProgress.last_login);
-                const diffMs = Date.now() - d.getTime();
-                const mins = Math.floor(diffMs / 60000);
-                const hours = Math.floor(mins / 60);
-                const days = Math.floor(hours / 24);
-                const rel = days > 0 ? `${days}d` : hours > 0 ? `${hours}h` : `${mins}m`;
-                return (<span className="ml-2 text-xs text-gray-300">Último login: {rel}</span>);
-              })()}
-              {supabaseConfigured && (
-                <div className="hidden md:flex items-center gap-3 ml-3 bg-slate-800 border border-slate-600 px-3 py-2 rounded">
-                  <button onClick={fetchPlayerProgressHeader} disabled={progressLoading} className={`px-2 py-1 rounded text-xs border ${progressLoading ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed' : 'bg-white text-gray-800 border-gray-300'}`}>{progressLoading ? (<span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></span><span>Progresso</span></span>) : 'Progresso'}</button>
-                  {progressError && <span className="text-xs text-red-400">{progressError}</span>}
-                  {playerProgress && (
-                    <div className="flex items-center gap-3 text-xs text-gray-200">
-                      <span>📋 {playerProgress.missions_completed}</span>
-                      <span>🏆 {playerProgress.achievements_unlocked}</span>
-                      <span>⏱️ {playerProgress.playtime_minutes}m</span>
+              {!installAvailable && (() => {
+                const ua = navigator.userAgent || ''
+                const isIOS = /iPhone|iPad|iPod/i.test(ua)
+                const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator as any).standalone
+                if (isIOS && !isStandalone) {
+                  return (
+                    <div className="relative ml-2">
+                      <button
+                        onClick={() => { setIosTipOpen(v => !v); try { trackMetric.featureUsedData('system', 'pwa-ios-tip-toggle', { open: !iosTipOpen }); } catch {} }}
+                        className={`px-2 py-1 rounded text-xs bg-gradient-to-r ${getSeasonalButtonGradient(useMonetizationStore.getState().activeSeasonalTheme as any)} text-white hover:brightness-110`}
+                        title="Como instalar no iOS"
+                      >
+                        📱 Instalar no iOS
+                      </button>
+                      {iosTipOpen && (
+                        <div className="absolute right-0 mt-2 w-64 bg-slate-800 border border-slate-600 rounded p-3 text-xs text-gray-200">
+                          <div className="font-semibold mb-1">Adicionar à Tela de Início</div>
+                          <div className="space-y-1">
+                            <div>1) Toque em Compartilhar</div>
+                            <div>2) Selecione “Adicionar à Tela de Início”</div>
+                            <div>3) Confirme “Adicionar”</div>
+                          </div>
+                          <button onClick={() => { setIosTipOpen(false); try { trackMetric.featureUsed('system', 'pwa-ios-tip-close'); } catch {} }} className="mt-2 px-2 py-1 bg-gray-700 rounded">Fechar</button>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
+                  )
+                }
+                return null
+              })()}
+              <div className="hidden md:flex items-center gap-2 ml-2">
+                <Link to="/journey" className={navLinkClass('/journey')}>Jornada</Link>
+                <Link to="/shop" className={navLinkClass('/shop')}>Loja</Link>
+                <Link to="/premium" className={navLinkClass('/premium')}>Premium</Link>
+                <Link to="/social-events" className={navLinkClass('/social-events')}>Eventos</Link>
+              </div>
+              <div className="hidden md:flex items-center gap-2 ml-2 bg-slate-800 border border-slate-600 px-2 py-1 rounded">
+                {useMonetizationStore.getState().seasonPassActive?.active && (
+                  <span className="text-xs text-amber-300">✨ Premium</span>
+                )}
+                {useMonetizationStore.getState().adsRemoved && (
+                  <span className="text-xs text-emerald-300">🚫 Ads</span>
+                )}
+                {useMonetizationStore.getState().activeThemeId && (
+                  <span className="text-xs text-indigo-300">Tema: {useMonetizationStore.getState().activeThemeId}</span>
+                )}
+                {useMonetizationStore.getState().activeFrameId && (
+                  <span className="text-xs text-cyan-300">Frame: {useMonetizationStore.getState().activeFrameId}</span>
+                )}
+                <span className="text-xs text-gray-200">{sbEmail ? `🔓 ${sbEmail}` : '🔒 Não logado'}</span>
+                {syncing && (<span className="text-xs text-amber-300">⏳ Sync</span>)}
+                {supabaseConfigured && (
+                  <>
+                    <button onClick={fetchPlayerProgressHeader} disabled={progressLoading} className={`px-2 py-1 rounded text-xs border ${progressLoading ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed' : 'bg-white text-gray-800 border-gray-300'}`}>{progressLoading ? (<span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></span><span>Progresso</span></span>) : 'Progresso'}</button>
+                    {playerProgress?.last_login && (() => {
+                      const d = new Date(playerProgress.last_login);
+                      const diffMs = Date.now() - d.getTime();
+                      const mins = Math.floor(diffMs / 60000);
+                      const hours = Math.floor(mins / 60);
+                      const days = Math.floor(hours / 24);
+                      const rel = days > 0 ? `${days}d` : hours > 0 ? `${hours}h` : `${mins}m`;
+                      return (<span className="text-xs text-gray-300">Últ. login: {rel}</span>);
+                    })()}
+                    {progressError && <span className="text-xs text-red-400">{progressError}</span>}
+                    {playerProgress && (
+                      <div className="flex items-center gap-2 text-xs text-gray-200">
+                        <span>📋 {playerProgress.missions_completed}</span>
+                        <span>🏆 {playerProgress.achievements_unlocked}</span>
+                        <span>⏱️ {playerProgress.playtime_minutes}m</span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+              {(() => {
+                const s = useMonetizationStore.getState();
+                const themes = s.ownedThemes || [];
+                const frames = s.ownedFrames || [];
+                return (
+                  <>
+                    {themes.length > 0 && (
+                      <button
+                        onClick={() => {
+                          const cur = s.activeThemeId || themes[0];
+                          const idx = Math.max(0, themes.indexOf(cur));
+                          const next = themes[(idx + 1) % themes.length];
+                          useMonetizationStore.getState().setActiveTheme(next);
+                          try { trackMetric.featureUsed(selectedHero?.id || 'system', 'theme-switch'); } catch {}
+                          try { addNotification({ id: `theme-${Date.now()}`, type: 'info', title: 'Tema aplicado', message: `Tema ${next} ativo`, timeoutMs: 3000 }); } catch {}
+                        }}
+                        className="ml-1 px-2 py-1 rounded text-xs bg-indigo-700 text-white"
+                        title="Trocar tema"
+                      >Tema ↻</button>
+                    )}
+                    {frames.length > 0 && (
+                      <button
+                        onClick={() => {
+                          const cur = s.activeFrameId || frames[0];
+                          const idx = Math.max(0, frames.indexOf(cur));
+                          const next = frames[(idx + 1) % frames.length];
+                          useMonetizationStore.getState().setActiveFrame(next);
+                          try { trackMetric.featureUsed(selectedHero?.id || 'system', 'frame-switch'); } catch {}
+                          try { addNotification({ id: `frame-${Date.now()}`, type: 'info', title: 'Frame aplicado', message: `Frame ${next} ativo`, timeoutMs: 3000 }); } catch {}
+                        }}
+                        className="ml-1 px-2 py-1 rounded text-xs bg-cyan-700 text-white"
+                        title="Trocar frame"
+                      >Frame ↻</button>
+                    )}
+                  </>
+                )
+              })()}
+              
             </div>
             
             {/* Herói Selecionado */}
@@ -406,126 +551,105 @@ const Layout = () => {
 
           <nav className="mt-3 md:mt-4">
             <div className="flex w-full justify-between items-center">
-              {/* Fluxo principal da jornada */}
-              <ul className="flex gap-3 md:space-x-6 overflow-x-auto -mx-1 px-1 snap-x snap-mandatory flex-nowrap sm:flex-wrap">
-                <li>
-                  <Link to="/journey" className={`${navLinkClass('/journey')} text-sm md:text-base`}>
-                    🏠 Início
-                  </Link>
-                </li>
-                <li>
-                  <Link to={(() => { const p = new URLSearchParams(location.search); const ref = p.get('ref'); const by = p.get('by'); return ref ? `/create?ref=${ref}${by?`&by=${by}`:''}` : "/create"; })()} className={`${navLinkClass('/create')} text-sm md:text-base`}>
-                    {medievalTheme.icons.ui.profile} Criar Herói
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/gallery" className={`${navLinkClass('/gallery')} text-sm md:text-base`}>
-                    {medievalTheme.icons.ui.inventory} Ver Galeria
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/guild-hub" className={`${navLinkClass('/guild-hub')} text-sm md:text-base`}>
-                    🏰 Guilda dos Aventureiros
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/stable" className={`${navLinkClass('/stable')} text-sm md:text-base`}>
-                    🐴 Estábulo
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/dungeon-infinita" className={`${navLinkClass('/dungeon-infinita')} text-sm md:text-base`}>
-                    🗝️ Dungeon Infinita
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/duel-arena" className={`${navLinkClass('/duel-arena')} text-sm md:text-base`}>
-                    ⚔️ Arena de Duelos
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/cadastro" className={`${navLinkClass('/cadastro')} text-sm md:text-base`}>
-                    📝 Cadastro
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/tavern" className={`${navLinkClass('/tavern')} text-sm md:text-base`}>
-                    🍺 Taverna
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/inventory" className={`${navLinkClass('/inventory')} text-sm md:text-base`}>
-                    🎒 Inventário
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/hero-forge" className={`${navLinkClass('/hero-forge')} text-sm md:text-base`}>
-                    ⚒️ Forja
-                  </Link>
-                </li>
-                {import.meta.env.DEV && (
-                  <li>
-                    <Link to="/admin" className={`${navLinkClass('/admin')} text-sm md:text-base`}>
-                      🛠️ Admin
-                    </Link>
-                  </li>
-                )}
-              </ul>
+              <div className="flex gap-3 md:gap-6 flex-wrap items-center">
+                <div className="relative">
+                  <button
+                    onClick={() => setOpenGroup(openGroup === 'aventura' ? null : 'aventura')}
+                    className={`${groupButtonClass(isAnyActive(['/journey','/create','/gallery','/dungeon-infinita','/duel-arena','/tavern']))} text-sm md:text-base`}
+                  >
+                    🧭 Aventura
+                  </button>
+                  {openGroup === 'aventura' && (
+                    <div className="absolute z-40 mt-2 w-56 bg-slate-800 border border-slate-600 rounded shadow-lg p-2">
+                      <ul className="space-y-1 text-sm">
+                        <li><Link to="/journey" className={navLinkClass('/journey')}>🏠 Início</Link></li>
+                        <li><Link to={(() => { const p = new URLSearchParams(location.search); const ref = p.get('ref'); const by = p.get('by'); return ref ? `/create?ref=${ref}${by?`&by=${by}`:''}` : "/create"; })()} className={navLinkClass('/create')}>{medievalTheme.icons.ui.profile} Criar Herói</Link></li>
+                        <li><Link to="/gallery" className={navLinkClass('/gallery')}>{medievalTheme.icons.ui.inventory} Ver Galeria</Link></li>
+                        <li><Link to="/dungeon-infinita" className={navLinkClass('/dungeon-infinita')}>🗝️ Dungeon Infinita</Link></li>
+                        <li><Link to="/duel-arena" className={navLinkClass('/duel-arena')}>⚔️ Arena de Duelos</Link></li>
+                        <li><Link to="/tavern" className={navLinkClass('/tavern')}>🍺 Taverna</Link></li>
+                      </ul>
+                    </div>
+                  )}
+                </div>
 
-              {/* Grupo final: Ranking | Loja | Comunidade (Futuro) - oculto até Evolução */}
-              {currentIdx >= FLOW_STEPS.length - 1 && (
-                <ul className="flex gap-3 md:space-x-4 text-sm overflow-x-auto -mx-1 px-1 snap-x snap-mandatory flex-nowrap sm:flex-wrap">
-                  <li>
-                    <Link to="/leaderboards" className={navLinkClass('/leaderboards')}>
-                      {medievalTheme.icons.ui.leaderboard} Ranking
-                    </Link>
-                  </li>
-                  <li>
-                    <Link to="/shop" className={navLinkClass('/shop')}>
-                      🏪 Loja
-                    </Link>
-                  </li>
-                <li>
-                  <Link to="/premium" className={navLinkClass('/premium')}>
-                    ✨ Premium
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/social-events" className={navLinkClass('/social-events')}>
+                <div className="relative">
+                  <button
+                    onClick={() => setOpenGroup(openGroup === 'gestao' ? null : 'gestao')}
+                    className={`${groupButtonClass(isAnyActive(['/inventory','/stable','/hero-forge']))} text-sm md:text-base`}
+                  >
+                    🧰 Gestão
+                  </button>
+                  {openGroup === 'gestao' && (
+                    <div className="absolute z-40 mt-2 w-56 bg-slate-800 border border-slate-600 rounded shadow-lg p-2">
+                      <ul className="space-y-1 text-sm">
+                        <li><Link to="/inventory" className={navLinkClass('/inventory')}>🎒 Inventário</Link></li>
+                        <li><Link to="/stable" className={navLinkClass('/stable')}>🐴 Estábulo</Link></li>
+                        <li><Link to="/hero-forge" className={navLinkClass('/hero-forge')}>⚒️ Forja</Link></li>
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                <div className="relative">
+                  <button
+                    onClick={() => setOpenGroup(openGroup === 'comunidade' ? null : 'comunidade')}
+                    className={`${groupButtonClass(isAnyActive(['/guild-hub','/social-events','/friends','/notifications']))} text-sm md:text-base`}
+                  >
                     👥 Comunidade
-                  </Link>
-                </li>
-                <li>
-                  <Link to={organizerNearCount > 0 ? "/organizer?nearFull=1" : "/organizer"} title="Eventos quase lotados no seu painel" className={navLinkClass('/organizer')}>
-                    🛠️ Organizador {organizerNearCount > 0 && (<span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white">{organizerNearCount}</span>)}
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/friends" className={navLinkClass('/friends')}>
-                    🤝 Amigos
-                  </Link>
-                </li>
-                  <li>
-                    <Link to="/notifications" className={navLinkClass('/notifications')}>
-                      🔔 Notificações {notifCount > 0 && (<span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white">{notifCount}</span>)}
-                    </Link>
-                  </li>
-                  <li>
-                    <Link to="/events-history" className={navLinkClass('/events-history')}>
-                      🗂️ Histórico
-                    </Link>
-                  </li>
-                  <li>
-                    <Link to="/profile" className={navLinkClass('/profile')}>
-                      👤 Perfil
-                    </Link>
-                  </li>
-                  <li>
-                    <Link to="/metrics" className={navLinkClass('/metrics')}>
-                      📊 Métricas
-                    </Link>
-                  </li>
-                </ul>
+                  </button>
+                  {openGroup === 'comunidade' && (
+                    <div className="absolute z-40 mt-2 w-56 bg-slate-800 border border-slate-600 rounded shadow-lg p-2">
+                      <ul className="space-y-1 text-sm">
+                        <li><Link to="/guild-hub" className={navLinkClass('/guild-hub')}>🏰 Guilda dos Aventureiros</Link></li>
+                        <li><Link to="/social-events" className={navLinkClass('/social-events')}>🎉 Eventos</Link></li>
+                        <li><Link to="/friends" className={navLinkClass('/friends')}>🤝 Amigos</Link></li>
+                        <li><Link to="/notifications" className={navLinkClass('/notifications')}>🔔 Notificações {notifCount > 0 && (<span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white">{notifCount}</span>)}</Link></li>
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                <div className="relative">
+                  <button
+                    onClick={() => setOpenGroup(openGroup === 'conta' ? null : 'conta')}
+                    className={`${groupButtonClass(isAnyActive(['/cadastro','/profile','/metrics']))} text-sm md:text-base`}
+                  >
+                    👤 Conta
+                  </button>
+                  {openGroup === 'conta' && (
+                    <div className="absolute z-40 mt-2 w-56 bg-slate-800 border border-slate-600 rounded shadow-lg p-2">
+                      <ul className="space-y-1 text-sm">
+                        <li><Link to="/cadastro" className={navLinkClass('/cadastro')}>📝 Cadastro</Link></li>
+                        <li><Link to="/profile" className={navLinkClass('/profile')}>👤 Perfil</Link></li>
+                        <li><Link to="/metrics" className={navLinkClass('/metrics')}>📊 Métricas</Link></li>
+                        {import.meta.env.DEV && (<li><Link to="/admin" className={navLinkClass('/admin')}>🛠️ Admin</Link></li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {currentIdx >= FLOW_STEPS.length - 1 && (
+                <div className="relative">
+                  <button
+                    onClick={() => setOpenGroup(openGroup === 'extras' ? null : 'extras')}
+                    className={`${groupButtonClass(isAnyActive(['/leaderboards','/shop','/premium','/organizer','/events-history']))} text-sm md:text-base`}
+                  >
+                    ⭐ Extras
+                  </button>
+                  {openGroup === 'extras' && (
+                    <div className="absolute right-0 z-40 mt-2 w-64 bg-slate-800 border border-slate-600 rounded shadow-lg p-2">
+                      <ul className="space-y-1 text-sm">
+                        <li><Link to="/leaderboards" className={navLinkClass('/leaderboards')}>{medievalTheme.icons.ui.leaderboard} Ranking</Link></li>
+                        <li><Link to="/shop" className={navLinkClass('/shop')}>🏪 Loja</Link></li>
+                        <li><Link to="/premium" className={navLinkClass('/premium')}>✨ Premium</Link></li>
+                        <li><Link to={organizerNearCount > 0 ? "/organizer?nearFull=1" : "/organizer"} title="Eventos quase lotados no seu painel" className={navLinkClass('/organizer')}>🛠️ Organizador {organizerNearCount > 0 && (<span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white">{organizerNearCount}</span>)}</Link></li>
+                        <li><Link to="/events-history" className={navLinkClass('/events-history')}>🗂️ Histórico</Link></li>
+                      </ul>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </nav>

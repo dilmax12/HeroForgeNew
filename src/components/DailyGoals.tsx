@@ -230,6 +230,18 @@ export const DailyGoals: React.FC<DailyGoalsProps> = ({ heroId }) => {
                       <span>💰</span>
                       <span>{rewards.gold} Ouro</span>
                     </div>
+                    {typeof rewards.glory === 'number' && rewards.glory > 0 && (
+                      <div className="flex items-center gap-1 text-yellow-300">
+                        <span>🏆</span>
+                        <span>{rewards.glory} Glória</span>
+                      </div>
+                    )}
+                    {typeof rewards.arcaneEssence === 'number' && rewards.arcaneEssence > 0 && (
+                      <div className="flex items-center gap-1 text-purple-300">
+                        <span>✨</span>
+                        <span>{rewards.arcaneEssence} Essência Arcana</span>
+                      </div>
+                    )}
                     {rewards.items && rewards.items.length > 0 && (
                       <div className="flex items-center gap-1 text-purple-400">
                         <span>🎁</span>

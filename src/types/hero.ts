@@ -213,6 +213,8 @@ export interface QuestReward {
   gold: number;
   xp: number;
   items?: QuestItem[];
+  glory?: number;
+  arcaneEssence?: number;
 }
 
 export interface QuestItem {
@@ -287,6 +289,11 @@ export interface Quest {
     situation: string;
     outcome?: string;
   };
+  templateId?: string;
+  categoryHint?: 'controle' | 'coleta' | 'escolta' | 'especial';
+  biomeHint?: string;
+  phasesHint?: number;
+  baseRewardsHint?: { xp: number; gold: number };
 }
 
 export interface Skill {
@@ -335,6 +342,12 @@ export interface Item {
     duration?: number; // em minutos para efeitos temporários
     special?: string; // efeitos especiais de encantamento (ex.: lifesteal)
   };
+  requirements?: {
+    minLevel?: number;
+    classAllow?: HeroClass[];
+    classDeny?: HeroClass[];
+  };
+  slot?: 'mainHand' | 'offHand' | 'helm' | 'chest' | 'belt' | 'gloves' | 'boots' | 'cape' | 'ring' | 'necklace' | 'earring';
 }
 
 export interface Achievement {
@@ -382,6 +395,8 @@ export interface DailyGoal {
   rewards: {
     xp: number;
     gold: number;
+    glory?: number;
+    arcaneEssence?: number;
     items?: Item[];
   };
   expiresAt: Date;
@@ -524,10 +539,28 @@ export interface HeroInventory {
   equippedWeapon?: string;
   equippedArmor?: string;
   equippedAccessory?: string;
+  equippedWeapons?: string[];
+  equippedArmorSlots?: string[];
+  equippedAccessories?: string[];
+  equippedMainHand?: string;
+  equippedOffHand?: string;
+  equippedHelm?: string;
+  equippedChest?: string;
+  equippedBelt?: string;
+  equippedGloves?: string;
+  equippedBoots?: string;
+  equippedCape?: string;
+  equippedRingLeft?: string;
+  equippedRingRight?: string;
+  equippedNecklace?: string;
+  equippedEarringLeft?: string;
+  equippedEarringRight?: string;
   upgrades?: { [itemId: string]: number }; // níveis de aprimoramento por item
   refined?: { [itemId: string]: ItemRarity }; // raridade refinada por item equipado
   enchantments?: { [itemId: string]: { special?: string } }; // encantos aplicados por item
   customItems?: { [itemId: string]: Item }; // itens gerados por forja/fusão
+  jewels?: { [jewelKey: string]: number };
+  equippedJewelsByItemId?: { [itemId: string]: string[] };
 }
 
 export interface Skill {

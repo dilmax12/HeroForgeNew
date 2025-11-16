@@ -17,27 +17,39 @@ const GoogleLoginButton: React.FC = () => {
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    if (!clientId || !window.google || !btnRef.current || isAuthenticated) return;
-
-    try {
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: async (resp: any) => {
-          try {
-            setLoading(true);
-            const u = await loginWithGoogleCredential(resp.credential);
-            login(u, resp.credential);
-            try { notificationBus.emit({ type: 'achievement', title: 'Login Google', message: 'Autenticado com sucesso', icon: '✅', duration: 2500 }); } catch {}
-          } catch (err) {
-            console.error('Login Google falhou', err);
-            try { notificationBus.emit({ type: 'error', title: 'Falha no Login Google', message: 'Verifique configuração e tente novamente', duration: 3500 }); } catch {}
+    if (!clientId || isAuthenticated) return;
+    const init = () => {
+      if (!window.google || !btnRef.current) return;
+      try {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: async (resp: any) => {
+            try {
+              setLoading(true);
+              const u = await loginWithGoogleCredential(resp.credential);
+              login(u, resp.credential);
+              try { notificationBus.emit({ type: 'achievement', title: 'Login Google', message: 'Autenticado com sucesso', icon: '✅', duration: 2500 }); } catch {}
+            } catch (err) {
+              console.error('Login Google falhou', err);
+              try { notificationBus.emit({ type: 'error', title: 'Falha no Login Google', message: 'Verifique configuração e tente novamente', duration: 3500 }); } catch {}
+            } finally { setLoading(false); }
           }
-          finally { setLoading(false); }
-        }
-      });
-      window.google.accounts.id.renderButton(btnRef.current, { theme: 'outline', size: 'large' });
-    } catch (err) {
-      console.error('Erro inicializando Google Identity', err);
+        });
+        window.google.accounts.id.renderButton(btnRef.current, { theme: 'outline', size: 'large' });
+      } catch (err) {
+        console.error('Erro inicializando Google Identity', err);
+      }
+    };
+    if (window.google) {
+      init();
+    } else {
+      const s = document.createElement('script');
+      s.src = 'https://accounts.google.com/gsi/client';
+      s.async = true;
+      s.defer = true;
+      s.onload = init;
+      s.onerror = () => {};
+      document.head.appendChild(s);
     }
   }, [login, isAuthenticated]);
 

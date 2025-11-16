@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useHeroStore } from '../store/heroStore';
 import { SHOP_CATEGORIES, purchaseItem, canAfford, getDailyOffers, getDiscountedPrice, RARITY_CONFIG } from '../utils/shop';
@@ -19,6 +19,7 @@ const Shop: React.FC = () => {
   const [showForgeServices, setShowForgeServices] = useState(false);
   const [fusionA, setFusionA] = useState<string>('');
   const [fusionB, setFusionB] = useState<string>('');
+  useEffect(() => { trackMetric.pageVisited(selectedHero?.id || 'system', '/shop'); trackMetric.featureUsed(selectedHero?.id || 'system', 'shop-open'); }, [])
 
   if (!selectedHero) {
     return (
@@ -34,9 +35,11 @@ const Shop: React.FC = () => {
   }
 
   const handlePurchase = (itemId: string) => {
+    try { trackMetric.featureUsed(selectedHero.id, 'shop-buy-click') } catch {}
     const result = purchaseItem(selectedHero, itemId);
     
     if (result.success && result.item) {
+      try { trackMetric.itemAcquired(selectedHero.id, { itemId }) } catch {}
       // Atualizar saldo da moeda correta e inventário
       const currency = result.currency || 'gold';
       const newProgression = { ...selectedHero.progression } as any;
@@ -61,6 +64,7 @@ const Shop: React.FC = () => {
       
       alert(result.message);
     } else {
+      try { trackMetric.featureUsed(selectedHero.id, 'shop-buy-denied') } catch {}
       alert(result.message);
     }
   };
@@ -204,7 +208,7 @@ const Shop: React.FC = () => {
       {/* Navegação */}
       <div className="flex flex-wrap justify-center gap-2 mb-4 sm:mb-6">
         <button
-          onClick={() => { setShowDailyOffers(false); setShowForgeServices(false); }}
+          onClick={() => { setShowDailyOffers(false); setShowForgeServices(false); trackMetric.featureUsed(selectedHero.id, 'shop-tab-catalog'); }}
           className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
             !showDailyOffers && !showForgeServices ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
           } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
@@ -212,7 +216,7 @@ const Shop: React.FC = () => {
           Catálogo Geral
         </button>
         <button
-          onClick={() => { setShowDailyOffers(true); setShowForgeServices(false); }}
+          onClick={() => { setShowDailyOffers(true); setShowForgeServices(false); trackMetric.featureUsed(selectedHero.id, 'shop-tab-daily'); }}
           className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
             showDailyOffers ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
           } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
@@ -220,7 +224,7 @@ const Shop: React.FC = () => {
           ⭐ Ofertas Diárias
         </button>
         <button
-          onClick={() => { setShowDailyOffers(false); setShowForgeServices(true); }}
+          onClick={() => { setShowDailyOffers(false); setShowForgeServices(true); trackMetric.featureUsed(selectedHero.id, 'shop-tab-forge'); }}
           className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
             showForgeServices ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
           } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
@@ -276,7 +280,7 @@ const Shop: React.FC = () => {
             <span>{((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.accents?.[0]) || '🎭'}</span>
             <span>Ofertas sazonais disponíveis conforme o tema atual.</span>
           </div>
-          <Link to="/premium" className={`px-3 py-2 rounded bg-gradient-to-r ${((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.buttonGradient) || 'from-amber-600 to-yellow-600'} text-white text-sm hover:brightness-110`}>Ver Ofertas</Link>
+          <Link to="/premium" onClick={() => { trackMetric.featureUsed(selectedHero.id, 'shop-premium-banner-click'); }} className={`px-3 py-2 rounded bg-gradient-to-r ${((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.buttonGradient) || 'from-amber-600 to-yellow-600'} text-white text-sm hover:brightness-110`}>Ver Ofertas</Link>
         </div>
       </div>
 
@@ -300,7 +304,11 @@ const Shop: React.FC = () => {
             <h3 className="text-lg sm:text-xl font-semibold mb-3">Refinar Raridade</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {(['weapon','armor','accessory'] as const).map(slot => {
-                const equippedId = slot === 'weapon' ? selectedHero.inventory.equippedWeapon : slot === 'armor' ? selectedHero.inventory.equippedArmor : selectedHero.inventory.equippedAccessory;
+                const equippedId = (() => {
+                  if (slot === 'weapon') return selectedHero.inventory.equippedMainHand || selectedHero.inventory.equippedOffHand || selectedHero.inventory.equippedWeapon || (selectedHero.inventory.equippedWeapons || [])[0];
+                  if (slot === 'armor') return selectedHero.inventory.equippedChest || selectedHero.inventory.equippedArmor || (selectedHero.inventory.equippedArmorSlots || [])[0];
+                  return selectedHero.inventory.equippedNecklace || selectedHero.inventory.equippedRingLeft || selectedHero.inventory.equippedRingRight || selectedHero.inventory.equippedAccessory || (selectedHero.inventory.equippedAccessories || [])[0];
+                })();
                 const baseItem = equippedId ? (SHOP_CATEGORIES.weapons.items.concat(SHOP_CATEGORIES.armor.items, SHOP_CATEGORIES.accessories.items).find(i => i.id === equippedId) || selectedHero.inventory.customItems?.[equippedId]) : undefined;
                 const currentRarity = equippedId ? (selectedHero.inventory.refined?.[equippedId] || baseItem?.rarity) : undefined;
                 const label = slot === 'weapon' ? 'Arma' : slot === 'armor' ? 'Armadura' : 'Acessório';
@@ -371,7 +379,11 @@ const Shop: React.FC = () => {
             <p className="text-sm text-gray-600 mb-2">Aplica efeito especial (lifesteal) ao item equipado. Custo: ✨ 50 Essência.</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {(['weapon','armor','accessory'] as const).map(slot => {
-                const equippedId = slot === 'weapon' ? selectedHero.inventory.equippedWeapon : slot === 'armor' ? selectedHero.inventory.equippedArmor : selectedHero.inventory.equippedAccessory;
+                const equippedId = (() => {
+                  if (slot === 'weapon') return selectedHero.inventory.equippedMainHand || selectedHero.inventory.equippedOffHand || selectedHero.inventory.equippedWeapon || (selectedHero.inventory.equippedWeapons || [])[0];
+                  if (slot === 'armor') return selectedHero.inventory.equippedChest || selectedHero.inventory.equippedArmor || (selectedHero.inventory.equippedArmorSlots || [])[0];
+                  return selectedHero.inventory.equippedNecklace || selectedHero.inventory.equippedRingLeft || selectedHero.inventory.equippedRingRight || selectedHero.inventory.equippedAccessory || (selectedHero.inventory.equippedAccessories || [])[0];
+                })();
                 const label = slot === 'weapon' ? 'Arma' : slot === 'armor' ? 'Armadura' : 'Acessório';
                 const enchanted = equippedId ? selectedHero.inventory.enchantments?.[equippedId]?.special : undefined;
                 return (

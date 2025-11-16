@@ -16,7 +16,13 @@ export async function startCheckout(productId: string): Promise<CheckoutResponse
       body: JSON.stringify({ productId })
     });
     if (!res.ok) throw new Error(await res.text());
-    return await res.json();
+    const json = await res.json();
+    try {
+      if (json?.redirectUrl) {
+        window.location.href = json.redirectUrl;
+      }
+    } catch {}
+    return json;
   } catch {
     // Fallback local: simular sucesso
     return { ok: true, sessionId: `local-${Date.now()}` };

@@ -6,6 +6,7 @@ import { getSeasonalButtonGradient } from '../styles/medievalTheme';
 
 const QuickNavigation: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [openGroupId, setOpenGroupId] = useState<string | null>(null);
   const location = useLocation();
   const { getSelectedHero } = useHeroStore();
   const selectedHero = getSelectedHero();
@@ -97,6 +98,15 @@ const QuickNavigation: React.FC = () => {
   ];
 
   const isCurrentPath = (path: string) => location.pathname === path;
+  const actionsById = Object.fromEntries(quickActions.map(a => [a.id, a]));
+
+  const groups: { id: string; title: string; icon: string; items: string[] }[] = [
+    { id: 'aventura', title: 'Aventura', icon: '🧭', items: ['quests','dungeon-infinita','duel-arena'] },
+    { id: 'companheiros', title: 'Companheiros', icon: '🐾', items: ['pets','hatch-next','party'] },
+    { id: 'progresso', title: 'Progresso', icon: '📈', items: ['training','daily-goals'] },
+    { id: 'comunidade', title: 'Comunidade', icon: '🏰', items: ['guild-hub'] },
+    { id: 'economia', title: 'Economia', icon: '💰', items: ['shop'] }
+  ];
 
   return (
     <div className="fixed bottom-4 left-4 z-50">
@@ -112,54 +122,69 @@ const QuickNavigation: React.FC = () => {
 
       {/* Quick Action Menu */}
       {isExpanded && (
-        <div className="absolute bottom-16 left-0 space-y-2 animate-slide-in-up">
-          {quickActions.map((action, index) => (
-            <Link
-              key={action.id}
-              to={action.path}
-              data-testid={`quick-nav-${action.id}`}
-              onClick={() => setIsExpanded(false)}
-              className={`
-                flex items-center space-x-3 px-3 sm:px-4 py-2 sm:py-3 rounded-lg text-white shadow-lg transition-all duration-300 min-w-0 sm:min-w-40 max-w-[80vw] text-sm sm:text-base break-words
-                bg-gradient-to-r ${g}
-                ${isCurrentPath(action.path) ? 'ring-2 ring-white ring-opacity-50' : ''}
-                transform hover:scale-105
-              `}
-              style={{
-                animationDelay: `${index * 50}ms`
-              }}
-            >
-              <div className="relative">
-                <span className="text-xl">{action.icon}</span>
-                {action.badge && (
-                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-xs font-bold">
-                    {action.badge}
+        <div className="absolute bottom-16 left-0 animate-slide-in-up">
+          <div className="bg-slate-900/90 backdrop-blur-sm border border-slate-700 rounded-xl p-3 shadow-2xl w-[90vw] max-w-sm sm:max-w-md">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {groups.map((grp) => {
+                const active = grp.items.some(id => isCurrentPath(actionsById[id]?.path || ''));
+                const open = openGroupId === grp.id;
+                return (
+                  <div key={grp.id} className="bg-slate-800 border border-slate-700 rounded-lg">
+                    <button
+                      onClick={() => setOpenGroupId(open ? null : grp.id)}
+                      className={`w-full flex items-center justify-between px-3 py-2 text-sm text-white rounded-t-lg ${active ? 'ring-2 ring-amber-400' : ''}`}
+                    >
+                      <span className="inline-flex items-center gap-2"><span>{grp.icon}</span><span className="font-semibold">{grp.title}</span></span>
+                      <span className="text-xs text-gray-300">{open ? '−' : '+'}</span>
+                    </button>
+                    {open && (
+                      <div className="px-2 pb-2 grid grid-cols-1 gap-2">
+                        {grp.items.map((id) => {
+                          const a = actionsById[id];
+                          if (!a) return null;
+                          return (
+                            <Link
+                              key={id}
+                              to={a.path}
+                              onClick={() => setIsExpanded(false)}
+                              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-white bg-gradient-to-r ${g} ${isCurrentPath(a.path) ? 'ring-2 ring-white/50' : ''}`}
+                            >
+                              <div className="relative">
+                                <span className="text-lg">{a.icon}</span>
+                                {a.badge && (
+                                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-[10px] font-bold">{a.badge}</div>
+                                )}
+                              </div>
+                              <span className="text-sm font-medium">{a.label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              <span className="font-medium">{action.label}</span>
-            </Link>
-          ))}
-          
-          {/* Quick Stats */}
-          <div className="bg-gray-800 rounded-lg p-3 text-white shadow-lg">
-            <div className="text-xs text-gray-400 mb-2">Status Rápido</div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="flex items-center space-x-1">
-                <span className="text-blue-400">⭐</span>
-                <span>Nv. {selectedHero.progression.level}</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <span className="text-yellow-400">🪙</span>
-                <span>{selectedHero.progression.gold}</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <span className="text-green-400">💚</span>
-                <span>{Math.floor((selectedHero.derivedAttributes.currentHp || selectedHero.derivedAttributes.hp) / selectedHero.derivedAttributes.hp * (selectedHero.attributes.constituicao * 5))}/{selectedHero.attributes.constituicao * 5}</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <span className="text-purple-400">⚔️</span>
-                <span>{selectedHero.activeQuests.length}</span>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 bg-gray-800 rounded-lg p-3 text-white shadow-lg">
+              <div className="text-xs text-gray-400 mb-2">Status Rápido</div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center space-x-1">
+                  <span className="text-blue-400">⭐</span>
+                  <span>Nv. {selectedHero.progression.level}</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <span className="text-yellow-400">🪙</span>
+                  <span>{selectedHero.progression.gold}</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <span className="text-green-400">💚</span>
+                  <span>{Math.floor((selectedHero.derivedAttributes.currentHp || selectedHero.derivedAttributes.hp) / selectedHero.derivedAttributes.hp * (selectedHero.attributes.constituicao * 5))}/{selectedHero.attributes.constituicao * 5}</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <span className="text-purple-400">⚔️</span>
+                  <span>{selectedHero.activeQuests.length}</span>
+                </div>
               </div>
             </div>
           </div>

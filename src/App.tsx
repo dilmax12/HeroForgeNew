@@ -460,7 +460,6 @@ function App() {
           <Route path="daily-goals" element={<DailyGoalsWrapper />} />
           <Route path="events" element={<EventsPanel />} />
           <Route path="social-events" element={<SocialEventsPage />} />
-          <Route path="//social-events" element={<SocialEventsPage />} />
           <Route path="event/:id" element={<EventDetailPage />} />
           <Route path="organizer" element={<OrganizerDashboard />} />
           <Route path="profile" element={<UserProfilePage />} />
@@ -474,7 +473,6 @@ function App() {
           {/* Rota de tutorial removida temporariamente */}
           <Route path="titles" element={<TitlesManager />} />
           <Route path="leaderboards" element={<Leaderboards />} />
-          <Route path="metrics" element={<Suspense fallback={<div className="p-6">Carregando...</div>}><AdminDashboardLazy /></Suspense>} />
           <Route path="ai-avatar" element={<AIAvatarGeneratorWrapper />} />
           <Route path="ai-missions" element={<DynamicMissionsPanelWrapper />} />
           <Route path="ai-recommendations" element={<AIRecommendationsPanelWrapper />} />

@@ -137,3 +137,65 @@ export function startLobbyPolling(
   tick();
   return () => { stopped = true; };
 }
+
+export function subscribePartyChatStream(
+  partyId: string,
+  onInit: (messages: PartyMessage[]) => void,
+  onMessage: (message: PartyMessage) => void
+): () => void {
+  const es = new EventSource(`/api/party/chat/stream?partyId=${encodeURIComponent(partyId)}`);
+  const handleInit = (ev: MessageEvent) => {
+    try {
+      const data = JSON.parse(ev.data);
+      onInit(Array.isArray(data) ? data as PartyMessage[] : []);
+    } catch {}
+  };
+  const handleMsg = (ev: MessageEvent) => {
+    try {
+      const data = JSON.parse(ev.data);
+      onMessage(data as PartyMessage);
+    } catch {}
+  };
+  es.addEventListener('init', handleInit as any);
+  es.addEventListener('message', handleMsg as any);
+  es.onerror = () => {};
+  return () => {
+    try { es.close(); } catch {}
+  };
+}
+
+const partyChannels = new Map<string, any>();
+
+export function subscribePartyChatSupabase(
+  partyId: string,
+  onInit: (messages: PartyMessage[]) => void,
+  onMessage: (message: PartyMessage) => void
+): () => void {
+  try {
+    const mod = require('../lib/supabaseClient') as any;
+    const supabase = mod.supabase;
+    const supabaseConfigured = mod.supabaseConfigured;
+    if (!supabaseConfigured) return () => {};
+    const channel = supabase.channel(`party-chat-${partyId}`, { config: { broadcast: { self: false }, presence: { key: 'client' } } });
+    channel.on('broadcast', { event: 'message' }, (payload: any) => {
+      const msg = payload?.payload as PartyMessage;
+      if (msg && msg.id) onMessage(msg);
+    });
+    channel.subscribe((status: string) => {
+      if (status === 'SUBSCRIBED') onInit([]);
+    });
+    partyChannels.set(partyId, channel);
+    return () => {
+      try { supabase.removeChannel(channel); } catch {}
+      partyChannels.delete(partyId);
+    };
+  } catch { return () => {}; }
+}
+
+export async function sendPartyChatRealtime(partyId: string, message: PartyMessage): Promise<void> {
+  try {
+    const ch = partyChannels.get(partyId);
+    if (!ch) return;
+    await ch.send({ type: 'broadcast', event: 'message', payload: message });
+  } catch {}
+}

@@ -5,6 +5,7 @@ import ErrorBoundary from './ErrorBoundary';
 import { useHeroStore } from '../store/heroStore';
 import { Hero } from '../types/hero';
 import { EXAMPLE_HERO_DATA, generateExampleHero } from '../utils/heroExample';
+import { getAltharionLore } from '../utils/story';
 
 const HeroList: React.FC = () => {
   const navigate = useNavigate();
@@ -52,6 +53,7 @@ const HeroList: React.FC = () => {
     }
   };
 
+  const shortLore = getAltharionLore('short');
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800">
       <div className="container mx-auto p-4 sm:p-6">
@@ -101,6 +103,20 @@ const HeroList: React.FC = () => {
               <div className="text-xl sm:text-2xl mb-1 sm:mb-2">🏆</div>
               <div className="font-medium text-sm sm:text-base">Rankings</div>
             </Link>
+          </div>
+        </div>
+
+        {/* Lore Curta */}
+        <div className="mb-6 sm:mb-8 rounded-lg p-4 border border-amber-500/30 bg-amber-900/10">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm text-amber-300 font-semibold">Forjador de Heróis — Introdução</div>
+            <div className="flex items-center gap-2">
+              <Link to="/intro?version=game_intro" className="px-3 py-1 rounded bg-amber-600 text-black text-xs">Narração</Link>
+              <Link to="/intro?version=cinematic" className="px-3 py-1 rounded bg-indigo-600 text-white text-xs">Trailer</Link>
+            </div>
+          </div>
+          <div className="space-y-2 text-xs sm:text-sm text-gray-200">
+            {shortLore.paragraphs.map((p, i) => (<p key={i}>{p}</p>))}
           </div>
         </div>
 

@@ -247,7 +247,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'comum',
     price: 80,
     icon: '🗡️',
-    bonus: { forca: 3, destreza: 1 }
+    bonus: { forca: 3, destreza: 1 },
+    slot: 'mainHand'
   },
   {
     id: 'machado-rustico',
@@ -257,7 +258,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'comum',
     price: 100,
     icon: '🪓',
-    bonus: { forca: 4, destreza: -1 }
+    bonus: { forca: 4, destreza: -1 },
+    slot: 'mainHand'
   },
   {
     id: 'arco-simples',
@@ -267,7 +269,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'comum',
     price: 90,
     icon: '🏹',
-    bonus: { destreza: 3 }
+    bonus: { destreza: 3 },
+    slot: 'mainHand'
   },
   {
     id: 'lamina-viajante',
@@ -277,7 +280,30 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 180,
     icon: '🗡️',
-    bonus: { forca: 4, destreza: 1 }
+    bonus: { forca: 4, destreza: 1 },
+    slot: 'mainHand'
+  },
+  {
+    id: 'escudo-madeira',
+    name: 'Escudo de Madeira',
+    description: 'Proteção simples para a mão secundária. +2 Constituição',
+    type: 'weapon',
+    rarity: 'comum',
+    price: 90,
+    icon: '🛡️',
+    bonus: { constituicao: 2 },
+    slot: 'offHand'
+  },
+  {
+    id: 'adaga-leve',
+    name: 'Adaga Leve',
+    description: 'Perfeita para mão secundária. +2 Destreza',
+    type: 'weapon',
+    rarity: 'comum',
+    price: 85,
+    icon: '🗡️',
+    bonus: { destreza: 2 },
+    slot: 'offHand'
   },
   {
     id: 'espada-ferro',
@@ -768,7 +794,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'comum',
     price: 75,
     icon: '🛡️',
-    bonus: { constituicao: 2, destreza: 1 }
+    bonus: { constituicao: 2, destreza: 1 },
+    slot: 'chest'
   },
   {
     id: 'tunica-estudioso',
@@ -778,7 +805,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'comum',
     price: 70,
     icon: '🪶',
-    bonus: { constituicao: 1, inteligencia: 2 }
+    bonus: { constituicao: 1, inteligencia: 2 },
+    slot: 'chest'
   },
   {
     id: 'armadura-novato',
@@ -788,7 +816,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'comum',
     price: 100,
     icon: '🥋',
-    bonus: { constituicao: 3 }
+    bonus: { constituicao: 3 },
+    slot: 'chest'
   },
   {
     id: 'armadura-couro',
@@ -798,7 +827,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'comum',
     price: 75,
     icon: '🦺',
-    bonus: { constituicao: 2 }
+    bonus: { constituicao: 2 },
+    slot: 'chest'
   },
   {
     id: 'armadura-cota',
@@ -808,7 +838,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 200,
     icon: '🛡️',
-    bonus: { constituicao: 4 }
+    bonus: { constituicao: 4 },
+    slot: 'chest'
   },
   {
     id: 'armadura-placas',
@@ -819,6 +850,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 500,
     icon: '🛡️',
     bonus: { constituicao: 6, destreza: -1 },
+    slot: 'chest',
     currency: 'glory'
   },
   {
@@ -839,7 +871,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'epico',
     price: 420,
     icon: '🦺',
-    bonus: { constituicao: 2, destreza: 3 }
+    bonus: { constituicao: 2, destreza: 3 },
+    slot: 'chest'
     ,setId: 'elfico'
   },
 
@@ -852,7 +885,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'comum',
     price: 120,
     icon: '🛡️',
-    bonus: { constituicao: 4 }
+    bonus: { constituicao: 4 },
+    slot: 'chest'
   },
   {
     id: 'manto-arcano',
@@ -863,6 +897,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 220,
     icon: '🪄',
     bonus: { constituicao: 1, inteligencia: 3 },
+    slot: 'cape',
     setId: 'arcanista'
   },
   {
@@ -873,7 +908,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 260,
     icon: '🦺',
-    bonus: { constituicao: 2, destreza: 3 }
+    bonus: { constituicao: 2, destreza: 3 },
+    slot: 'chest'
   },
   {
     id: 'armadura-escamas',
@@ -883,7 +919,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 320,
     icon: '🛡️',
-    bonus: { constituicao: 4, sabedoria: 2 }
+    bonus: { constituicao: 4, sabedoria: 2 },
+    slot: 'chest'
   },
   {
     id: 'cota-sagrada',
@@ -894,6 +931,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 520,
     icon: '🛡️',
     bonus: { constituicao: 4, sabedoria: 3 },
+    slot: 'chest',
     currency: 'glory',
     setId: 'aurora'
   },
@@ -906,6 +944,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 560,
     icon: '🧿',
     bonus: { constituicao: 5, sabedoria: 3 },
+    slot: 'chest',
     currency: 'glory'
   },
   {
@@ -917,6 +956,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 600,
     icon: '🪄',
     bonus: { constituicao: 2, inteligencia: 6 },
+    slot: 'chest',
     currency: 'arcaneEssence',
     setId: 'arcanista'
   },
@@ -929,6 +969,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 1400,
     icon: '🛡️',
     bonus: { constituicao: 8, sabedoria: 4 },
+    slot: 'chest',
     currency: 'arcaneEssence',
     setId: 'eterno'
   },
@@ -943,7 +984,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'comum',
     price: 110,
     icon: '🦺',
-    bonus: { constituicao: 3, destreza: 1 }
+    bonus: { constituicao: 3, destreza: 1 },
+    slot: 'chest'
   },
   {
     id: 'cota-malha-abencoada',
@@ -953,7 +995,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 280,
     icon: '🛡️',
-    bonus: { constituicao: 4, sabedoria: 1 }
+    bonus: { constituicao: 4, sabedoria: 1 },
+    slot: 'chest'
   },
   {
     id: 'platina-imperial',
@@ -964,6 +1007,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 560,
     icon: '🛡️',
     bonus: { constituicao: 6, carisma: 1 },
+    slot: 'chest',
     currency: 'glory'
   },
   // Leves (Assassino, Bardo, Monge)
@@ -975,7 +1019,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'comum',
     price: 90,
     icon: '🦺',
-    bonus: { constituicao: 2, destreza: 1 }
+    bonus: { constituicao: 2, destreza: 1 },
+    slot: 'chest'
   },
   {
     id: 'roupa-sombras',
@@ -985,7 +1030,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 240,
     icon: '🦺',
-    bonus: { destreza: 3, inteligencia: 1 }
+    bonus: { destreza: 3, inteligencia: 1 },
+    slot: 'chest'
   },
   {
     id: 'traje-viajante',
@@ -995,7 +1041,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'comum',
     price: 120,
     icon: '🦺',
-    bonus: { destreza: 2, constituicao: 1 }
+    bonus: { destreza: 2, constituicao: 1 },
+    slot: 'chest'
   },
   {
     id: 'veste-bardo-errante',
@@ -1005,7 +1052,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 260,
     icon: '🪶',
-    bonus: { destreza: 2, carisma: 2 }
+    bonus: { destreza: 2, carisma: 2 },
+    slot: 'chest'
   },
   {
     id: 'roupas-celestes-monge',
@@ -1016,6 +1064,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 900,
     icon: '🥋',
     bonus: { destreza: 3, sabedoria: 3 },
+    slot: 'chest',
     currency: 'arcaneEssence'
   },
   // Místicas (Mago, Clérigo)
@@ -1027,7 +1076,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 300,
     icon: '🪄',
-    bonus: { constituicao: 1, inteligencia: 4 }
+    bonus: { constituicao: 1, inteligencia: 4 },
+    slot: 'chest'
   },
   {
     id: 'manto-seda-espiritual',
@@ -1037,7 +1087,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 280,
     icon: '🪄',
-    bonus: { sabedoria: 2, constituicao: 1 }
+    bonus: { sabedoria: 2, constituicao: 1 },
+    slot: 'chest'
   },
   {
     id: 'tunica-sol',
@@ -1048,6 +1099,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 520,
     icon: '🪄',
     bonus: { constituicao: 2, sabedoria: 4 },
+    slot: 'chest',
     currency: 'glory'
   },
   {
@@ -1059,6 +1111,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 560,
     icon: '🪄',
     bonus: { constituicao: 2, inteligencia: 5 },
+    slot: 'chest',
     currency: 'glory'
   },
   {
@@ -1070,6 +1123,142 @@ export const SHOP_ITEMS: Item[] = [
     price: 1200,
     icon: '🪄',
     bonus: { constituicao: 3, inteligencia: 6 },
+    slot: 'cape',
+    currency: 'arcaneEssence'
+  },
+
+  // === NOVOS ITENS DE SLOT ESPECÍFICO ===
+  {
+    id: 'capacete-ferro',
+    name: 'Capacete de Ferro',
+    description: 'Protege a cabeça com firmeza. +1 Constituição',
+    type: 'armor',
+    rarity: 'comum',
+    price: 90,
+    icon: '🪖',
+    bonus: { constituicao: 1 },
+    slot: 'helm'
+  },
+  {
+    id: 'elmo-guardiao',
+    name: 'Elmo do Guardião',
+    description: 'Bênçãos leves e proteção sólida. +2 Constituição, +1 Sabedoria',
+    type: 'armor',
+    rarity: 'raro',
+    price: 220,
+    icon: '🪖',
+    bonus: { constituicao: 2, sabedoria: 1 },
+    slot: 'helm'
+  },
+  {
+    id: 'cinto-couro',
+    name: 'Cinto de Couro',
+    description: 'Suporte básico. +1 Destreza',
+    type: 'armor',
+    rarity: 'comum',
+    price: 70,
+    icon: '🧵',
+    bonus: { destreza: 1 },
+    slot: 'belt'
+  },
+  {
+    id: 'cinto-gladiador',
+    name: 'Cinto do Gladiador',
+    description: 'Firmeza no centro. +2 Força',
+    type: 'armor',
+    rarity: 'raro',
+    price: 180,
+    icon: '🧶',
+    bonus: { forca: 2 },
+    slot: 'belt'
+  },
+  {
+    id: 'luvas-couro',
+    name: 'Luvas de Couro',
+    description: 'Aprimora a pegada. +1 Destreza',
+    type: 'armor',
+    rarity: 'comum',
+    price: 60,
+    icon: '🧤',
+    bonus: { destreza: 1 },
+    slot: 'gloves'
+  },
+  {
+    id: 'luvas-runicas',
+    name: 'Luvas Rúnicas',
+    description: 'Inscrições arcanas. +2 Destreza, +1 Inteligência',
+    type: 'armor',
+    rarity: 'epico',
+    price: 320,
+    icon: '🧤',
+    bonus: { destreza: 2, inteligencia: 1 },
+    slot: 'gloves'
+  },
+  {
+    id: 'botas-caminhante',
+    name: 'Botas do Caminhante',
+    description: 'Confortáveis para longas viagens. +1 Destreza, +1 Constituição',
+    type: 'armor',
+    rarity: 'comum',
+    price: 90,
+    icon: '👢',
+    bonus: { destreza: 1, constituicao: 1 },
+    slot: 'boots'
+  },
+  {
+    id: 'botas-velozes',
+    name: 'Botas Velozes',
+    description: 'Passos rápidos e precisos. +2 Destreza',
+    type: 'armor',
+    rarity: 'raro',
+    price: 200,
+    icon: '👢',
+    bonus: { destreza: 2 },
+    slot: 'boots'
+  },
+  {
+    id: 'capa-iniciante',
+    name: 'Capa do Iniciante',
+    description: 'Proteção leve e estilo básico. +1 Destreza',
+    type: 'armor',
+    rarity: 'comum',
+    price: 60,
+    icon: '🧥',
+    bonus: { destreza: 1 },
+    slot: 'cape'
+  },
+  {
+    id: 'capa-aventura',
+    name: 'Capa da Aventura',
+    description: 'Ideal para exploradores. +2 Destreza, +1 Constituição',
+    type: 'armor',
+    rarity: 'raro',
+    price: 180,
+    icon: '🧥',
+    bonus: { destreza: 2, constituicao: 1 },
+    slot: 'cape'
+  },
+  {
+    id: 'capa-heroi',
+    name: 'Capa do Herói',
+    description: 'Ecoa histórias épicas. +3 Destreza, +2 Sabedoria',
+    type: 'armor',
+    rarity: 'epico',
+    price: 420,
+    icon: '🧥',
+    bonus: { destreza: 3, sabedoria: 2 },
+    slot: 'cape'
+  },
+  {
+    id: 'asas-lendarias',
+    name: 'Asas Lendárias',
+    description: 'Voos míticos. +4 Destreza, +2 Inteligência, +1 Sabedoria',
+    type: 'armor',
+    rarity: 'lendario',
+    price: 900,
+    icon: '🪽',
+    bonus: { destreza: 4, inteligencia: 2, sabedoria: 1 },
+    slot: 'cape',
     currency: 'arcaneEssence'
   },
 
@@ -1082,7 +1271,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 150,
     icon: '💍',
-    bonus: { forca: 2 }
+    bonus: { forca: 2 },
+    slot: 'ring'
   },
   {
     id: 'amuleto-sabedoria',
@@ -1093,6 +1283,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 180,
     icon: '🔮',
     bonus: { sabedoria: 3 },
+    slot: 'necklace',
     currency: 'arcaneEssence',
     setId: 'arcanista'
   },
@@ -1104,7 +1295,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'epico',
     price: 300,
     icon: '📿',
-    bonus: { carisma: 3 }
+    bonus: { carisma: 3 },
+    slot: 'necklace'
   },
   {
     id: 'aljava-encantada',
@@ -1137,6 +1329,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 280,
     icon: '💍',
     bonus: { destreza: 2, inteligencia: 1 },
+    slot: 'ring',
     setId: 'elfico'
   },
   {
@@ -1146,7 +1339,8 @@ export const SHOP_ITEMS: Item[] = [
     type: 'accessory',
     rarity: 'raro',
     price: 120,
-    icon: '💍'
+    icon: '💍',
+    slot: 'ring'
   },
   {
     id: 'pingente-sorte',
@@ -1155,7 +1349,8 @@ export const SHOP_ITEMS: Item[] = [
     type: 'accessory',
     rarity: 'raro',
     price: 150,
-    icon: '📿'
+    icon: '📿',
+    slot: 'necklace'
   },
   {
     id: 'brincos-eco',
@@ -1166,7 +1361,8 @@ export const SHOP_ITEMS: Item[] = [
     price: 200,
     icon: '🔔',
     bonus: { forca: 1, destreza: 1, constituicao: 1, inteligencia: 1, sabedoria: 1, carisma: 1 },
-    effects: { duration: 10 }
+    effects: { duration: 10 },
+    slot: 'earring'
   },
   {
     id: 'amuleto-brisa',
@@ -1187,7 +1383,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'comum',
     price: 60,
     icon: '💍',
-    bonus: { sabedoria: 1 }
+    bonus: { sabedoria: 1 },
+    slot: 'ring'
   },
   {
     id: 'colar-madeira',
@@ -1197,7 +1394,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'comum',
     price: 60,
     icon: '📿',
-    bonus: { constituicao: 1 }
+    bonus: { constituicao: 1 },
+    slot: 'necklace'
   },
   {
     id: 'amuleto-vitalidade',
@@ -1207,7 +1405,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 240,
     icon: '📿',
-    bonus: { constituicao: 3 }
+    bonus: { constituicao: 3 },
+    slot: 'necklace'
   },
   {
     id: 'anel-precisao-raro',
@@ -1217,7 +1416,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 220,
     icon: '💍',
-    bonus: { destreza: 2 }
+    bonus: { destreza: 2 },
+    slot: 'ring'
   },
   {
     id: 'medalhao-guardiao',
@@ -1228,6 +1428,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 260,
     icon: '📿',
     bonus: { constituicao: 2, sabedoria: 3 },
+    slot: 'necklace',
     setId: 'aurora'
   },
   {
@@ -1238,7 +1439,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'epico',
     price: 380,
     icon: '💍',
-    bonus: { forca: 5, constituicao: -2 }
+    bonus: { forca: 5, constituicao: -2 },
+    slot: 'ring'
   },
   {
     id: 'colar-equilibrio',
@@ -1248,7 +1450,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'epico',
     price: 400,
     icon: '📿',
-    bonus: { forca: 3, constituicao: 3 }
+    bonus: { forca: 3, constituicao: 3 },
+    slot: 'necklace'
   },
   {
     id: 'amuleto-tempo',
@@ -1259,6 +1462,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 900,
     icon: '⌛',
     bonus: { destreza: 3, carisma: 2 },
+    slot: 'necklace',
     currency: 'arcaneEssence'
   },
   {
@@ -1270,6 +1474,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 1100,
     icon: '💍',
     bonus: { sabedoria: 5, destreza: 3 },
+    slot: 'ring',
     currency: 'arcaneEssence',
     setId: 'eterno'
   },
@@ -1283,7 +1488,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 220,
     icon: '💍',
-    bonus: { constituicao: 3 }
+    bonus: { constituicao: 3 },
+    slot: 'ring'
   },
   {
     id: 'anel-foco-arcano',
@@ -1293,7 +1499,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 240,
     icon: '💍',
-    bonus: { inteligencia: 3 }
+    bonus: { inteligencia: 3 },
+    slot: 'ring'
   },
   {
     id: 'colar-viajante',
@@ -1303,7 +1510,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 200,
     icon: '📿',
-    bonus: { destreza: 2 }
+    bonus: { destreza: 2 },
+    slot: 'necklace'
   },
   {
     id: 'bracelete-gladiador',
@@ -1313,7 +1521,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 240,
     icon: '🛡️',
-    bonus: { forca: 3 }
+    bonus: { forca: 3 },
+    slot: 'ring'
   },
   {
     id: 'amuleto-cura',
@@ -1324,6 +1533,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 420,
     icon: '📿',
     bonus: { constituicao: 2 },
+    slot: 'necklace',
     currency: 'glory'
   },
   {
@@ -1334,7 +1544,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 220,
     icon: '💍',
-    bonus: { destreza: 2 }
+    bonus: { destreza: 2 },
+    slot: 'ring'
   },
   {
     id: 'colar-inspiracao',
@@ -1344,7 +1555,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'epico',
     price: 400,
     icon: '📿',
-    bonus: { carisma: 3, sabedoria: 1 }
+    bonus: { carisma: 3, sabedoria: 1 },
+    slot: 'necklace'
   },
   {
     id: 'pingente-resistencia',
@@ -1354,7 +1566,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 240,
     icon: '📿',
-    bonus: { sabedoria: 2 }
+    bonus: { sabedoria: 2 },
+    slot: 'necklace'
   },
   {
     id: 'anel-tempestade',
@@ -1365,6 +1578,7 @@ export const SHOP_ITEMS: Item[] = [
     price: 420,
     icon: '💍',
     bonus: { destreza: 2, inteligencia: 1 },
+    slot: 'ring',
     currency: 'glory'
   },
   {
@@ -1375,7 +1589,8 @@ export const SHOP_ITEMS: Item[] = [
     rarity: 'raro',
     price: 260,
     icon: '✝️',
-    bonus: { sabedoria: 2, constituicao: 1 }
+    bonus: { sabedoria: 2, constituicao: 1 },
+    slot: 'necklace'
   },
 
   // === COSMÉTICOS ===
@@ -1688,6 +1903,12 @@ export const SHOP_ITEMS: Item[] = [
   }
 ];
 
+export const SHOP_ITEMS_MAP: Record<string, Item> = (() => {
+  const map: Record<string, Item> = {};
+  for (const it of SHOP_ITEMS) map[it.id] = it;
+  return map;
+})();
+
 // === CATEGORIAS DA LOJA ===
 
 export const SHOP_CATEGORIES = {
@@ -1877,7 +2098,7 @@ export function sellItem(hero: Hero, itemId: string, quantity: number = 1): Purc
 // === SISTEMA DE EQUIPAMENTOS ===
 
 export function equipItem(hero: Hero, itemId: string): { success: boolean; message: string } {
-  const item = SHOP_ITEMS.find(i => i.id === itemId);
+  const item = SHOP_ITEMS_MAP[itemId] || SHOP_ITEMS.find(i => i.id === itemId);
   const hasItem = (hero.inventory.items[itemId] || 0) > 0;
   
   if (!item || !hasItem) {
@@ -1893,42 +2114,72 @@ export function equipItem(hero: Hero, itemId: string): { success: boolean; messa
       message: 'Este item não pode ser equipado!'
     };
   }
-  
-  // Verificar se já tem algo equipado no slot
-  let currentEquipped: string | undefined;
-  let slotName: string;
-  
-  switch (item.type) {
-    case 'weapon':
-      currentEquipped = hero.inventory.equippedWeapon;
-      slotName = 'arma';
-      break;
-    case 'armor':
-      currentEquipped = hero.inventory.equippedArmor;
-      slotName = 'armadura';
-      break;
-    case 'accessory':
-      currentEquipped = hero.inventory.equippedAccessory;
-      slotName = 'acessório';
-      break;
-    default:
-      return {
-        success: false,
-        message: 'Tipo de item inválido!'
-      };
+
+  if (item.requirements) {
+    const minLevel = item.requirements.minLevel || 0;
+    if ((hero.progression.level || hero.level || 1) < minLevel) {
+      return { success: false, message: `Requer nível ${minLevel}` };
+    }
+    const allow = item.requirements.classAllow;
+    const deny = item.requirements.classDeny;
+    if (allow && allow.length > 0 && !allow.includes(hero.class)) {
+      return { success: false, message: 'Classe incompatível para este item' };
+    }
+    if (deny && deny.length > 0 && deny.includes(hero.class)) {
+      return { success: false, message: 'Sua classe não pode usar este item' };
+    }
   }
   
-  let message = `${item.name} equipado como ${slotName}!`;
-  
-  if (currentEquipped) {
-    const currentItem = SHOP_ITEMS.find(i => i.id === currentEquipped);
-    message += ` ${currentItem?.name} foi desequipado.`;
-  }
-  
-  return {
-    success: true,
-    message
+  const inv = hero.inventory;
+  const placeInSlot = (): string | null => {
+    if (item.type === 'weapon') {
+      const prefer = item.slot === 'offHand' ? 'offHand' : 'mainHand';
+      const free = prefer === 'mainHand' ? (!inv.equippedMainHand ? 'mainHand' : (!inv.equippedOffHand ? 'offHand' : null)) : (!inv.equippedOffHand ? 'offHand' : (!inv.equippedMainHand ? 'mainHand' : null));
+      return free;
+    }
+    if (item.type === 'armor') {
+      const s = item.slot;
+      if (s === 'helm' && !inv.equippedHelm) return 'helm';
+      if (s === 'chest' && !inv.equippedChest) return 'chest';
+      if (s === 'belt' && !inv.equippedBelt) return 'belt';
+      if (s === 'gloves' && !inv.equippedGloves) return 'gloves';
+      if (s === 'boots' && !inv.equippedBoots) return 'boots';
+      if (s === 'cape' && !inv.equippedCape) return 'cape';
+      if (!s) return !inv.equippedChest ? 'chest' : null;
+      return null;
+    }
+    if (item.type === 'accessory') {
+      const s = item.slot;
+      if (s === 'necklace' && !inv.equippedNecklace) return 'necklace';
+      if (s === 'ring') {
+        if (!inv.equippedRingLeft) return 'ringLeft';
+        if (!inv.equippedRingRight) return 'ringRight';
+        return null;
+      }
+      if (s === 'earring') {
+        if (!inv.equippedEarringLeft) return 'earringLeft';
+        if (!inv.equippedEarringRight) return 'earringRight';
+        return null;
+      }
+      if (!s) {
+        if (!inv.equippedRingLeft) return 'ringLeft';
+        if (!inv.equippedRingRight) return 'ringRight';
+        if (!inv.equippedNecklace) return 'necklace';
+        if (!inv.equippedEarringLeft) return 'earringLeft';
+        if (!inv.equippedEarringRight) return 'earringRight';
+        return null;
+      }
+      return null;
+    }
+    return null;
   };
+  const target = placeInSlot();
+  if (!target) return { success: false, message: 'Sem slot disponível compatível' };
+  const slotLabelMap: Record<string, string> = {
+    mainHand: 'mão principal', offHand: 'mão secundária', helm: 'helmo', chest: 'armadura', belt: 'cintura', gloves: 'luvas', boots: 'botas', cape: 'asa/capa',
+    ringLeft: 'anel (esq.)', ringRight: 'anel (dir.)', necklace: 'colar', earringLeft: 'brinco (esq.)', earringRight: 'brinco (dir.)'
+  };
+  return { success: true, message: `${item.name} equipado no slot ${slotLabelMap[target]}!` };
 }
 
 // === SISTEMA DE USO DE CONSUMÍVEIS ===

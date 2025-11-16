@@ -122,15 +122,12 @@ export const MountsPanel: React.FC = () => {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold">Montarias</h2>
         <div className="flex gap-2">
-          {sampleMounts.map(m => (
-            <button key={m.id} onClick={() => addMountToSelected({ ...m, id: crypto.randomUUID() })} className="px-3 py-2 rounded bg-amber-600 hover:bg-amber-700 text-white text-sm">Adicionar {m.name}</button>
-          ))}
           <button disabled={!bestMountId} onClick={() => bestMountId && setActiveMount(bestMountId)} className={`px-3 py-2 rounded ${bestMountId?'bg-indigo-600 hover:bg-indigo-700':'bg-gray-700'} text-white text-sm`}>Ativar melhor</button>
           {hero?.favoriteMountId && (
             <button onClick={() => setActiveMount(hero.favoriteMountId)} className="px-3 py-2 rounded bg-amber-600 hover:bg-amber-700 text-white text-sm">Ativar favorita ⭐</button>
           )}
-          <button onClick={() => generateMountForSelected()} className="px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-sm">Gerar aleatória</button>
-          <button onClick={() => (useHeroStore.getState() as any).upgradeStableForSelected()} className="px-3 py-2 rounded bg-amber-700 hover:bg-amber-800 text-white text-sm">Expandir Estábulo +10</button>
+          
+          
           <button onClick={() => { try { const payload = JSON.stringify((hero.mounts||[]).map(m => ({ name:m.name, type:m.type, rarity:m.rarity, stage:m.stage, speedBonus:m.speedBonus, attributes:m.attributes, refineLevel:m.refineLevel, mastery:m.mastery })), null, 2); navigator.clipboard.writeText(payload); notificationBus.emit({ type:'item', title:'Exportado', message:'Estábulo copiado para a área de transferência', duration:3000 }); } catch { notificationBus.emit({ type:'item', title:'Falha ao exportar', message:'Verifique permissões do navegador', duration:3000 }); } }} className="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm">Exportar</button>
           <button onClick={() => { const json = window.prompt('Cole o JSON de montarias'); if (!json) return; const ok = (useHeroStore.getState() as any).importMountsForSelected(json); if (!ok) notificationBus.emit({ type:'item', title:'Importação falhou', message:'Formato inválido ou sem capacidade', duration:3000 }); }} className="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm">Importar</button>
           {(() => { const favs = new Set(hero.favoriteMountIds||[]); const candidates = (hero.mounts||[]).filter(m => m.rarity==='comum' && m.id!==hero.activeMountId && !favs.has(m.id) && !m.locked).length; const disabled = candidates===0; return (

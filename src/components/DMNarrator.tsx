@@ -5,7 +5,7 @@ import { generateDMLine } from '../services/narratorAI';
 
 const DMNarrator: React.FC = () => {
   const location = useLocation();
-  const { getSelectedHero } = useHeroStore();
+  const { getSelectedHero, dmOverrideLine } = useHeroStore();
   const hero = getSelectedHero();
   const [line, setLine] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
@@ -40,7 +40,7 @@ const DMNarrator: React.FC = () => {
         <span className="font-semibold">Mestre do Jogo</span>
         {loading && <span className="text-xs text-gray-400">gerando...</span>}
       </div>
-      <p className="text-sm leading-relaxed">{line}</p>
+      <p className="text-sm leading-relaxed">{dmOverrideLine || line}</p>
     </div>
   );
 };

@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Hero, Party } from '../types/hero';
 import { useHeroStore } from '../store/heroStore';
 import { notificationBus } from './NotificationSystem';
-import { listParties, createPartyOnline, joinPartyOnline, leavePartyOnline, startLobbyPolling, ServerParty, setPartyReady, fetchPartyChat, sendPartyChat, startPartyMission, kickMemberOnline, transferLeadershipOnline, PartyMessage } from '../services/partyService';
+import { listParties, createPartyOnline, joinPartyOnline, leavePartyOnline, startLobbyPolling, ServerParty, setPartyReady, fetchPartyChat, sendPartyChat, startPartyMission, kickMemberOnline, transferLeadershipOnline, PartyMessage, subscribePartyChatStream, subscribePartyChatSupabase, sendPartyChatRealtime } from '../services/partyService';
 
 interface PartySystemProps {
   hero: Hero;
@@ -161,22 +161,28 @@ const PartySystem: React.FC<PartySystemProps> = ({ hero }) => {
     }
   }, [onlineParties, joinedOnlineParty]);
 
-  // Polling de chat quando no lobby
   useEffect(() => {
     if (!joinedOnlineParty || activeTab !== 'lobby') return;
-    let stopped = false;
-    async function tick() {
-      try {
-        const msgs = await fetchPartyChat(joinedOnlineParty.id);
-        if (!stopped) setChatMessages(msgs);
-      } catch {
-        // silencia erros de rede
-      } finally {
-        if (!stopped) setTimeout(tick, 2500);
-      }
+    let useSupabase = false;
+    try {
+      const mod = require('../lib/supabaseClient') as any;
+      useSupabase = !!mod.supabaseConfigured;
+    } catch {}
+    if (useSupabase) {
+      const unsub = subscribePartyChatSupabase(
+        joinedOnlineParty.id,
+        (messages) => setChatMessages(messages),
+        (message) => setChatMessages(prev => [...prev.slice(-49), message])
+      );
+      return () => { unsub(); };
+    } else {
+      const unsub = subscribePartyChatStream(
+        joinedOnlineParty.id,
+        (messages) => setChatMessages(messages),
+        (message) => setChatMessages(prev => [...prev.slice(-49), message])
+      );
+      return () => { unsub(); };
     }
-    tick();
-    return () => { stopped = true; };
   }, [joinedOnlineParty, activeTab]);
 
   // Deep-link: ?lobby=ID aplica filtro automaticamente
@@ -358,6 +364,7 @@ const PartySystem: React.FC<PartySystemProps> = ({ hero }) => {
       const msg = await sendPartyChat(joinedOnlineParty.id, hero.id, text);
       setChatInput('');
       setChatMessages(prev => [...prev.slice(-49), msg]);
+      try { await sendPartyChatRealtime(joinedOnlineParty.id, msg); } catch {}
     } catch (err) {
       const msg = (err as Error)?.message || 'Erro';
       if (msg.includes('404')) {

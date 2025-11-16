@@ -1,34 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { getAltharionLore } from '../utils/story';
 
-// Introdução cinematográfica: A Balada do Véu Partido
-const SCRIPT_LINES = [
-  'Antes do primeiro trovão, havia silêncio.',
-  'Antes da primeira chama, havia escuridão.',
-  'E antes da primeira espada… havia o Véu.',
-  'Há muito tempo, o Véu separava o mundo dos mortais das terras esquecidas dos deuses.',
-  'Era uma fronteira invisível — onde o tempo dormia e a magia repousava em equilíbrio.',
-  'Mas a ambição dos reinos que buscavam poder absoluto rasgou esse limite sagrado.',
-  'O céu se abriu, e das fendas do Véu jorraram luz e sombra em igual medida.',
-  'Florestas floresceram e morreram em um só sopro.',
-  'Montanhas se ergueram sobre cidades.',
-  'E criaturas que jamais deveriam ter pisado neste mundo despertaram.',
-  'Os sábios chamaram esse evento de A Quebra do Véu.',
-  'Os tolos… chamaram de milagre.',
-  'Quando tudo parecia perdido, um grupo de heróis ergueu-se entre as cinzas —',
-  'guerreiros, magos, caçadores e andarilhos sem bandeira.',
- 'Unidos pelo caos, eles fundaram a Foja dos Herois de Altharion:',
-  'um refúgio para os que ousam caminhar entre o perigo e o impossível.',
-  'Hoje, séculos depois, o Véu continua instável.',
-  'E as sombras voltam a se mover sob a terra.',
-  '“Dizem que o destino não é forjado por reis,',
-  'mas por aventureiros com coragem o bastante para enfrentá-lo.”',
-  'E agora…',
-  'é o seu nome que será gravado no Livro dos Primeiros Passos.',
-  'Um novo herói desperta.',
-  'E as chamas do destino aguardam para provar sua alma.'
-];
+const supportedVersions = ['short', 'cinematic', 'game_intro', 'topics', 'full'] as const;
 
 const lineVariants = {
   initial: { opacity: 0, y: 10 },
@@ -37,6 +12,18 @@ const lineVariants = {
 };
 
 const IntroCinematic: React.FC = () => {
+  const location = useLocation();
+  const lore = React.useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const v = params.get('version') || 'short';
+    const key = (supportedVersions as readonly string[]).includes(v) ? (v as any) : 'game_intro';
+    const data = getAltharionLore(key as any) as any;
+    const linesArr = data?.lines || data?.script || data?.paragraphs || [];
+    const title = data?.title || 'Narração Inicial do Jogo';
+    const lines: string[] = Array.isArray(linesArr) ? linesArr : [];
+    const isCinematic = key === 'cinematic';
+    return { title, lines, isCinematic };
+  }, [location.search]);
   const [index, setIndex] = useState(0);
   const [autoPlay, setAutoPlay] = useState(true);
   const [ttsEnabled, setTtsEnabled] = useState(true);
@@ -91,10 +78,10 @@ const IntroCinematic: React.FC = () => {
   };
 
   const computeDelay = (text: string) => {
-    const base = 2000; // base mais suave
-    const perCharMs = 65; // tempo por caractere
-    const maxMs = 12000;
-    return Math.min(maxMs, base + perCharMs * Math.min(text.length, 180));
+    const base = 1400;
+    const perCharMs = 45;
+    const maxMs = 9000;
+    return Math.min(maxMs, base + perCharMs * Math.min(text.length, 160));
   };
 
   const speak = (text: string, onEnd?: () => void) => {
@@ -128,7 +115,7 @@ const IntroCinematic: React.FC = () => {
 
   // Avanço de linhas: usa onend da TTS quando ativada; senão usa delay dinâmico
   useEffect(() => {
-    const text = SCRIPT_LINES[index];
+    const text = lore.lines[index];
     if (!autoPlay || !text) return () => {};
 
     // Limpar qualquer timeout anterior
@@ -147,7 +134,7 @@ const IntroCinematic: React.FC = () => {
       // Falar e avançar somente quando a narração terminar
       const id = setTimeout(() => {
         speak(text, () => {
-          setIndex((i) => Math.min(i + 1, SCRIPT_LINES.length));
+          setIndex((i) => Math.min(i + 1, lore.lines.length));
         });
       }, 50);
       return () => {
@@ -159,7 +146,7 @@ const IntroCinematic: React.FC = () => {
       // Sem TTS: usar atraso proporcional ao tamanho do texto
       const delayMs = computeDelay(text);
       nextTimeout.current = window.setTimeout(() => {
-        setIndex((i) => Math.min(i + 1, SCRIPT_LINES.length));
+        setIndex((i) => Math.min(i + 1, lore.lines.length));
       }, delayMs);
       return () => {
         if (nextTimeout.current) {
@@ -168,13 +155,15 @@ const IntroCinematic: React.FC = () => {
         }
       };
     }
-  }, [index, autoPlay, ttsEnabled]);
+  }, [index, autoPlay, ttsEnabled, lore.lines]);
 
   // Música ambiente e crescendo com fade
   useEffect(() => {
     // Preparar players
     if (!ambientRef.current) {
-      const a = new Audio('/audio/intro-ambient.mp3');
+      const base = (import.meta.env && import.meta.env.BASE_URL) || '/';
+      const ambientSrc = `${base}audio/intro-ambient.mp3`;
+      const a = new Audio(ambientSrc);
       a.preload = 'auto';
       a.loop = true;
       a.volume = 0;
@@ -189,7 +178,9 @@ const IntroCinematic: React.FC = () => {
       }, 500);
     }
     if (!crescendoRef.current) {
-      const c = new Audio('/audio/intro-crescendo.mp3');
+      const base = (import.meta.env && import.meta.env.BASE_URL) || '/';
+      const crescendoSrc = `${base}audio/intro-crescendo.mp3`;
+      const c = new Audio(crescendoSrc);
       c.preload = 'auto';
       c.loop = true;
       c.volume = 0;
@@ -222,7 +213,7 @@ const IntroCinematic: React.FC = () => {
   useEffect(() => {
     const c = crescendoRef.current;
     if (!c) return;
-    const threshold = Math.floor(SCRIPT_LINES.length * 0.75); // mais tarde e sutil
+    const threshold = Math.floor(lore.lines.length * 0.75);
     if (index >= threshold) {
       c.play().catch(() => {});
       let v = c.volume;
@@ -235,7 +226,7 @@ const IntroCinematic: React.FC = () => {
     }
   }, [index]);
 
-  const isFinished = index >= SCRIPT_LINES.length;
+  const isFinished = index >= lore.lines.length;
 
   const handleSkip = () => {
     window.speechSynthesis?.cancel();
@@ -293,10 +284,13 @@ const IntroCinematic: React.FC = () => {
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[60vw] h-[60vw] rounded-full bg-amber-500/10 blur-3xl" />
         <div className="absolute bottom-0 left-1/4 w-[30vw] h-[30vw] rounded-full bg-indigo-500/10 blur-3xl" />
+        {lore.isCinematic && (
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[40vw] h-[40vw] rounded-full bg-cyan-400/10 blur-3xl animate-pulse" />
+        )}
       </div>
 
       <div className="relative z-10 container mx-auto px-6 py-10 flex flex-col items-center text-center">
-        <div className="text-amber-400 text-sm tracking-widest uppercase mb-4">A Balada do Véu Partido</div>
+        <div className="text-amber-400 text-sm tracking-widest uppercase mb-4" aria-live="polite">{lore.title}</div>
         <div className="max-w-3xl">
           <AnimatePresence mode="wait">
             {!isFinished && (
@@ -308,7 +302,7 @@ const IntroCinematic: React.FC = () => {
                 exit="exit"
                 className="text-xl md:text-2xl text-slate-100 font-serif leading-relaxed"
               >
-                {SCRIPT_LINES[index]}
+                {lore.lines[index]}
               </motion.p>
             )}
           </AnimatePresence>

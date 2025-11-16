@@ -31,20 +31,15 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
   const xpPercentage = isMaxLevel ? 100 : Math.max(0, Math.min(100, (xpProgress / xpNeeded) * 100));
 
   // Obter informações dos itens equipados
-  const getEquippedItem = (itemId: string | undefined) => {
-    if (!itemId) return null;
-    return SHOP_ITEMS.find(item => item.id === itemId);
-  };
-
-  const equippedWeapon = getEquippedItem(hero.inventory.equippedWeapon);
-  const equippedArmor = getEquippedItem(hero.inventory.equippedArmor);
-  const equippedAccessory = getEquippedItem(hero.inventory.equippedAccessory);
+  const equippedWeapons = [hero.inventory.equippedMainHand, hero.inventory.equippedOffHand].filter(Boolean).map(id => SHOP_ITEMS.find(i => i.id === id)).filter(Boolean) as typeof SHOP_ITEMS;
+  const equippedArmorSlots = [hero.inventory.equippedHelm, hero.inventory.equippedChest, hero.inventory.equippedBelt, hero.inventory.equippedGloves, hero.inventory.equippedBoots, hero.inventory.equippedCape].filter(Boolean).map(id => SHOP_ITEMS.find(i => i.id === id)).filter(Boolean) as typeof SHOP_ITEMS;
+  const equippedAccessories = [hero.inventory.equippedRingLeft, hero.inventory.equippedRingRight, hero.inventory.equippedNecklace, hero.inventory.equippedEarringLeft, hero.inventory.equippedEarringRight].filter(Boolean).map(id => SHOP_ITEMS.find(i => i.id === id)).filter(Boolean) as typeof SHOP_ITEMS;
 
   // Calcular bônus totais dos equipamentos (efeitos diretos + bônus de atributos)
   const getTotalBonuses = () => {
     let bonuses = { attack: 0, defense: 0, hp: 0, mp: 0 };
 
-    [equippedWeapon, equippedArmor, equippedAccessory].forEach(item => {
+    [...equippedWeapons, ...equippedArmorSlots, ...equippedAccessories].forEach(item => {
       if (!item) return;
 
       // Efeitos diretos do item (se existirem)
@@ -331,118 +326,90 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
 
       {activeTab === 'equipment' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Slots de Equipamento */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Arma */}
-            <div className="bg-white p-6 rounded-lg border border-gray-200">
-              <h3 className="text-lg font-bold mb-4 text-gray-800">⚔️ Arma</h3>
-              {equippedWeapon ? (
-                <div className="flex items-center space-x-4">
-                  <div className="text-3xl">{equippedWeapon.icon}</div>
-                  <div className="flex-1">
-                    <div className="font-medium">{equippedWeapon.name}</div>
-                    <div className="text-sm text-gray-600">{equippedWeapon.description}</div>
-                    {equippedWeapon.effects && (
-                      <div className="text-sm text-green-600 mt-1">
-                        {equippedWeapon.effects.attack && `+${equippedWeapon.effects.attack} Ataque`}
+      {/* Slots de Equipamento (multi) */}
+      <div className="lg:col-span-2 space-y-6">
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-bold mb-4 text-gray-800">⚔️ Armas</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {['mainHand','offHand'].map((slot, idx) => {
+              const id = slot === 'mainHand' ? hero.inventory.equippedMainHand : hero.inventory.equippedOffHand;
+              const item = id ? SHOP_ITEMS.find(i => i.id === id) : null;
+              return (
+                <div key={`w-${idx}`} className="flex items-center justify-between bg-gray-50 p-3 rounded">
+                  {item ? (
+                    <>
+                      <div className="flex items-center space-x-3">
+                        <div className="text-2xl">{item.icon}</div>
+                        <div>
+                          <div className="font-medium">{item.name}</div>
+                          <div className="text-xs text-gray-600">{item.description}</div>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => unequipItem(hero.id, equippedWeapon.id)}
-                    className="px-3 py-1 bg-gray-200 text-gray-900 text-sm rounded hover:bg-gray-300 transition-colors"
-                  >
-                    Desequipar
-                  </button>
-                  <button
-                    onClick={() => sellItem(hero.id, equippedWeapon.id)}
-                    className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors"
-                  >
-                    Vender
-                  </button>
+                      <button onClick={() => unequipItem(hero.id, id!)} className="px-3 py-1 bg-gray-700 text-white text-sm rounded">Desequipar</button>
+                    </>
+                  ) : (
+                    <div className="text-gray-400 text-center w-full">Slot vazio</div>
+                  )}
                 </div>
-              ) : (
-                <div className="text-center py-8 text-gray-400">
-                  <div className="text-4xl mb-2">⚔️</div>
-                  <div>Nenhuma arma equipada</div>
-                </div>
-              )}
-            </div>
-
-            {/* Armadura */}
-            <div className="bg-white p-6 rounded-lg border border-gray-200">
-              <h3 className="text-lg font-bold mb-4 text-gray-800">🛡️ Armadura</h3>
-              {equippedArmor ? (
-                <div className="flex items-center space-x-4">
-                  <div className="text-3xl">{equippedArmor.icon}</div>
-                  <div className="flex-1">
-                    <div className="font-medium">{equippedArmor.name}</div>
-                    <div className="text-sm text-gray-600">{equippedArmor.description}</div>
-                    {equippedArmor.effects && (
-                      <div className="text-sm text-blue-600 mt-1">
-                        {equippedArmor.effects.defense && `+${equippedArmor.effects.defense} Defesa`}
-                        {equippedArmor.effects.hp && ` +${equippedArmor.effects.hp} HP`}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => unequipItem(hero.id, equippedArmor.id)}
-                    className="px-3 py-1 bg-gray-200 text-gray-900 text-sm rounded hover:bg-gray-300 transition-colors"
-                  >
-                    Desequipar
-                  </button>
-                  <button
-                    onClick={() => sellItem(hero.id, equippedArmor.id)}
-                    className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors"
-                  >
-                    Vender
-                  </button>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-400">
-                  <div className="text-4xl mb-2">🛡️</div>
-                  <div>Nenhuma armadura equipada</div>
-                </div>
-              )}
-            </div>
-
-            {/* Acessório */}
-            <div className="bg-white p-6 rounded-lg border border-gray-200">
-              <h3 className="text-lg font-bold mb-4 text-gray-800">💍 Acessório</h3>
-              {equippedAccessory ? (
-                <div className="flex items-center space-x-4">
-                  <div className="text-3xl">{equippedAccessory.icon}</div>
-                  <div className="flex-1">
-                    <div className="font-medium">{equippedAccessory.name}</div>
-                    <div className="text-sm text-gray-600">{equippedAccessory.description}</div>
-                    {equippedAccessory.effects && (
-                      <div className="text-sm text-purple-600 mt-1">
-                        {equippedAccessory.effects.mp && `+${equippedAccessory.effects.mp} MP`}
-                        {equippedAccessory.effects.hp && ` +${equippedAccessory.effects.hp} HP`}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => unequipItem(hero.id, equippedAccessory.id)}
-                    className="px-3 py-1 bg-gray-200 text-gray-900 text-sm rounded hover:bg-gray-300 transition-colors"
-                  >
-                    Desequipar
-                  </button>
-                  <button
-                    onClick={() => sellItem(hero.id, equippedAccessory.id)}
-                    className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors"
-                  >
-                    Vender
-                  </button>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-400">
-                  <div className="text-4xl mb-2">💍</div>
-                  <div>Nenhum acessório equipado</div>
-                </div>
-              )}
-            </div>
+              );
+            })}
           </div>
+        </div>
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-bold mb-4 text-gray-800">🛡️ Armaduras</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {(['helm','chest','belt','gloves','boots','cape'] as const).map((slot) => {
+              const id = (slot === 'helm' ? hero.inventory.equippedHelm : slot === 'chest' ? hero.inventory.equippedChest : slot === 'belt' ? hero.inventory.equippedBelt : slot === 'gloves' ? hero.inventory.equippedGloves : slot === 'boots' ? hero.inventory.equippedBoots : hero.inventory.equippedCape);
+              const item = id ? SHOP_ITEMS.find(i => i.id === id) : null;
+              return (
+                <div key={`a-${slot}`} className="flex items-center justify-between bg-gray-50 p-3 rounded">
+                  {item ? (
+                    <>
+                      <div className="flex items-center space-x-3">
+                        <div className="text-2xl">{item.icon}</div>
+                        <div>
+                          <div className="font-medium">{item.name}</div>
+                          <div className="text-xs text-gray-600">{item.description}</div>
+                        </div>
+                      </div>
+                      <button onClick={() => unequipItem(hero.id, id!)} className="px-3 py-1 bg-gray-700 text-white text-sm rounded">Desequipar</button>
+                    </>
+                  ) : (
+                    <div className="text-gray-400 text-center w-full">Slot vazio</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-bold mb-4 text-gray-800">💍 Acessórios</h3>
+          <div className="grid grid-cols-3 gap-3">
+            {(['ringLeft','ringRight','necklace','earringLeft','earringRight'] as const).map((slot) => {
+              const id = slot === 'ringLeft' ? hero.inventory.equippedRingLeft : slot === 'ringRight' ? hero.inventory.equippedRingRight : slot === 'necklace' ? hero.inventory.equippedNecklace : slot === 'earringLeft' ? hero.inventory.equippedEarringLeft : hero.inventory.equippedEarringRight;
+              const item = id ? SHOP_ITEMS.find(i => i.id === id) : null;
+              return (
+                <div key={`x-${slot}`} className="flex items-center justify-between bg-gray-50 p-3 rounded">
+                  {item ? (
+                    <>
+                      <div className="flex items-center space-x-3">
+                        <div className="text-2xl">{item.icon}</div>
+                        <div>
+                          <div className="font-medium">{item.name}</div>
+                          <div className="text-xs text-gray-600">{item.description}</div>
+                        </div>
+                      </div>
+                      <button onClick={() => unequipItem(hero.id, id!)} className="px-3 py-1 bg-gray-700 text-white text-sm rounded">Desequipar</button>
+                    </>
+                  ) : (
+                    <div className="text-gray-400 text-center w-full">Slot vazio</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
           {/* Resumo de Bônus */}
           <div className="bg-white p-6 rounded-lg border border-gray-200">
@@ -483,9 +450,9 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
                   if (!item || quantity <= 0 || item.type === 'consumable' || item.type === 'cosmetic' || item.type === 'material') return null;
                   
                   const isEquipped = 
-                    hero.inventory.equippedWeapon === itemId ||
-                    hero.inventory.equippedArmor === itemId ||
-                    hero.inventory.equippedAccessory === itemId;
+                    (hero.inventory.equippedWeapons || []).includes(itemId) ||
+                    (hero.inventory.equippedArmorSlots || []).includes(itemId) ||
+                    (hero.inventory.equippedAccessories || []).includes(itemId);
                   
                   if (isEquipped) return null;
                   

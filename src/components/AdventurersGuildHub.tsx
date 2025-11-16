@@ -121,7 +121,7 @@ const AdventurersGuildHub: React.FC = () => {
     const isEquipped = item && (
       (item.type === 'weapon' && selectedHero.inventory.equippedWeapon === itemId) ||
       (item.type === 'armor' && selectedHero.inventory.equippedArmor === itemId) ||
-      (item.type === 'accessory' && selectedHero.inventory.equippedAccessory === itemId)
+      (item.type === 'accessory' && (selectedHero.inventory.equippedAccessories || []).includes(itemId))
     );
     if (!item) {
       notificationBus.emit({
@@ -219,7 +219,7 @@ const AdventurersGuildHub: React.FC = () => {
     const isEquipped =
       (item.type === 'weapon' && selectedHero.inventory.equippedWeapon === itemId) ||
       (item.type === 'armor' && selectedHero.inventory.equippedArmor === itemId) ||
-      (item.type === 'accessory' && selectedHero.inventory.equippedAccessory === itemId);
+      (item.type === 'accessory' && (selectedHero.inventory.equippedAccessories || []).includes(itemId));
     if (isEquipped) {
       notificationBus.emit({
         title: 'Item equipado',
@@ -310,13 +310,12 @@ const AdventurersGuildHub: React.FC = () => {
       {/* Conteúdo por seção */}
       {activeSection === 'salao' && (
         <div className="space-y-6">
-          {/* Missões de Caça */}
           <div className={`bg-white p-6 rounded-lg border ${seasonalBorder} text-gray-800`}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold text-gray-800">🎯 Missões de Caça</h2>
-              <a href="/hunting" className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">Abrir</a>
+              <h2 className="text-2xl font-bold text-gray-800">📜 Quadro de Missões</h2>
+              <a href="/quests" className="px-4 py-2 rounded bg-amber-600 text-black hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">Abrir</a>
             </div>
-            <div className="text-sm text-gray-600">Missões geradas pela IA com fases, risco x recompensa e progressão de rank.</div>
+            <div className="text-sm text-gray-600">Missões unificadas de caça e escolta com interface clara e progressão integrada da guilda.</div>
           </div>
 
           {/* Ranking rápido */}
@@ -539,7 +538,7 @@ const AdventurersGuildHub: React.FC = () => {
                     const isEquipped =
                       (item.type === 'weapon' && selectedHero.inventory.equippedWeapon === itemId) ||
                       (item.type === 'armor' && selectedHero.inventory.equippedArmor === itemId) ||
-                      (item.type === 'accessory' && selectedHero.inventory.equippedAccessory === itemId);
+                      (item.type === 'accessory' && (selectedHero.inventory.equippedAccessories || []).includes(itemId));
                     return (
                       <div key={itemId} className="flex items-center justify-between bg-gray-50 p-3 rounded">
                         <div className="flex items-center space-x-4">
