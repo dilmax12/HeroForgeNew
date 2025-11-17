@@ -24,6 +24,8 @@ self.addEventListener('fetch', event => {
   const { request } = event
   if (request.method !== 'GET') return
   const url = new URL(request.url)
+  // Não interceptar requisições de outros domínios (fonts, ads, etc.)
+  if (url.origin !== self.location.origin) return
   const isAsset = url.pathname.startsWith('/assets/') || url.pathname.endsWith('.css') || url.pathname.endsWith('.js')
   if (isAsset) {
     event.respondWith(
