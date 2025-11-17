@@ -198,26 +198,7 @@ const HeroDetail = () => {
           <div className="rounded-xl p-4 bg-gray-800/70 border border-white/10">
             <h2 className="text-base sm:text-lg font-semibold text-white mb-3">Informações</h2>
             <div className="grid grid-cols-2 gap-3 text-sm text-gray-300">
-              <div>
-                <span className="text-gray-400">Alinhamento</span>
-                <div className="text-white">
-                  {hero.alignment.split('-').map(w => w[0].toUpperCase()+w.slice(1)).join(' ')}
-                </div>
-                <div className="mt-1 text-xs text-indigo-300" title="Impacto do alinhamento em combate e recompensas">
-                  {(() => {
-                    const [axis, moralRaw] = hero.alignment.split('-');
-                    const moral = moralRaw === 'puro' ? 'neutro' : moralRaw;
-                    const effects: string[] = [];
-                    if (axis === 'leal') effects.push('+10% acerto');
-                    if (axis === 'caotico') effects.push('+10% crítico', '-5% acerto');
-                    if (moral === 'bom') effects.push('+20% dano vs dark');
-                    if (moral === 'mal') effects.push('drena 20% HP');
-                    if (moral === 'neutro') effects.push('+4% loot bônus');
-                    return `Efeitos: ${effects.join(' • ')}`;
-                  })()}
-                </div>
-              </div>
-              {hero.background && <div><span className="text-gray-400">Antecedente</span><div className="text-white">{hero.background[0].toUpperCase()+hero.background.slice(1)}</div></div>}
+              
               <div><span className="text-gray-400">XP</span><div className="text-white">{hero.progression.xp}</div></div>
               <div><span className="text-gray-400">Ouro</span><div className="text-white">{hero.progression.gold}</div></div>
               <div><span className="text-gray-400">Missões</span><div className="text-white">{hero.stats?.questsCompleted || 0}</div></div>

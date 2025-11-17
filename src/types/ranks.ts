@@ -1,6 +1,6 @@
 // Sistema de Ranks e Progressão Visual - HeroForge v2.2
 
-export type RankLevel = 'F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S';
+export type RankLevel = 'F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S' | 'SS' | 'SSS';
 
 export interface RankInfo {
   level: RankLevel;
@@ -162,6 +162,27 @@ export const RANK_CONFIG: Record<RankLevel, RankInfo> = {
     textColor: 'text-yellow-600',
     glowColor: 'shadow-yellow-400/75 animate-pulse'
   }
+  ,
+  SS: {
+    level: 'SS',
+    name: 'Ícone Imortal',
+    color: '#FFE55C',
+    icon: '🌟',
+    description: 'Além da lenda: referência viva de todos os heróis.',
+    gradient: 'from-amber-300 via-amber-400 to-yellow-500',
+    textColor: 'text-amber-600',
+    glowColor: 'shadow-amber-300/80 animate-pulse'
+  },
+  SSS: {
+    level: 'SSS',
+    name: 'Mito Absoluto',
+    color: '#FFF1A6',
+    icon: '👑',
+    description: 'O pináculo da guilda: inspiração eterna.',
+    gradient: 'from-yellow-200 via-yellow-300 to-amber-400',
+    textColor: 'text-yellow-700',
+    glowColor: 'shadow-yellow-200/90 animate-pulse'
+  }
 };
 
 // Thresholds para progressão de rank
@@ -172,11 +193,13 @@ export const RANK_THRESHOLDS: Record<RankLevel, RankThreshold> = {
   C: { xp: 1200, missions: 10, titles: 1 },
   B: { xp: 2500, missions: 20, titles: 2 },
   A: { xp: 4000, missions: 30, titles: 3, specialRequirements: ['legendary_quest'] },
-  S: { xp: 7000, missions: 50, titles: 5, specialRequirements: ['legendary_quest', 'epic_achievement'] }
+  S: { xp: 7000, missions: 50, titles: 5, specialRequirements: ['legendary_quest', 'epic_achievement'] },
+  SS: { xp: 9500, missions: 70, titles: 6, specialRequirements: ['legendary_quest', 'epic_achievement'] },
+  SSS: { xp: 13000, missions: 100, titles: 8, specialRequirements: ['legendary_quest', 'epic_achievement'] }
 };
 
 // Ordem dos ranks para progressão
-export const RANK_ORDER: RankLevel[] = ['F', 'E', 'D', 'C', 'B', 'A', 'S'];
+export const RANK_ORDER: RankLevel[] = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'];
 
 // Recompensas por rank
 export const RANK_REWARDS: Record<RankLevel, RankReward[]> = {
@@ -291,5 +314,77 @@ export const RANK_REWARDS: Record<RankLevel, RankReward[]> = {
       icon: '🗝️',
       unlocked: false
     }
+  ],
+  SS: [
+    {
+      type: 'gameplay',
+      name: 'Habilidade Exclusiva: Ordem Superior',
+      description: 'Nova habilidade de elite disponível na árvore de talentos',
+      icon: '🌀',
+      unlocked: false
+    },
+    {
+      type: 'cosmetic',
+      name: 'Traje Ícone Imortal',
+      description: 'Visual único da guilda para SS',
+      icon: '👗',
+      unlocked: false
+    },
+    {
+      type: 'visual',
+      name: 'Aura Mítica',
+      description: 'Aura dourada reforçada',
+      icon: '✨',
+      unlocked: false
+    }
+  ],
+  SSS: [
+    {
+      type: 'special',
+      name: 'Carta de Parabenização da Guilda',
+      description: 'Mensagem oficial celebrando sua ascensão ao topo',
+      icon: '📜',
+      unlocked: false
+    },
+    {
+      type: 'gameplay',
+      name: 'Convite para Missões Míticas',
+      description: 'Desbloqueia missão de raridade mítica',
+      icon: '🗡️',
+      unlocked: false
+    },
+    {
+      type: 'cosmetic',
+      name: 'Coroa do Mito Absoluto',
+      description: 'Adorno único para SSS',
+      icon: '👑',
+      unlocked: false
+    }
   ]
+};
+
+// Bônus de XP por Rank (cada promoção concede +5%)
+export const RANK_XP_BONUS_PERCENT: Record<RankLevel, number> = {
+  F: 0,
+  E: 5,
+  D: 10,
+  C: 15,
+  B: 20,
+  A: 25,
+  S: 30,
+  SS: 35,
+  SSS: 45
+};
+
+// Perfil de missões por Rank (melhoria de qualidade e raridade)
+export const RANK_MISSION_PROFILE: Record<RankLevel, { epicSlots: number; rewardMultiplier: number }> = {
+  F: { epicSlots: 1, rewardMultiplier: 1.0 },
+  E: { epicSlots: 1, rewardMultiplier: 1.05 },
+  D: { epicSlots: 1, rewardMultiplier: 1.1 },
+  C: { epicSlots: 1, rewardMultiplier: 1.12 },
+  B: { epicSlots: 1, rewardMultiplier: 1.15 },
+  A: { epicSlots: 1, rewardMultiplier: 1.18 },
+  S: { epicSlots: 2, rewardMultiplier: 1.22 },
+  SS: { epicSlots: 2, rewardMultiplier: 1.25 },
+  SSS: { epicSlots: 3, rewardMultiplier: 1.3 }
 };

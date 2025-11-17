@@ -93,6 +93,8 @@ const QuestBoard: React.FC = () => {
     refreshQuests, 
     acceptQuest, 
     completeQuest,
+    abandonQuest,
+    clearActiveQuests,
     gainXP,
     gainGold,
     addItemToInventory,
@@ -128,6 +130,14 @@ const QuestBoard: React.FC = () => {
   useEffect(() => {
     console.log('Estado do herói selecionado mudou:', selectedHero?.name || 'Nenhum');
   }, [selectedHero]);
+
+  // Rotação automática de missões a cada 1h
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      refreshQuests(selectedHero?.progression.level || 1);
+    }, 60 * 60 * 1000);
+    return () => clearInterval(intervalId);
+  }, [selectedHero?.id]);
 
   // Narrativas removidas: não geramos mais missões narrativas
 
@@ -231,6 +241,30 @@ const QuestBoard: React.FC = () => {
     const biome = quest.biomeHint || 'Floresta Nebulosa';
     const category = quest.categoryHint || (quest.type === 'caca' ? 'controle' : 'controle');
 
+    useEffect(() => {
+      try {
+        const st = (hero.stats as any)?.missionRunState || {};
+        const s = st[String(quest.id)];
+        if (s) {
+          setPhaseIndex(Math.max(0, s.phase || 0));
+          setNpcIntegrity(typeof s.npcIntegrity === 'number' ? s.npcIntegrity : (quest.categoryHint === 'escolta' ? 100 : null));
+          setRunning(Boolean(s.running));
+          setFinished(Boolean(s.finished));
+          if (Array.isArray(s.logs) && s.logs.length > 0) {
+            setLog(s.logs.map(e => ({ phase: e.phase, success: true, xp: e.xp, gold: e.gold, narrative: e.narrative, itemsAwarded: [] })));
+          }
+        }
+      } catch {}
+    }, [hero.id, quest.id]);
+
+    const persistState = (pi: number, ni: number | null, run: boolean, fin: boolean, logsArr: Array<{ phase: number; xp: number; gold: number; narrative: string }>) => {
+      try {
+        const st = { ...((hero.stats as any)?.missionRunState || {}) } as Record<string, any>;
+        st[String(quest.id)] = { phase: pi, npcIntegrity: (ni ?? undefined) as any, running: run, finished: fin, logs: logsArr };
+        updateHero(hero.id, { stats: { ...hero.stats, missionRunState: st } });
+      } catch {}
+    };
+
     const start = () => {
       if ((hero.stamina?.current || 0) < staminaCostPerPhase) { setError('Stamina insuficiente para iniciar.'); return; }
       setRunning(true);
@@ -241,6 +275,7 @@ const QuestBoard: React.FC = () => {
       setStreak(0);
       setNpcIntegrity(category === 'escolta' ? 100 : null);
       setAnyLoot(false);
+      persistState(0, category === 'escolta' ? 100 : null, true, false, []);
     };
 
     const resolvePhase = () => {
@@ -308,6 +343,7 @@ const QuestBoard: React.FC = () => {
       };
       const baseAmbush = category === 'escolta' ? 0.25 : 0.15;
       const ambush = Math.random() < (baseAmbush + (quest.difficulty === 'dificil' ? 0.05 : quest.difficulty === 'epica' ? 0.1 : 0));
+      let npcAfter = npcIntegrity;
       let ambushText = '';
       if (ambush) {
         const enemies = ENEMIES_BY_BIOME[biome] || ['Inimigos'];
@@ -317,7 +353,7 @@ const QuestBoard: React.FC = () => {
         const newHp2 = Math.max(0, curHp2 - ambushDamageBase);
         updateHero(hero.id, { derivedAttributes: { ...hero.derivedAttributes, currentHp: newHp2 } });
         ambushText = ` • Emboscada: ${foe} causa dano.`;
-        if (npcIntegrity !== null) setNpcIntegrity(Math.max(0, npcIntegrity - 10));
+        if (npcAfter !== null) npcAfter = Math.max(0, (npcAfter ?? 0) - 10);
         const maxHp2 = hero.derivedAttributes.hp || 1;
         if ((newHp2 / maxHp2) < 0.2) { setAutoRun(false); setError('HP baixo, auto desativado.'); }
       }
@@ -329,20 +365,22 @@ const QuestBoard: React.FC = () => {
         const newHp = Math.max(0, curHp - damageBase);
         const newFatigue = Math.min(100, (hero.progression.fatigue || 0) + 6);
         updateHero(hero.id, { derivedAttributes: { ...hero.derivedAttributes, currentHp: newHp }, progression: { ...hero.progression, fatigue: newFatigue } });
-        if (npcIntegrity !== null) setNpcIntegrity(Math.max(0, npcIntegrity - 15));
+        if (npcAfter !== null) npcAfter = Math.max(0, (npcAfter ?? 0) - 15);
         const maxHp2 = hero.derivedAttributes.hp || 1;
         if ((newHp / maxHp2) < 0.2) { setAutoRun(false); setError('HP baixo, auto desativado.'); }
       }
+      if (npcAfter !== undefined && npcAfter !== null) setNpcIntegrity(npcAfter);
 
       const mapName = (id: string) => SHOP_ITEMS.find(i => i.id === id)?.name || id;
       const result = { phase: phaseIndex + 1, success, xp, gold, narrative: (success ? `Progresso na fase ${phaseIndex + 1}.` : `Revés na fase ${phaseIndex + 1}.`) + ambushText, itemsAwarded: [...itemsEquip.map((i: any) => ({ id: i.id, name: i.name })), ...extraIds.map(id => ({ id, name: mapName(id) }))] };
-      const newLog = [...log, result];
-      setLog(newLog);
+      const nextLogs = [...log, { phase: phaseIndex + 1, xp, gold, narrative: result.narrative }];
+      setLog(prev => [...prev, result]);
       if ((itemsEquip.length > 0) || (extraIds.length > 0)) setAnyLoot(true);
       setStreak(s => s + (success ? 1 : 0));
       const nextPhase = phaseIndex + 1;
-      setPhaseIndex(nextPhase);
-      if ((npcIntegrity !== null && npcIntegrity <= 0) || (nextPhase >= phasesTotal)) {
+      setPhaseIndex(p => p + 1);
+      const willFinish = (npcAfter !== null && npcAfter !== undefined && npcAfter <= 0) || (nextPhase >= phasesTotal);
+      if (willFinish) {
         setFinished(true);
         setRunning(false);
         updateDailyGoalProgress(hero.id, 'quest-completed', 1);
@@ -351,6 +389,7 @@ const QuestBoard: React.FC = () => {
           addItemToInventory(hero.id, consolation, 1);
         }
       }
+      persistState(Math.min(nextPhase, phasesTotal), npcAfter, !willFinish, willFinish, nextLogs.map(e => ({ phase: e.phase, xp: (e as any).xp || 0, gold: (e as any).gold || 0, narrative: (e as any).narrative || '' })));
     };
 
     useEffect(() => {
@@ -373,7 +412,7 @@ const QuestBoard: React.FC = () => {
         )}
         {running && (
           <div className="mt-3">
-            <div className="text-gray-200">Fase {phaseIndex + 1} de {phasesTotal}</div>
+            <div className="text-gray-200">Fase {Math.min(phasesTotal, (log?.length || 0) + 1)} de {phasesTotal}</div>
             {npcIntegrity !== null && <div className="text-gray-400 text-xs">Integridade do NPC: {npcIntegrity}%</div>}
             <div className="mt-2 flex gap-2">
               <button onClick={resolvePhase} className="px-3 py-2 rounded bg-purple-600 text-white hover:bg-purple-700">Prosseguir</button>
@@ -393,10 +432,7 @@ const QuestBoard: React.FC = () => {
           </div>
         )}
         {finished && (
-          <div className="mt-3">
-            <div className="text-sm text-gray-200">Missão finalizada.</div>
-            <button onClick={() => handleCompleteQuest(quest.id)} className="mt-2 px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Concluir Oficialmente</button>
-          </div>
+          <ConcludeButton heroId={hero.id} questId={quest.id} onConcluded={() => { setRunning(false); setFinished(true); }} />
         )}
       </div>
     );
@@ -452,9 +488,11 @@ const QuestBoard: React.FC = () => {
             </div>
           </div>
         </div>
-        {quest.timeLimit && (
+        {typeof quest.timeLimit === 'number' && (
           <div className="text-right">
-            <span className="text-red-400 text-sm">⏰ {quest.timeLimit} min</span>
+            <span className="text-red-400 text-sm">
+              ⏰ {quest.timeLimit >= 60 ? `${Math.round(quest.timeLimit / 60)} h` : `${quest.timeLimit} min`}
+            </span>
           </div>
         )}
       </div>
@@ -505,7 +543,9 @@ const QuestBoard: React.FC = () => {
       </div>
 
       <div className="mt-4 flex justify-end">
-        {!isActive && !isCompleted && (
+        {(() => {
+          const alreadyCompleted = selectedHero.completedQuests.includes(quest.id);
+          if (!isActive && !isCompleted && !alreadyCompleted) return (
           <button
             onClick={() => handleAcceptQuest(quest)}
             disabled={!canAcceptQuest(quest)}
@@ -517,18 +557,16 @@ const QuestBoard: React.FC = () => {
           >
             {canAcceptQuest(quest) ? 'Aceitar Missão' : 'Requisitos não atendidos'}
           </button>
-        )}
+          );
+          if (alreadyCompleted && !isActive) return (
+            <span className="px-4 py-2 bg-gray-700 rounded-md font-medium text-gray-300">✅ Já concluída</span>
+          );
+          return null;
+        })()}
         {isActive && (quest.type === 'caca' || quest.categoryHint === 'escolta') && (
           <span className="px-2 py-1 rounded-md text-xs font-medium bg-green-900/30 text-green-300 border border-green-600/30">Execução por fases</span>
         )}
-        {isActive && !(quest.type === 'caca' || quest.categoryHint === 'escolta') && (
-          <button
-            onClick={() => handleCompleteQuest(quest.id)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md font-medium transition-colors"
-          >
-            Completar Missão
-          </button>
-        )}
+        {/* Botão de completar missão removido conforme solicitado */}
         {isCompleted && (
           <span className="px-4 py-2 bg-gray-600 rounded-md font-medium text-gray-300">
             ✅ Concluída
@@ -541,7 +579,10 @@ const QuestBoard: React.FC = () => {
   return (
     <div className="container mx-auto p-6">
       <div className="flex items-center justify-between mb-8">
-        <h2 className="text-3xl font-bold text-amber-400">Quadro de Missões {companionsOnly && <span className="ml-2 text-sm px-2 py-1 rounded bg-emerald-800/40 text-emerald-200 border border-emerald-600/40">Companheiros ({availableQuests.filter(q => q.isGuildQuest).length})</span>}</h2>
+        <div>
+          <h2 className="text-3xl font-bold text-amber-400">Quadro de Missões {companionsOnly && <span className="ml-2 text-sm px-2 py-1 rounded bg-emerald-800/40 text-emerald-200 border border-emerald-600/40">Companheiros ({availableQuests.filter(q => q.isGuildQuest).length})</span>}</h2>
+          <div className="mt-1 text-sm text-gray-300">Novas missões a cada 1h • Rápidas (5–20 min) • Épicas (2–3h)</div>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setCompanionsOnly(v => { try { localStorage.setItem('questboard_companions_only', v ? '0' : '1'); } catch {}; return !v; })}
@@ -550,14 +591,15 @@ const QuestBoard: React.FC = () => {
           >
             🐾 Companheiros {companionsOnly ? '✓' : ''}
           </button>
-          <button
-            onClick={() => {
-              refreshQuests(selectedHero?.progression.level || 1);
-            }}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-md font-medium transition-colors"
-          >
-            🔄 Atualizar Missões
-          </button>
+          {selectedHero && (selectedHero.activeQuests.length > 0) && (
+            <button
+              onClick={() => { clearActiveQuests(selectedHero.id); refreshQuests(selectedHero.progression.level); }}
+              className="px-3 py-2 rounded-md font-medium transition-colors bg-red-600 text-white hover:bg-red-700"
+              title="Remover todas as missões ativas"
+            >
+              Abandonar Todas
+            </button>
+          )}
         </div>
       </div>
 
@@ -622,9 +664,15 @@ const QuestBoard: React.FC = () => {
           .map(q => (
             <div key={q.id}>
               {renderQuestCard(q, true)}
-              {(q.type === 'caca' || q.categoryHint === 'escolta') && selectedHero && (
-                <ActiveMissionRunner hero={selectedHero} quest={q} />
+              {selectedHero && (
+                <ActiveMissionRunner key={`runner-${q.id}`} hero={selectedHero} quest={q} />
               )}
+              {selectedHero && !(q.type === 'caca' || q.categoryHint === 'escolta') && (
+                <AutoCompleteMission key={`auto-${q.id}`} hero={selectedHero} quest={q} />
+              )}
+              <div className="mt-2 flex justify-end">
+                <button onClick={() => abandonQuest(selectedHero!.id, q.id)} className="px-3 py-2 rounded bg-red-600 text-white hover:bg-red-700">Abandonar</button>
+              </div>
             </div>
           ))}
         {selectedTab === 'completed' && selectedHero.completedQuests
@@ -667,4 +715,49 @@ const QuestBoard: React.FC = () => {
   );
 };
 
+const ConcludeButton: React.FC<{ heroId: string; questId: string; onConcluded?: () => void }> = ({ heroId, questId, onConcluded }) => {
+  const completeQuest = useHeroStore(s => s.completeQuest);
+  const [busy, setBusy] = React.useState(false);
+  const handle = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      completeQuest(heroId, questId, false);
+      onConcluded?.();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-3">
+      <div className="text-sm text-gray-200">Missão finalizada.</div>
+      <button onClick={handle} disabled={busy} className={`mt-2 px-3 py-2 rounded ${busy ? 'bg-gray-600 text-gray-300 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>{busy ? 'Concluindo...' : 'Concluir Oficialmente'}</button>
+    </div>
+  );
+};
+
 export default QuestBoard;
+
+const AutoCompleteMission: React.FC<{ hero: Hero; quest: Quest }> = ({ hero, quest }) => {
+  const completeQuest = useHeroStore(s => s.completeQuest);
+  const updateHero = useHeroStore(s => s.updateHero);
+  const [started, setStarted] = React.useState(false);
+  React.useEffect(() => {
+    if (started) return;
+    try {
+      const stAll = { ...(((hero.stats as any)?.missionRunState) || {}) } as Record<string, any>;
+      const k = String(quest.id);
+      const st = stAll[k];
+      if (st?.finished || st?.running) return;
+      stAll[k] = { phase: 0, running: true, finished: false, logs: [] };
+      updateHero(hero.id, { stats: { ...hero.stats, missionRunState: stAll } });
+      setStarted(true);
+      setTimeout(() => {
+        completeQuest(hero.id, quest.id, false);
+      }, 100);
+    } catch {}
+  }, [hero.id, quest.id, started]);
+  return (
+    <div className="mt-2 text-xs text-gray-400">Finalizando missão...</div>
+  );
+};

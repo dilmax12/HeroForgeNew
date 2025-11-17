@@ -555,7 +555,7 @@ const Layout = () => {
                 <div className="relative">
                   <button
                     onClick={() => setOpenGroup(openGroup === 'aventura' ? null : 'aventura')}
-                    className={`${groupButtonClass(isAnyActive(['/journey','/create','/gallery','/dungeon-infinita','/duel-arena','/tavern']))} text-sm md:text-base`}
+                    className={`${groupButtonClass(isAnyActive(['/journey','/create','/gallery','/dungeon-infinita','/tavern']))} text-sm md:text-base`}
                   >
                     🧭 Aventura
                   </button>
@@ -566,7 +566,7 @@ const Layout = () => {
                         <li><Link to={(() => { const p = new URLSearchParams(location.search); const ref = p.get('ref'); const by = p.get('by'); return ref ? `/create?ref=${ref}${by?`&by=${by}`:''}` : "/create"; })()} className={navLinkClass('/create')}>{medievalTheme.icons.ui.profile} Criar Herói</Link></li>
                         <li><Link to="/gallery" className={navLinkClass('/gallery')}>{medievalTheme.icons.ui.inventory} Ver Galeria</Link></li>
                         <li><Link to="/dungeon-infinita" className={navLinkClass('/dungeon-infinita')}>🗝️ Dungeon Infinita</Link></li>
-                        <li><Link to="/duel-arena" className={navLinkClass('/duel-arena')}>⚔️ Arena de Duelos</Link></li>
+                        {/* Arena de Duelos removida */}
                         <li><Link to="/tavern" className={navLinkClass('/tavern')}>🍺 Taverna</Link></li>
                       </ul>
                     </div>
@@ -654,15 +654,7 @@ const Layout = () => {
             </div>
           </nav>
           <SeasonalDecor />
-          {/* Minibarra de progresso e controles do fluxo - mostrar apenas em Início sem herói criado */}
-          {location.pathname === '/journey' && heroes.length === 0 && (
-            <div className="mt-2">
-              <FlowProgress />
-              <FlowControls />
-              {/* Narrador Mestre do Jogo */}
-              <DMNarrator />
-            </div>
-          )}
+          {/* Minibarra de progresso e controles do fluxo removidos quando não há herói criado */}
         </div>
       </header>
       

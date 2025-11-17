@@ -6,7 +6,7 @@ export function validateBuild(data: HeroCreationData): { ok: boolean; issues: st
   const issues: string[] = []
   const meta = CLASS_METADATA[data.class]
   if (meta?.requirements) {
-    const check = meta.requirements({ alignment: data.alignment as any, attributes: data.attributes, race: data.race })
+    const check = meta.requirements({ attributes: data.attributes, race: data.race })
     if (!check.ok) issues.push(check.message || 'Requisitos da classe não atendidos')
   }
   const remaining = calculateRemainingPoints(data.attributes)

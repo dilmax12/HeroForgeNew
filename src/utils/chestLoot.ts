@@ -1,5 +1,6 @@
 import { Item } from '../types/hero';
 import { SHOP_ITEMS } from './shop';
+import { getRareItemChanceBonus } from './replayModifiers';
 
 /**
  * Utilitário de loot de baús de masmorras.
@@ -27,7 +28,8 @@ export function generateChestLoot(tier: ChestTier): Item[] {
   const items: Item[] = [pick()];
 
   // Chance de 2º item para tiers acima de comum
-  if (tier !== 'raro' && tier !== 'comum' && Math.random() < 0.35) {
+  const bonus = getRareItemChanceBonus();
+  if (tier !== 'raro' && tier !== 'comum' && Math.random() < Math.min(0.8, 0.35 + bonus)) {
     items.push(pick());
   }
 

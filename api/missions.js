@@ -40,8 +40,8 @@ export default async function handler(req, res) {
           challenge,
           difficulty,
           choices: [
-            { key: 'A', text: 'Estudar a fenda com runas de estabilização (Ordem)', success: probA },
-            { key: 'B', text: 'Aproveitar a energia do Véu e avançar (Sombra)', success: probB },
+            { key: 'A', text: 'Estudar a fenda com runas de estabilização (Clero)', success: probA },
+            { key: 'B', text: 'Aproveitar a energia do Véu e avançar (Ladrões)', success: probB },
             { key: 'C', text: 'Desviar criaturas e selar com sutileza', success: probC }
           ]
         };

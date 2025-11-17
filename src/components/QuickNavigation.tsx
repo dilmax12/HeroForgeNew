@@ -57,20 +57,7 @@ const QuickNavigation: React.FC = () => {
       path: '/dungeon-infinita',
       color: 'bg-purple-600 hover:bg-purple-700'
     },
-    {
-      id: 'duel-arena',
-      label: 'Arena de Duelos',
-      icon: '⚔️',
-      path: '/duel-arena',
-      color: 'bg-indigo-700 hover:bg-indigo-800'
-    },
-    {
-      id: 'party',
-      label: 'Party',
-      icon: '👥',
-      path: '/party',
-      color: 'bg-pink-600 hover:bg-pink-700'
-    },
+    
     {
       id: 'training',
       label: 'Treinamento',
@@ -101,8 +88,8 @@ const QuickNavigation: React.FC = () => {
   const actionsById = Object.fromEntries(quickActions.map(a => [a.id, a]));
 
   const groups: { id: string; title: string; icon: string; items: string[] }[] = [
-    { id: 'aventura', title: 'Aventura', icon: '🧭', items: ['quests','dungeon-infinita','duel-arena'] },
-    { id: 'companheiros', title: 'Companheiros', icon: '🐾', items: ['pets','hatch-next','party'] },
+    { id: 'aventura', title: 'Aventura', icon: '🧭', items: ['quests','dungeon-infinita'] },
+    { id: 'companheiros', title: 'Companheiros', icon: '🐾', items: ['pets','hatch-next'] },
     { id: 'progresso', title: 'Progresso', icon: '📈', items: ['training','daily-goals'] },
     { id: 'comunidade', title: 'Comunidade', icon: '🏰', items: ['guild-hub'] },
     { id: 'economia', title: 'Economia', icon: '💰', items: ['shop'] }

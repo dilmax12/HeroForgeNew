@@ -9,6 +9,7 @@ import { worldStateManager } from '../utils/worldState';
 import { trackMetric } from '../utils/metricsSystem';
 import { useMonetizationStore } from '../store/monetizationStore';
 import { seasonalThemes } from '../styles/medievalTheme';
+import { getActiveWeeklyMutator, getActiveGlobalEvents, getPlayerRelics, claimDailyChest } from '../services/replayService';
 
 interface EnhancedHUDProps {
   hero: Hero;
@@ -19,6 +20,9 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
   const [daily, setDaily] = useState<any | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [weeklyMutator, setWeeklyMutator] = useState<string | null>(null);
+  const [claimingChest, setClaimingChest] = useState(false);
+  const [chestResult, setChestResult] = useState<any | null>(null);
 
   const isMaxLevel = hero.progression.level >= LEVEL_CAP;
   const currentLevelXP = calculateXPForLevel(hero.progression.level);
@@ -84,6 +88,12 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
       } catch (e) {
         // silencioso no HUD
       }
+      try {
+        const wm = await getActiveWeeklyMutator();
+        if (mounted) setWeeklyMutator(wm?.name || null);
+        await getActiveGlobalEvents();
+        await getPlayerRelics();
+      } catch {}
     })();
     return () => { mounted = false; };
   }, [hero.id]);
@@ -244,18 +254,23 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
   return (
     <div className={`fixed top-2 right-2 md:top-4 md:right-4 z-50 bg-gray-900/95 backdrop-blur-sm border ${glowClass} rounded-lg p-2 md:p-4 min-w-56 sm:min-w-64 md:min-w-80 max-w-[90vw] shadow-xl`}>
       {/* Hero Level and Name */}
-      <div className="flex items-center justify-between mb-2 md:mb-3">
-        <div className="flex items-center space-x-2">
-          <div className="w-7 h-7 md:w-8 md:h-8 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center text-white font-bold text-xs md:text-sm">
-            {hero.progression.level}
+        <div className="flex items-center justify-between mb-2 md:mb-3">
+          <div className="flex items-center space-x-2">
+            <div className="w-7 h-7 md:w-8 md:h-8 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center text-white font-bold text-xs md:text-sm">
+              {hero.progression.level}
+            </div>
+            <div>
+              <div className="text-white font-semibold text-xs md:text-sm">{hero.name}</div>
+              <div className="text-gray-400 text-[10px] md:text-xs">{hero.class}</div>
+            </div>
           </div>
-          <div>
-            <div className="text-white font-semibold text-xs md:text-sm">{hero.name}</div>
-            <div className="text-gray-400 text-[10px] md:text-xs">{hero.class}</div>
-          </div>
+          <div className="px-2 py-1 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] md:text-xs">Poder {powerValue}</div>
         </div>
-        <div className="px-2 py-1 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] md:text-xs">Poder {powerValue}</div>
-      </div>
+        {weeklyMutator && (
+          <div className="mb-2">
+            <span className="inline-flex items-center px-2 py-1 rounded bg-purple-800/40 text-purple-200 border border-purple-600/40 text-[10px] md:text-xs">Mutador semanal: {weeklyMutator}</span>
+          </div>
+        )}
 
       {/* Mascote Ativo */}
       {(hero.pets || []).find(p => p.id === hero.activePetId) && (
@@ -477,6 +492,28 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
             } catch { return <span>Compradas hoje: 0</span>; }
           })()}
         </div>
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            disabled={claimingChest}
+            onClick={async () => {
+              if (claimingChest) return
+              setClaimingChest(true)
+              const res = await claimDailyChest()
+              setClaimingChest(false)
+              if (res.ok) {
+                setChestResult(res)
+                notificationBus.emit({ type: 'achievement', title: 'Cofre Diário', message: `+${res.rewards?.xp || 0} XP, +${res.rewards?.gold || 0} ouro`, icon: '🎁', duration: 3500 })
+              } else {
+                notificationBus.emit({ type: 'quest', title: 'Cofre Diário', message: res.error || 'Falha ao coletar', icon: '⚠️', duration: 3500 })
+              }
+            }}
+            className={`px-2 py-1 rounded ${claimingChest?'bg-gray-700':'bg-amber-600 hover:bg-amber-700'} text-white text-[11px]`}>
+            {claimingChest ? 'Coletando...' : 'Abrir Cofre Diário'}
+          </button>
+          {chestResult?.streak ? (
+            <span className="text-[11px] text-amber-300">Streak {chestResult.streak}</span>
+          ) : null}
+        </div>
       </div>
 
       <div className="mb-2 md:mb-3">
@@ -503,7 +540,7 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
             <Link to="/hunting" className="text-[11px] text-indigo-300 hover:text-indigo-200">Caça</Link>
             <Link to="/dungeon-infinita" className="text-[11px] text-indigo-300 hover:text-indigo-200">Dungeon</Link>
             <Link to="/shop" className="text-[11px] text-indigo-300 hover:text-indigo-200">Loja</Link>
-            <Link to="/duel-arena" className="text-[11px] text-indigo-300 hover:text-indigo-200">Arena</Link>
+            {/* Arena removida para modo single-player */}
           </div>
         </div>
         {(() => {

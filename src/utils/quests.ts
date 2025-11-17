@@ -3,6 +3,7 @@
  */
 
 import { Quest, QuestType, QuestDifficulty, QuestReward, QuestEnemy } from '../types/hero';
+import { RankLevel, RANK_MISSION_PROFILE } from '../types/ranks';
 
 // === TEMPLATES DE MISSÕES ===
 
@@ -152,20 +153,17 @@ const DIFFICULTY_MODIFIERS = {
   rapida: {
     goldMultiplier: 0.7,
     xpMultiplier: 0.8,
-    enemyCountMultiplier: 0.7,
-    timeLimit: 3 // 3 minutos (ajuste para testes)
+    enemyCountMultiplier: 0.7
   },
   padrao: {
     goldMultiplier: 1.0,
     xpMultiplier: 1.0,
-    enemyCountMultiplier: 1.0,
-    timeLimit: 3 // 3 minutos (ajuste para testes)
+    enemyCountMultiplier: 1.0
   },
   epica: {
     goldMultiplier: 1.5,
     xpMultiplier: 1.8,
-    enemyCountMultiplier: 1.4,
-    timeLimit: 3 // 3 minutos (ajuste para testes)
+    enemyCountMultiplier: 1.4
   }
 };
 
@@ -235,7 +233,11 @@ export function generateQuest(
     type: template.type,
     difficulty,
     levelRequirement: Math.max(1, heroLevel - 1),
-    timeLimit: modifier.timeLimit,
+    timeLimit: (() => {
+      if (difficulty === 'rapida') return Math.floor(Math.random() * 16) + 5;
+      if (difficulty === 'epica') return Math.floor(Math.random() * 61) + 120;
+      return 60;
+    })(),
     enemies,
     rewards,
     repeatable: template.type === 'caca' || template.type === 'contrato',
@@ -264,9 +266,10 @@ export function generateQuest(
   return quest;
 }
 
-export function generateQuestBoard(heroLevel: number = 1, guildLevel: number = 0): Quest[] {
+export function generateQuestBoard(heroLevel: number = 1, guildLevel: number = 0, heroRank: RankLevel = 'F'): Quest[] {
   console.log('🎯 generateQuestBoard chamada:', { heroLevel, guildLevel });
   const quests: Quest[] = [];
+  const profile = RANK_MISSION_PROFILE[heroRank] || RANK_MISSION_PROFILE['F'];
   
   // 2 missões rápidas
   quests.push(generateQuest('rapida', heroLevel));
@@ -277,8 +280,10 @@ export function generateQuestBoard(heroLevel: number = 1, guildLevel: number = 0
   quests.push(generateQuest('padrao', heroLevel));
   quests.push(generateQuest('padrao', heroLevel));
   
-  // 1 missão épica
-  quests.push(generateQuest('epica', heroLevel));
+  // Missões épicas por perfil de Rank
+  for (let i = 0; i < Math.max(1, profile.epicSlots); i++) {
+    quests.push(generateQuest('epica', heroLevel));
+  }
   
   // Missões de guilda (se aplicável)
   console.log('🏰 Verificando missões de guilda - guildLevel:', guildLevel);
@@ -299,8 +304,18 @@ export function generateQuestBoard(heroLevel: number = 1, guildLevel: number = 0
     guildQuests: guildQuests.length,
     guildQuestTitles: guildQuests.map(q => q.title)
   });
-  
-  return quests;
+
+  // Aplicar multiplicador de recompensa por Rank
+  const tuned = quests.map(q => ({
+    ...q,
+    rewards: {
+      ...q.rewards,
+      gold: Math.floor((q.rewards?.gold || 0) * profile.rewardMultiplier),
+      xp: Math.floor((q.rewards?.xp || 0) * profile.rewardMultiplier)
+    }
+  }));
+
+  return tuned;
 }
 
 // === SISTEMA DE ACHIEVEMENTS RELACIONADOS A MISSÕES ===

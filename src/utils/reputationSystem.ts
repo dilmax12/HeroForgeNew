@@ -1,5 +1,7 @@
 import { Hero } from '../types/hero';
 import type { Quest } from '../types/hero';
+import { rankSystem } from './rankSystem';
+import { RANK_ORDER, RankLevel } from '../types/ranks';
 
 export interface ReputationLevel {
   name: string;
@@ -86,20 +88,41 @@ export const REPUTATION_LEVELS: ReputationLevel[] = [
 ];
 
 export const FACTION_DESCRIPTIONS = {
-  'Ordem': {
-    description: 'Defensores da lei, justiça e estabilidade',
-    opposingFactions: ['Sombra'],
-    allyFactions: ['Livre']
+  'Guarda da Cidade': {
+    description: 'Defensores da lei e da ordem nas ruas',
+    opposingFactions: ['Ladrões', 'Cultistas'],
+    allyFactions: ['Clero', 'Comerciantes'],
+    minRankRequirement: 'E' as RankLevel
   },
-  'Sombra': {
-    description: 'Operadores das sombras: ladrões, cultistas e informantes',
-    opposingFactions: ['Ordem'],
-    allyFactions: []
+  'Ladrões': {
+    description: 'Guildas clandestinas e redes de contrabando',
+    opposingFactions: ['Guarda da Cidade', 'Comerciantes'],
+    allyFactions: ['Cultistas'],
+    minRankRequirement: 'D' as RankLevel
   },
-  'Livre': {
-    description: 'Exploradores e comerciantes independentes',
+  'Clero': {
+    description: 'Ordens sagradas, templos e curandeiros',
+    opposingFactions: ['Cultistas'],
+    allyFactions: ['Guarda da Cidade'],
+    minRankRequirement: 'D' as RankLevel
+  },
+  'Cultistas': {
+    description: 'Seitas profanas e rituais sombrios',
+    opposingFactions: ['Clero', 'Guarda da Cidade'],
+    allyFactions: ['Ladrões'],
+    minRankRequirement: 'B' as RankLevel
+  },
+  'Comerciantes': {
+    description: 'Companhias de comércio, caravanas e mercados',
+    opposingFactions: ['Ladrões'],
+    allyFactions: ['Guarda da Cidade', 'Exploradores'],
+    minRankRequirement: 'E' as RankLevel
+  },
+  'Exploradores': {
+    description: 'Cartógrafos, aventureiros e descobridores de rotas',
     opposingFactions: [],
-    allyFactions: ['Ordem']
+    allyFactions: ['Comerciantes'],
+    minRankRequirement: 'D' as RankLevel
   }
 };
 
@@ -159,6 +182,12 @@ export function calculateReputationModifiers(hero: Hero, factionName: string) {
   if (!faction) return { goldBonus: 0, xpBonus: 0 };
   
   const level = getReputationLevel(faction.reputation);
+  const info = FACTION_DESCRIPTIONS[factionName as keyof typeof FACTION_DESCRIPTIONS] as any;
+  const heroRank = rankSystem.calculateRank(hero);
+  const meetsRank = !info?.minRankRequirement || (RANK_ORDER.indexOf(heroRank) >= RANK_ORDER.indexOf(info.minRankRequirement as RankLevel));
+  if (!meetsRank) {
+    return { goldBonus: 0, xpBonus: 0 };
+  }
   return level.questModifiers;
 }
 
@@ -183,16 +212,15 @@ export function generateReputationEvents(hero: Hero): Array<{
   // Exemplo simples de eventos (ajuste conforme sua lógica real)
   // Melhor manter neutro, usando nomes das 3 facções
   if ((hero.completedQuests || []).length > 0) {
-    // Nota: se completedQuests for apenas IDs, adapte quando tiver contexto da última missão
     events.push({
-      factionName: 'Ordem',
+      factionName: 'Guarda da Cidade',
       change: 10,
-      reason: 'Apoiou a estabilidade e combateu ameaças públicas'
+      reason: 'Apoiou a segurança urbana'
     });
     events.push({
-      factionName: 'Sombra',
+      factionName: 'Ladrões',
       change: -3,
-      reason: 'Ações que atrapalham operações clandestinas'
+      reason: 'Ações que atrapalham redes clandestinas'
     });
   }
 
@@ -216,21 +244,23 @@ export function inferQuestFactionChanges(quest: Quest): Array<{ factionName: str
   if (quest.isGuildQuest) {
     const guildBase: Record<string, number> = { facil: 5, medio: 8, dificil: 12, epica: 20 };
     const gb = guildBase[quest.difficulty] ?? 6;
-    changes.push({ factionName: 'Ordem', change: gb, reason: 'Missão de guilda' });
+    changes.push({ factionName: 'Guarda da Cidade', change: gb, reason: 'Missão de guilda' });
     return changes;
   }
 
   if (quest.type === 'exploracao') {
-    changes.push({ factionName: 'Livre', change: base, reason: 'Exploração e mapeamento' });
+    changes.push({ factionName: 'Exploradores', change: base, reason: 'Exploração e mapeamento' });
   } else if (quest.type === 'caca' || quest.type === 'contrato' || quest.type === 'historia') {
-    changes.push({ factionName: 'Ordem', change: base, reason: 'Proteção e estabilidade' });
+    changes.push({ factionName: 'Guarda da Cidade', change: base, reason: 'Proteção e estabilidade' });
   }
 
   const keywordMap: Array<{ re: RegExp; faction: string; delta: number; reason: string }> = [
-    { re: /(comerciante|mercador|rota|caravana)/, faction: 'Livre', delta: Math.max(1, Math.floor(base * 0.5)), reason: 'Apoio a comércio' },
-    { re: /(cultista|ladrao|roubo|contrabando|clandestino|assassino)/, faction: 'Sombra', delta: -Math.max(1, Math.floor(base * 0.4)), reason: 'Contrário às sombras' },
-    { re: /(resgatar|defender|patrulha|guarda|protege)/, faction: 'Ordem', delta: Math.max(1, Math.floor(base * 0.5)), reason: 'Ações de ordem' },
-    { re: /(mapear|explorar|ruínas|descobrir)/, faction: 'Livre', delta: Math.max(1, Math.floor(base * 0.4)), reason: 'Exploração livre' }
+    { re: /(comerciante|mercador|rota|caravana)/, faction: 'Comerciantes', delta: Math.max(1, Math.floor(base * 0.5)), reason: 'Apoio ao comércio' },
+    { re: /(cultista|ritual|profano|blasfemo)/, faction: 'Cultistas', delta: -Math.max(1, Math.floor(base * 0.4)), reason: 'Combate a seitas profanas' },
+    { re: /(ladrao|roubo|contrabando|clandestino|assassino)/, faction: 'Ladrões', delta: -Math.max(1, Math.floor(base * 0.4)), reason: 'Repressão ao crime' },
+    { re: /(resgatar|defender|patrulha|guarda|protege|lei|ordem)/, faction: 'Guarda da Cidade', delta: Math.max(1, Math.floor(base * 0.5)), reason: 'Ações de segurança' },
+    { re: /(igreja|templo|cura|sagrado)/, faction: 'Clero', delta: Math.max(1, Math.floor(base * 0.4)), reason: 'Serviço aos templos' },
+    { re: /(mapear|explorar|ruínas|descobrir|cartografar)/, faction: 'Exploradores', delta: Math.max(1, Math.floor(base * 0.4)), reason: 'Exploração e cartografia' }
   ];
 
   keywordMap.forEach(rule => {
@@ -247,5 +277,7 @@ export function inferQuestFactionChanges(quest: Quest): Array<{ factionName: str
     if (c.reason) merged[key].reason!.push(c.reason);
   });
 
-  return Object.entries(merged).map(([factionName, info]) => ({ factionName, change: info.change, reason: info.reason?.join('; ') }));
+  const mergedArray = Object.entries(merged).map(([factionName, info]) => ({ factionName, change: info.change, reason: info.reason?.join('; ') }));
+  mergedArray.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+  return mergedArray.slice(0, 2);
 }

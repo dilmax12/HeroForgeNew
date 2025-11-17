@@ -11,7 +11,7 @@ export function buildChecklist(data: HeroCreationData): ChecklistItem[] {
   items.push({ label: 'Atributos', status: rem === 0 ? 'ok' : rem > 0 ? 'warn' : 'error', detail: rem === 0 ? 'Distribuição completa' : `Restantes: ${rem}` })
   const meta = CLASS_METADATA[data.class]
   if (meta?.requirements) {
-    const check = meta.requirements({ alignment: data.alignment as any, attributes: data.attributes, race: data.race })
+    const check = meta.requirements({ attributes: data.attributes, race: data.race })
     items.push({ label: 'Requisitos de Classe', status: check.ok ? 'ok' : 'error', detail: check.ok ? 'OK' : (check.message || 'Pendentes') })
   } else {
     items.push({ label: 'Requisitos de Classe', status: 'ok', detail: 'OK' })

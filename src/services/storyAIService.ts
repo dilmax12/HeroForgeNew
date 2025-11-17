@@ -55,7 +55,7 @@ Informações do herói:
         prompt += '\n\nConte como o herói conquistou uma de suas maiores realizações.';
         break;
       default:
-        prompt += '\n\nCrie uma história épica que capture a essência deste herói e reflita seu alinhamento em decisões, tom e consequências.';
+        prompt += '\n\nCrie uma história épica que capture a essência deste herói, com decisões, tom e consequências coerentes.';
     }
 
     return prompt;

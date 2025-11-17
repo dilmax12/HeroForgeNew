@@ -91,11 +91,11 @@ describe('Persistência de missões após regeneração', () => {
     useHeroStore.getState().completeQuest(hero.id, quest.id, true)
 
     const after = useHeroStore.getState().heroes.find(h => h.id === hero.id)!
-    const ordem = (after.reputationFactions || []).find(f => f.name === 'Ordem')
+    const ordem = (after.reputationFactions || []).find(f => f.name === 'Guarda da Cidade')
     expect(ordem?.reputation).toBeGreaterThan(0)
   })
 
-  it('exploração concede reputação à facção Livre', () => {
+  it('exploração concede reputação à facção Exploradores', () => {
     const hero = useHeroStore.getState().createHero({
       name: 'Explorador',
       class: 'Guerreiro' as any,
@@ -126,11 +126,11 @@ describe('Persistência de missões após regeneração', () => {
     useHeroStore.getState().completeQuest(hero.id, quest.id, true)
 
     const after = useHeroStore.getState().heroes.find(h => h.id === hero.id)!
-    const livre = (after.reputationFactions || []).find(f => f.name === 'Livre')
+    const livre = (after.reputationFactions || []).find(f => f.name === 'Exploradores')
     expect(livre?.reputation).toBeGreaterThan(0)
   })
 
-  it('história concede reputação à facção Ordem', () => {
+  it('história concede reputação à facção Guarda da Cidade', () => {
     const hero = useHeroStore.getState().createHero({
       name: 'Narrador',
       class: 'Guerreiro' as any,
@@ -161,7 +161,7 @@ describe('Persistência de missões após regeneração', () => {
     useHeroStore.getState().completeQuest(hero.id, quest.id, true)
 
     const after = useHeroStore.getState().heroes.find(h => h.id === hero.id)!
-    const ordem = (after.reputationFactions || []).find(f => f.name === 'Ordem')
+    const ordem = (after.reputationFactions || []).find(f => f.name === 'Guarda da Cidade')
     expect(ordem?.reputation).toBeGreaterThan(0)
   })
 })

@@ -52,6 +52,8 @@ export const RankCelebration: React.FC<RankCelebrationProps> = ({
   const getRankIcon = (rank: RankLevel) => {
     switch (rank) {
       case 'S': return Crown;
+      case 'SS': return Crown;
+      case 'SSS': return Crown;
       case 'A': return Trophy;
       case 'B': return Star;
       case 'C': return Sparkles;
@@ -63,6 +65,8 @@ export const RankCelebration: React.FC<RankCelebrationProps> = ({
   const getRankColor = (rank: RankLevel) => {
     switch (rank) {
       case 'S': return 'from-purple-500 to-pink-500';
+      case 'SS': return 'from-amber-500 to-yellow-500';
+      case 'SSS': return 'from-yellow-400 to-amber-600';
       case 'A': return 'from-yellow-500 to-orange-500';
       case 'B': return 'from-blue-500 to-cyan-500';
       case 'C': return 'from-green-500 to-emerald-500';

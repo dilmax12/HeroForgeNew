@@ -64,6 +64,7 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
   const [imageError, setImageError] = useState(false);
   const { selectHero, getSelectedHero } = useHeroStore();
   const selectedHero = getSelectedHero();
+  const isNPC = hero.origin === 'npc';
 
   // Define variáveis usadas no JSX
   const isSelected = selectedHero?.id === hero.id;
@@ -76,6 +77,7 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
   };
 
   const handleCardClick = () => {
+    if (isNPC) return;
     selectHero(hero.id);
     onClick?.();
   };
@@ -309,7 +311,7 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
       </div>
 
       {/* Barra de Ações (aparece no hover) */}
-      {showDetails && isHovered && (
+      {showDetails && isHovered && !isNPC && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg z-50">
           <div className="flex flex-col space-y-2">
             <button 

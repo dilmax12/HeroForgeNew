@@ -146,7 +146,7 @@ export type DungeonLeaderboardEntry = {
 };
 
 export async function getDungeonLeaderboard(limit = 10): Promise<{ data: DungeonLeaderboardEntry[]; offline?: boolean; error?: string }>{
-  if (!supabaseConfigured) return { data: [], offline: true };
+  if (!supabaseConfigured || import.meta.env.DEV) return { data: [], offline: true };
   try {
     const { data, error } = await supabase
       .from('dungeon_leaderboard')
@@ -177,7 +177,7 @@ export type WeeklyDungeonHighlights = {
 };
 
 export async function getWeeklyDungeonHighlights(): Promise<{ data: WeeklyDungeonHighlights; offline?: boolean; error?: string }>{
-  if (!supabaseConfigured) return { data: {}, offline: true };
+  if (!supabaseConfigured || import.meta.env.DEV) return { data: {}, offline: true };
   try {
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);

@@ -159,17 +159,20 @@ export class RankSystem {
     const rewards = RANK_REWARDS[rank] || [];
     
     let animationType: 'ascension' | 'legendary' | 'epic' = 'ascension';
-    if (rank === 'S') animationType = 'legendary';
+    if (['S', 'SS', 'SSS'].includes(rank)) animationType = 'legendary';
     else if (['A', 'B'].includes(rank)) animationType = 'epic';
     
     return {
       rank,
       title: `Promoção para ${rankInfo.name}!`,
       message: `Parabéns, ${hero.name}! Você alcançou o rank ${rank} - ${rankInfo.name}. ${rankInfo.description}`,
-      rewards: rewards.map(r => ({ ...r, unlocked: true })),
+      rewards: [
+        ...rewards.map(r => ({ ...r, unlocked: true })),
+        { type: 'special', name: 'Carta de Parabenização da Guilda', description: 'Mensagem oficial celebrando sua promoção', icon: '📜', unlocked: true }
+      ],
       animationType,
-      soundEffect: rank === 'S' ? 'legendary_fanfare' : 'rank_up_trumpet',
-      particleEffect: rank === 'S' ? 'golden_explosion' : 'sparkle_burst'
+      soundEffect: ['S', 'SS', 'SSS'].includes(rank) ? 'legendary_fanfare' : 'rank_up_trumpet',
+      particleEffect: ['S', 'SS', 'SSS'].includes(rank) ? 'golden_explosion' : 'sparkle_burst'
     };
   }
 

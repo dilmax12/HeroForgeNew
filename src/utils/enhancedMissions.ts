@@ -272,6 +272,11 @@ export class EnhancedMissionGenerator {
       staminaCost: this.calculateStaminaCost(template.difficulty)
     };
 
+    // Garantir exatamente 3 caminhos (A, B, C)
+    if (mission.enhancedChoices && mission.enhancedChoices.length > 3) {
+      mission.enhancedChoices = mission.enhancedChoices.slice(0, 3);
+    }
+
     return mission;
   }
 

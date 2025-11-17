@@ -107,7 +107,8 @@ export function generateLeaderboard(
         value: safeValue,
         rank: 0, // Será definido após ordenação
         change: 0, // TODO: Implementar comparação com ranking anterior
-        lastUpdated: new Date()
+        lastUpdated: new Date(),
+        isNPC: hero.origin === 'npc'
       };
     })
     .sort((a, b) => b.value - a.value) // Ordenar por valor (maior primeiro)

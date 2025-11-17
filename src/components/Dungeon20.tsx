@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useHeroStore } from '../store/heroStore';
 import { saveDungeonRun, startDungeonRun, updateDungeonRun, finishDungeonRun } from '../services/dungeonService';
 import { addGuildReputation } from '../services/guildService';
-import { dungeonConfig, computeRewardMultiplier, isBossFloor } from '../utils/dungeonConfig';
+import { dungeonConfig, computeRewardMultiplier, isBossFloor, isMiniBossFloor } from '../utils/dungeonConfig';
 import { logActivity } from '../utils/activitySystem';
 import { generateChestLoot } from '../utils/chestLoot';
 import { SHOP_ITEMS } from '../utils/shop';
@@ -31,7 +31,6 @@ export default function Dungeon20() {
   const gainGlory = useHeroStore(s => s.gainGlory);
   const gainArcaneEssence = useHeroStore(s => s.gainArcaneEssence);
   const updateHero = useHeroStore(s => s.updateHero);
-  const getHeroParty = useHeroStore(s => s.getHeroParty);
   const addItemToInventory = useHeroStore(s => s.addItemToInventory);
   const equipItem = useHeroStore(s => s.equipItem);
   const unequipItem = useHeroStore(s => s.unequipItem);
@@ -59,6 +58,8 @@ export default function Dungeon20() {
   const [lootFeedback, setLootFeedback] = useState<string | null>(null);
   const useItem = useHeroStore(s => s.useItem);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [bossRewardPending, setBossRewardPending] = useState(false);
+  const [selectedAttrReward, setSelectedAttrReward] = useState<'forca'|'destreza'|'constituicao'|'inteligencia'|'sabedoria'|'carisma'|'none'>('none');
 
   const totalXP = useMemo(() => log.reduce((acc, r) => acc + r.xpGained, 0), [log]);
   const totalGold = useMemo(() => log.reduce((acc, r) => acc + r.goldGained, 0), [log]);
@@ -80,6 +81,10 @@ export default function Dungeon20() {
         return 6;
       case 'S':
         return 7;
+      case 'SS':
+        return 8;
+      case 'SSS':
+        return 9;
       default:
         return 3;
     }
@@ -95,6 +100,17 @@ export default function Dungeon20() {
     }
     if (!heroRank || heroRank === 'F' || heroRank === 'E') {
       setError('Rank insuficiente. A Dungeon Infinita requer rank D ou superior.');
+      return;
+    }
+    const now = Date.now();
+    const cdEnds = hero?.dungeon?.cooldownEndsAt ? new Date(hero.dungeon.cooldownEndsAt).getTime() : 0;
+    if (cdEnds && now < cdEnds) {
+      setError('Cooldown ativo para a dungeon. Aguarde antes de tentar novamente.');
+      return;
+    }
+    const dStamina = hero?.dungeon?.stamina?.current ?? 0;
+    if (dStamina <= 0) {
+      setError('Stamina de dungeon insuficiente. Aguarde a recuperação.');
       return;
     }
     setRunning(true);
@@ -135,8 +151,12 @@ export default function Dungeon20() {
     return `${base} ${ev} (+${xp} XP, +${gold} ouro)`;
   };
 
+  const DUNGEON_STAMINA_COST = 2;
   const handleChoice = (risk: 'safe' | 'normal' | 'risky') => {
     if (!hero || loading || finished) return;
+    const cur = hero.dungeon?.stamina?.current ?? 0;
+    if (cur < DUNGEON_STAMINA_COST) { setError('Stamina de dungeon insuficiente.'); return; }
+    updateHero(hero.id, { dungeon: { ...(hero.dungeon || {}), stamina: { ...((hero.dungeon||{}).stamina||{ current: 0, max: 0, lastRecovery: new Date().toISOString(), recoveryRate: 0 }), current: Math.max(0, cur - DUNGEON_STAMINA_COST) } } });
     setLoading(true);
     try {
       // Probabilidade básica e recompensa
@@ -185,13 +205,14 @@ export default function Dungeon20() {
         return;
       }
       const boss = isBossFloor(currentFloor);
+      const miniboss = isMiniBossFloor(currentFloor);
 
       // Combate real quando o evento for 'combat'
       if (event === 'combat') {
-        const templates = boss ? ['Troll'] : ['Goblin', 'Esqueleto', 'Bandido', 'Lobo'];
+        const templates = boss ? ['Troll'] : miniboss ? ['Ogro','Guardião'] : ['Goblin', 'Esqueleto', 'Bandido', 'Lobo'];
         const chosen = templates[Math.floor(Math.random() * templates.length)];
-        const count = boss ? 1 : (Math.random() < 0.2 ? 2 : 1);
-        const level = Math.max(1, Math.floor((hero.progression.level || 1) + currentFloor * 0.3));
+        const count = boss ? 1 : miniboss ? 1 : (Math.random() < 0.2 ? 2 : 1);
+        const level = Math.max(1, Math.floor((hero.progression.level || 1) + currentFloor * (boss ? 0.5 : miniboss ? 0.4 : 0.3)));
         const questEnemies = [{ type: chosen, count, level }];
         setBattleEnemies(questEnemies);
         setAwaitingCombatChoice(true);
@@ -224,6 +245,11 @@ export default function Dungeon20() {
       };
       const newLog = [...log, result];
       setLog(newLog);
+      if (hero?.dungeon) {
+        const currentMax = hero.dungeon.maxFloor || 0;
+        const nextMax = Math.max(currentMax, newLog.length);
+        updateHero(hero.id, { dungeon: { ...hero.dungeon, maxFloor: nextMax } });
+      }
       // Persistência incremental
       if (activeRunId) {
         updateDungeonRun(activeRunId, {
@@ -332,7 +358,9 @@ export default function Dungeon20() {
       const res = await saveDungeonRun(hero, payload);
       if (!res.ok) setError(res.error || 'Falha ao salvar run.');
     }
-    if (!res.ok) setError(res.error || 'Falha ao salvar run.');
+    const cdMs = 15 * 60 * 1000;
+    const ends = new Date(Date.now() + cdMs).toISOString();
+    if (hero.dungeon) updateHero(hero.id, { dungeon: { ...hero.dungeon, cooldownEndsAt: ends } });
     // Pequeno bônus de reputação por concluir
     if (victory) await addGuildReputation(hero, 25);
     setBlockedToday(true);
@@ -358,11 +386,8 @@ export default function Dungeon20() {
         if (action === 'open') {
           // Probabilidades base: comum 70, raro 20, épico 8, lendário 2
           // Aplicar viés por andar e bônus de party completa (+5%)
-          const party = getHeroParty(hero.id);
-          const partyComplete = !!party && party.members.length >= 4;
-          const floorBias = (dungeonConfig.rarityIncreasePerFloor || 0) * currentFloor; // em % acumulado
-          const partyBonus = partyComplete ? 5 : 0; // +5%
-          const roll = Math.min(100, Math.random() * 100 + floorBias + partyBonus);
+          const floorBias = (dungeonConfig.rarityIncreasePerFloor || 0) * currentFloor;
+          const roll = Math.min(100, Math.random() * 100 + floorBias);
           let tier: 'comum' | 'raro' | 'epico' | 'lendario' = 'comum';
           if (roll >= 98) tier = 'lendario'; else if (roll >= 90) tier = 'epico'; else if (roll >= 70) tier = 'raro';
           // Gerar loot de baú com suporte a 'comum'
@@ -425,6 +450,11 @@ export default function Dungeon20() {
             const result: FloorResult = { floor: currentFloor, success: true, event: 'rest', xpGained: 4, goldGained: 0, narrative: 'Santuário místico: você recupera forças (+HP).' };
             const newLog = [...log, result];
             setLog(newLog);
+            if (hero.dungeon) {
+              const currentMax = hero.dungeon.maxFloor || 0;
+              const nextMax = Math.max(currentMax, newLog.length);
+              updateHero(hero.id, { dungeon: { ...hero.dungeon, maxFloor: nextMax } });
+            }
             if (activeRunId) {
               updateDungeonRun(activeRunId, {
                 max_floor_reached: newLog.length,
@@ -631,13 +661,24 @@ export default function Dungeon20() {
               </div>
             </div>
           )}
-          {awaitingDecision && !finished && (
-            <div className="mt-4 flex items-center gap-3">
-              <button onClick={ascend} className="px-3 py-2 rounded bg-purple-600 text-white hover:bg-purple-700">Subir</button>
-              <button onClick={exitRun} className="px-3 py-2 rounded bg-amber-600 text-black hover:bg-amber-500">Sair com prêmios</button>
-              <span className="text-sm text-gray-400">Multiplicador atual: x{computeRewardMultiplier(streak).toFixed(2)}</span>
-            </div>
-          )}
+      {awaitingDecision && !finished && (
+        <div className="mt-4 flex items-center gap-3">
+          <button onClick={ascend} className="px-3 py-2 rounded bg-purple-600 text-white hover:bg-purple-700">Subir</button>
+          <button onClick={exitRun} className="px-3 py-2 rounded bg-amber-600 text-black hover:bg-amber-500">Sair com prêmios</button>
+          <span className="text-sm text-gray-400">Multiplicador atual: x{computeRewardMultiplier(streak).toFixed(2)}</span>
+        </div>
+      )}
+      {bossRewardPending && !finished && (
+        <div className="mt-4 p-3 border border-yellow-700 bg-yellow-900/20 rounded">
+          <div className="text-white font-semibold">Recompensa de Chefe</div>
+          <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button onClick={() => { setSelectedAttrReward('forca'); updateHero(hero!.id, { dungeon: { ...((hero!.dungeon)||{}), permanentBonusAttributes: { ...((hero!.dungeon?.permanentBonusAttributes)||{}), forca: ((hero!.dungeon?.permanentBonusAttributes?.forca)||0)+1 } } }); setBossRewardPending(false); setAwaitingDecision(true); }} className="px-3 py-2 rounded bg-red-600 text-white hover:bg-red-700">+1 atributo permanente</button>
+            <button onClick={() => { const cur = hero!.dungeon?.rareItemBonusPercent ?? 0; updateHero(hero!.id, { dungeon: { ...((hero!.dungeon)||{}), rareItemBonusPercent: Math.min(100, cur + 10) } }); setBossRewardPending(false); setAwaitingDecision(true); }} className="px-3 py-2 rounded bg-purple-600 text-white hover:bg-purple-700">+10% item raro</button>
+            <button onClick={() => { const list = hero!.dungeon?.specialSkills || []; updateHero(hero!.id, { dungeon: { ...((hero!.dungeon)||{}), specialSkills: [...list, 'habilidade-especial'] } }); setBossRewardPending(false); setAwaitingDecision(true); }} className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Habilidade especial</button>
+            <button onClick={() => { const buffs = hero!.dungeon?.eternalBuffs || []; updateHero(hero!.id, { dungeon: { ...((hero!.dungeon)||{}), eternalBuffs: [...buffs, 'buff-eterno'] } }); setBossRewardPending(false); setAwaitingDecision(true); }} className="px-3 py-2 rounded bg-green-600 text-white hover:bg-green-700">Buff eterno da dungeon</button>
+          </div>
+        </div>
+      )}
           {awaitingEventChoice && !finished && (
             <div className="mt-4 p-3 border border-indigo-700 bg-indigo-900/20 rounded">
               <div className="text-white font-semibold">Eventos Aleatórios</div>
@@ -790,7 +831,7 @@ export default function Dungeon20() {
           hero={hero as any}
           enemies={battleEnemies as any}
           floor={floorIndex + 1}
-          partyRarityBonusPercent={(getHeroParty(hero.id)?.members.length || 0) >= 4 ? 5 : 0}
+          partyRarityBonusPercent={0}
           onClose={() => setShowBattle(false)}
           onResult={(res) => {
             const currentFloor = floorIndex + 1;
@@ -839,7 +880,12 @@ export default function Dungeon20() {
 
             if (victory) {
               logActivity.combatVictory({ heroId: hero.id, heroName: hero.name, heroClass: hero.class, enemiesDefeated: boss ? ['Boss da faixa'] : battleEnemies.map(e => e.type) });
-              setAwaitingDecision(true);
+              if (boss) {
+                setBossRewardPending(true);
+                setAwaitingDecision(false);
+              } else {
+                setAwaitingDecision(true);
+              }
             } else {
               // Derrota: penalidade maior se for boss
               if (boss) {

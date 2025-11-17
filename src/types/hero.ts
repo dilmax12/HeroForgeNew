@@ -24,7 +24,7 @@ export type HeroClass =
 
 export type HeroRace = 'humano' | 'elfo' | 'anao' | 'orc' | 'halfling';
 
-export type Element = 'fire' | 'ice' | 'thunder' | 'earth' | 'light' | 'dark' | 'physical';
+export type Element = 'fire' | 'water' | 'earth' | 'air' | 'thunder' | 'light' | 'dark' | 'physical';
 
 export type SkillType = 'attack' | 'buff' | 'support';
 
@@ -422,6 +422,7 @@ export interface LeaderboardEntry {
   rank: number;
   change: number; // Mudança de posição desde a última atualização
   lastUpdated: Date;
+  isNPC?: boolean;
 }
 
 export interface Leaderboard {
@@ -585,8 +586,6 @@ export interface Hero {
   race: HeroRace;
   class: HeroClass;
   level: number;
-  alignment: Alignment;
-  background: string;
   attributes: HeroAttributes;
   attributePoints?: number;
   derivedAttributes: DerivedAttributes;
@@ -602,6 +601,22 @@ export interface Hero {
   plannedTalents?: string[];
   createdAt: string; // ISO string
   updatedAt: string; // ISO string
+  origin?: 'player' | 'npc';
+  controlledByAI?: boolean;
+  socialRelations?: Record<string, number>;
+  npcPersonality?: {
+    archetype: 'competitivo' | 'colaborativo' | 'mercador' | 'explorador' | 'sabio' | 'caotico';
+    traits: string[];
+    riskAffinity: number;
+    chatStyle: 'amigavel' | 'sarcastico' | 'formal' | 'quieto';
+    prefersParty?: boolean;
+  };
+  npcMemory?: {
+    interactions: { heroId: string; ts: string; summary: string; impact?: number }[];
+    preferences?: { quests?: string[]; items?: string[]; locations?: string[] };
+    scoreByAction?: Record<string, number>;
+  };
+  npcRoutine?: { start: string; end: string; activity: string; location?: string }[];
   
   // Missões ativas
   activeQuests: string[]; // Quest IDs
@@ -626,6 +641,8 @@ export interface Hero {
     trainingsToday?: number;
     lastTrainingDate?: string; // ISO string
     trainingDailyLimit?: number; // padrão: 5
+    trainingAttemptsByStatus?: Record<string, number>;
+    missionRunState?: Record<string, { phase: number; npcIntegrity?: number; running?: boolean; finished?: boolean; logs: Array<{ phase: number; xp: number; gold: number; narrative: string }> }>;
     // Status de treino ativo (para HUD)
     trainingActiveUntil?: string; // ISO de término do treino atual
     trainingActiveName?: string; // nome da opção de treino ativa
@@ -671,14 +688,32 @@ export interface Hero {
   favoriteMountIds?: string[];
   mountBuff?: { speedBonus?: number; expiresAt?: string };
   stableCapacity?: number;
+  dungeon?: {
+    stamina: { current: number; max: number; lastRecovery: string; recoveryRate: number };
+    cooldownEndsAt?: string;
+    maxFloor?: number;
+    eternalBuffs?: string[];
+    rareItemBonusPercent?: number;
+    specialSkills?: string[];
+    permanentBonusAttributes?: Partial<HeroAttributes>;
+  };
+}
+
+export interface Party {
+  id: string;
+  name: string;
+  leaderId: string;
+  members: string[];
+  invites?: string[];
+  createdAt: string;
+  sharedLoot?: boolean;
+  sharedXP?: boolean;
 }
 
 export interface HeroCreationData {
   name: string;
   race: HeroRace;
   class: HeroClass;
-  alignment: Alignment;
-  background: string;
   attributes: HeroAttributes;
   element: Element;
   skills: Skill[];
@@ -690,16 +725,6 @@ export interface HeroCreationData {
   plannedTalents?: string[];
 }
 
-export interface Party {
-  id: string;
-  name: string;
-  members: string[]; // hero IDs
-  createdAt: string;
-  sharedLoot?: boolean;
-  sharedXP?: boolean;
-  leaderId?: string;
-  invites?: string[]; // hero IDs convidados que ainda não aceitaram
-}
 
 // === Tipos de Capítulos da Jornada ===
 export interface JourneyChapter {

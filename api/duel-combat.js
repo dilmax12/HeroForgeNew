@@ -12,7 +12,7 @@ function mulberry32(seed) {
 
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)) }
 
-const ELEMENT_ADV = { fire: { beats: ['ice'] }, ice: { beats: ['thunder'] }, thunder: { beats: ['earth'] }, earth: { beats: ['fire'] }, light: { beats: ['dark'] }, dark: { beats: ['light'] }, physical: { beats: [] } }
+const ELEMENT_ADV = { fire: { beats: ['earth'] }, water: { beats: ['fire'] }, earth: { beats: ['thunder'] }, air: { beats: [] }, thunder: { beats: ['water'] }, light: { beats: ['dark'] }, dark: { beats: ['fire','water','earth','air','thunder'] }, physical: { beats: [] } }
 function elementMult(atkElem, defElem) {
   let base = 1
   if ((ELEMENT_ADV[atkElem]?.beats || []).includes(defElem)) base *= 1.3
@@ -63,7 +63,7 @@ export function resolveServerCombat(hero, opponent, seed = Date.now()) {
   }
   const e = opponent && opponent.name ? { ...opponent } : createEnemyFromLevel(hero.level || 1, rng)
   const heroElem = h.element || 'physical'
-  const enemyElem = ['fire','ice','thunder','earth','light','dark'][Math.floor(rng() * 6)]
+  const enemyElem = ['fire','water','earth','air','thunder','light','dark'][Math.floor(rng() * 7)]
   log.push(`${h.name} desafia ${e.name}!`)
   const heroFirst = h.destreza >= e.destreza
   let turn = 1

@@ -280,14 +280,6 @@ const TitlesManager: React.FC = () => {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-3xl font-bold text-amber-400">Gerenciar Títulos</h2>
-          <button
-            onClick={handleGenerateAITitle}
-            disabled={generating || !selectedHero}
-            className={`px-4 py-2 rounded-md font-medium transition-colors ${generating ? 'bg-gray-700 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-700'}`}
-            title="Gerar título personalizado por IA"
-          >
-            {generating ? 'Gerando…' : '🤖 Gerar Título IA'}
-          </button>
           <div className="flex items-center space-x-2 ml-4">
             <button
               onClick={suggestBestTitle}

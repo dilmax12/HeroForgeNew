@@ -22,9 +22,12 @@ export class WorldStateManager {
   initializeWorldState(): WorldState {
     return {
       factions: {
-        ordem: { reputation: 0, alliances: ['livre'], enemies: ['sombra'], influence: 50 },
-        sombra: { reputation: 0, alliances: [], enemies: ['ordem'], influence: 30 },
-        livre: { reputation: 0, alliances: ['ordem'], enemies: [], influence: 40 }
+        guarda: { reputation: 0, alliances: ['clero', 'comerciantes'], enemies: ['ladroes', 'cultistas'], influence: 60 },
+        ladroes: { reputation: 0, alliances: ['cultistas'], enemies: ['guarda', 'comerciantes'], influence: 30 },
+        clero: { reputation: 0, alliances: ['guarda'], enemies: ['cultistas'], influence: 50 },
+        cultistas: { reputation: 0, alliances: ['ladroes'], enemies: ['clero', 'guarda'], influence: 25 },
+        comerciantes: { reputation: 0, alliances: ['guarda', 'exploradores'], enemies: ['ladroes'], influence: 45 },
+        exploradores: { reputation: 0, alliances: ['comerciantes'], enemies: [], influence: 40 }
       },
       activeEvents: [],
       npcStatus: {
@@ -101,12 +104,33 @@ export class WorldStateManager {
     const success = rollResult.total >= riskThreshold;
     
     // Determinar efeitos a aplicar
-    const effectsToApply = success ? successEffects : failureEffects;
+    let effectsToApply = success ? successEffects : failureEffects;
+    try {
+      const reputationTargets: Record<string, number> = {};
+      effectsToApply.forEach(e => {
+        if (e.type === 'reputation' && e.target) {
+          reputationTargets[e.target] = (reputationTargets[e.target] || 0) + Math.abs(e.value || 0);
+        }
+      });
+      const topTargets = Object.entries(reputationTargets)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 2)
+        .map(([t]) => t);
+      effectsToApply = effectsToApply.filter(e => e.type !== 'reputation' || !e.target || topTargets.includes(e.target));
+    } catch {}
     const appliedEffects: QuestChoiceEffect[] = [];
 
     // Aplicar efeitos
     const immediateImpact: any = {};
     const longTermImpact: any = {};
+
+    const factionAlias: Record<string, string> = {
+      'Comerciantes': 'Livre',
+      'Guarda da Cidade': 'Ordem',
+      'Bandidos': 'Sombra',
+      'Diplomatas': 'Ordem',
+      'Aventureiros': 'Livre'
+    };
 
     effectsToApply.forEach(effect => {
       // Verificar probabilidade
@@ -125,12 +149,13 @@ export class WorldStateManager {
           break;
         case 'reputation':
           if (effect.target) {
+            const targetName = factionAlias[effect.target] || effect.target;
             if (!immediateImpact.reputation) immediateImpact.reputation = {};
-            immediateImpact.reputation[effect.target] = (effect.value || 0);
+            immediateImpact.reputation[targetName] = (effect.value || 0);
             
             // Atualizar WorldState
-            if (hero.worldState?.factions[effect.target]) {
-              hero.worldState.factions[effect.target].reputation += (effect.value || 0);
+            if (hero.worldState?.factions[targetName]) {
+              hero.worldState.factions[targetName].reputation += (effect.value || 0);
             }
           }
           break;
@@ -153,8 +178,26 @@ export class WorldStateManager {
             longTermImpact.worldEvents.push(effect.target);
           }
           break;
+        case 'spawn_enemy':
+          if (effect.target) {
+            if (!longTermImpact.worldEvents) longTermImpact.worldEvents = [];
+            longTermImpact.worldEvents.push(`spawn_enemy:${effect.target}`);
+            if (hero.worldState) {
+              hero.worldState.activeEvents.push(`spawn_enemy:${effect.target}`);
+            }
+          }
+          break;
       }
     });
+
+    // Evento aleatório de sorte
+    if (Math.random() < 0.15) {
+      if (!longTermImpact.worldEvents) longTermImpact.worldEvents = [];
+      longTermImpact.worldEvents.push('luck_blessing');
+      if (hero.worldState) {
+        hero.worldState.activeEvents.push('luck_blessing');
+      }
+    }
 
     // Criar entrada no log de decisões
     const logEntry: DecisionLogEntry = {
@@ -197,8 +240,16 @@ export class WorldStateManager {
 
     // Verificar reputação com facções
     if (requirements.factionReputation) {
+      const alias: Record<string, string> = {
+        'Aventureiros': 'Livre',
+        'Comerciantes': 'Livre',
+        'Guarda da Cidade': 'Ordem',
+        'Bandidos': 'Sombra',
+        'Diplomatas': 'Ordem'
+      };
       for (const [faction, minRep] of Object.entries(requirements.factionReputation)) {
-        const currentRep = hero.worldState.factions[faction]?.reputation || 0;
+        const key = alias[faction] || faction;
+        const currentRep = hero.worldState.factions[key]?.reputation || 0;
         if (currentRep < (minRep as number)) {
           return false;
         }

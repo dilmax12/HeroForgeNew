@@ -4,7 +4,6 @@ export type DungeonConfig = {
   rewards: { xpPerFloor: number; goldPerFloor: number; rarityIncreasePerFloor: number; streakMultiplierPerFloor: number };
   events: { baseChance: number };
   deathPenalty: { normal: { gold: number; xp: number } };
-  bossSchedule: number[];
 };
 
 export const dungeonConfig: DungeonConfig = {
@@ -12,12 +11,15 @@ export const dungeonConfig: DungeonConfig = {
   scaling: { hpPerFloor: 0.12, atkPerFloor: 0.1, defPerFloor: 0.08, bossMultiplier: 1.8, affixBonus: 0.2 },
   rewards: { xpPerFloor: 6, goldPerFloor: 2, rarityIncreasePerFloor: 0.6, streakMultiplierPerFloor: 0.07 },
   events: { baseChance: 0.1 },
-  deathPenalty: { normal: { gold: 0.5, xp: 0.3 } },
-  bossSchedule: [10, 20, 30, 40]
+  deathPenalty: { normal: { gold: 0.5, xp: 0.3 } }
 };
 
 export function isBossFloor(floor: number): boolean {
-  return dungeonConfig.bossSchedule.includes(floor);
+  return floor > 0 && floor % 10 === 0;
+}
+
+export function isMiniBossFloor(floor: number): boolean {
+  return floor > 0 && floor % 5 === 0 && floor % 10 !== 0;
 }
 
 export function computeRewardMultiplier(streak: number) {

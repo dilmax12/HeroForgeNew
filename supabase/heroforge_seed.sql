@@ -50,3 +50,20 @@ UNION ALL
 SELECT (SELECT id FROM npc WHERE name = 'Guild Master'), (SELECT id FROM loc WHERE name = 'Capital of Altharion')
 UNION ALL
 SELECT (SELECT id FROM npc WHERE name = 'Wandering Merchant'), (SELECT id FROM loc WHERE name = 'Greenwood Forest');
+
+insert into relics (id, name, rarity, effect, description)
+values ('reliquia_pedra_eternidade','Pedra da Eternidade','epic','{"global_crit_bonus":0.1}','Aumenta o crítico global em 10%');
+
+insert into global_events (id, name, type, modifiers, starts_at, ends_at)
+values ('evento_lua_sangue','Lua de Sangue','world','{"enemy_damage_multiplier":1.2,"rare_item_chance":0.2}', now(), now() + interval '2 hours');
+
+insert into weekly_mutators (id, name, description, modifiers, week_start, week_end, active)
+values ('mutador_inimigos_fogo','Todos os inimigos são de fogo','Converte inimigos para elemento fogo','{"enemy_element":"fire"}', date_trunc('week', now()), date_trunc('week', now()) + interval '7 days', true);
+
+insert into minibosses (id, name, element, level, stats, rewards)
+values ('mb_enxame_elemental','Enxame Elemental','fire',12,'{"hp":1200,"attack":75,"abilities":["swarm","ignite"]}','{"xp":500,"gold":150,"rare_item_chance":0.15}');
+
+insert into location_minibosses (location_id, miniboss_id, spawn_chance)
+values ((select id from locations where name = 'Greenwood Forest'),'mb_enxame_elemental',0.08);
+
+update missions set night_only = true, danger_multiplier = 1.3, reward_multiplier = 1.5 where id = 'mis_forest_hunt';

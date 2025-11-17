@@ -1,4 +1,4 @@
-import { HeroAttributes, HeroClass, Alignment } from '../types/hero'
+import { HeroAttributes, HeroClass } from '../types/hero'
 
 export interface ClassMeta {
   id: HeroClass
@@ -8,7 +8,7 @@ export interface ClassMeta {
   baseAttributes: HeroAttributes
   advantages: string[]
   disadvantages: string[]
-  requirements?: (input: { alignment: Alignment; attributes: HeroAttributes; race: string }) => { ok: boolean; message?: string }
+  requirements?: (input: { attributes: HeroAttributes; race: string }) => { ok: boolean; message?: string }
   suggestedRaces?: string[]
 }
 
@@ -59,10 +59,6 @@ export const CLASS_METADATA: Record<HeroClass, ClassMeta> = {
     baseAttributes: { forca: 4, destreza: 2, constituicao: 4, inteligencia: 2, sabedoria: 4, carisma: 3 },
     advantages: ['Defesa e controle', 'Suporte luminoso'],
     disadvantages: ['Menos flexível ofensivamente'],
-    requirements: ({ alignment }) => {
-      if (!alignment.includes('leal')) return { ok: false, message: 'Paladino requer alinhamento leal.' }
-      return { ok: true }
-    },
     suggestedRaces: ['humano', 'anao']
   },
   arqueiro: {
@@ -139,10 +135,6 @@ export const CLASS_METADATA: Record<HeroClass, ClassMeta> = {
     baseAttributes: { forca: 1, destreza: 2, constituicao: 2, inteligencia: 5, sabedoria: 3, carisma: 3 },
     advantages: ['Debuffs fortes', 'Invocações'],
     disadvantages: ['Frágil, dependente de mana'],
-    requirements: ({ alignment }) => {
-      if (!alignment.includes('mal')) return { ok: false, message: 'Feiticeiro requer alinhamento inclinado ao mal.' }
-      return { ok: true }
-    },
     suggestedRaces: ['humano', 'orc']
   }
 }

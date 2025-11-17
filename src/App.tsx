@@ -7,7 +7,6 @@ const HeroDetailLazy = React.lazy(() => import('./components/HeroDetail'))
 // import TestComponent from './components/TestComponent'
 import HeroProgression from './components/HeroProgression'
 import GuildSystem from './components/GuildSystem'
-import PartySystem from './components/PartySystem'
 import AdventurersGuildHub from './components/AdventurersGuildHub'
 import QuestBoard from './components/QuestBoard'
 import TitlesManager from './components/TitlesManager'
@@ -45,10 +44,8 @@ const AdminDashboardLazy = React.lazy(() => import('./components/AdminDashboard'
 import IntroCinematic from './components/IntroCinematic'
 import PlayerRegistration from './components/PlayerRegistration'
 import Tavern from './components/Tavern'
-import Messenger from './components/Messenger'
 import HeroForge from './components/HeroForge'
 import PremiumCenter from './components/PremiumCenterSimple'
-import DuelArena from './components/DuelArena'
 import SocialEventsPage from './components/SocialEventsPage'
 import EventDetailPage from './components/EventDetailPage'
 import OrganizerDashboard from './components/OrganizerDashboard'
@@ -101,26 +98,6 @@ function GuildSystemWrapper() {
   return <GuildSystem hero={selectedHero} />;
 }
 
-// Componente wrapper para PartySystem que precisa do herói selecionado
-function PartySystemWrapper() {
-  const { getSelectedHero } = useHeroStore();
-  const selectedHero = getSelectedHero();
-  
-  if (!selectedHero) {
-    return (
-      <div className="max-w-4xl mx-auto p-6 text-center">
-        <div className="text-6xl mb-4">👥</div>
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
-        <p className="text-gray-600 mb-6">Selecione um herói para acessar o sistema de party.</p>
-        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
-          Voltar à Lista de Heróis
-        </Link>
-      </div>
-    );
-  }
-  
-  return <PartySystem hero={selectedHero} />;
-}
 
 // Componente wrapper para DailyGoals que precisa do herói selecionado
 function DailyGoalsWrapper() {
@@ -389,17 +366,37 @@ function App() {
   useEffect(() => {
     try {
       startPlaytimeHeartbeat(1);
+      let localTimer: any = null;
+      const getSelectedHero = useHeroStore.getState().getSelectedHero;
+      const updateHero = useHeroStore.getState().updateHero;
+      const startLocal = () => {
+        if (localTimer) { try { clearInterval(localTimer) } catch {} localTimer = null }
+        localTimer = setInterval(() => {
+          const h = getSelectedHero();
+          if (!h) return;
+          const stats = { ...(h.stats || {}) } as any;
+          const total = Math.max(0, (stats.totalPlayTime || 0)) + 1;
+          stats.totalPlayTime = total;
+          stats.lastActiveAt = new Date().toISOString();
+          updateHero(h.id, { stats });
+        }, 60000);
+      };
+      const stopLocal = () => { if (localTimer) { try { clearInterval(localTimer) } catch {} localTimer = null } };
+      startLocal();
       const onVis = () => {
         if (document.hidden) {
           stopPlaytimeHeartbeat();
+          stopLocal();
         } else {
           startPlaytimeHeartbeat(1);
+          startLocal();
         }
       };
       document.addEventListener('visibilitychange', onVis);
       return () => {
         document.removeEventListener('visibilitychange', onVis);
         stopPlaytimeHeartbeat();
+        stopLocal();
       };
     } catch {}
   }, []);
@@ -443,12 +440,8 @@ function App() {
           <Route path="hero/:id" element={<Suspense fallback={<div className="p-6">Carregando herói…</div>}><HeroDetailLazy /></Suspense>} />
           <Route path="progression" element={<HeroProgressionWrapper />} />
           <Route path="evolution" element={<EvolutionPanelWrapper />} />
-          {/* Party agora aponta para PartySystem (inclui Lobby Online) */}
-        <Route path="party" element={<PartySystemWrapper />} />
           {/* GuildSystem disponível em rota separada caso necessário */}
         <Route path="guild" element={<GuildSystemWrapper />} />
-          {/* Rota dedicada para Lobby/PartySystem (UI com aba "Lobby Online") */}
-        <Route path="party-lobby" element={<PartySystemWrapper />} />
           {/* Hub da Guilda dos Aventureiros */}
           <Route path="guild-hub" element={<AdventurersGuildHub />} />
           <Route path="missions" element={<Suspense fallback={<div className="p-6">Carregando...</div>}><MissionsHubLazy /></Suspense>} />
@@ -476,15 +469,15 @@ function App() {
           <Route path="ai-avatar" element={<AIAvatarGeneratorWrapper />} />
           <Route path="ai-missions" element={<DynamicMissionsPanelWrapper />} />
           <Route path="ai-recommendations" element={<AIRecommendationsPanelWrapper />} />
-          {/* Taverna comunitária e murais */}
+          {/* Taverna (single-player) */}
           <Route path="tavern" element={<Tavern />} />
-          {/* Cartas e Mensageiros */}
-          <Route path="messenger" element={<Messenger />} />
           {/* Rotas de missões narrativas removidas */}
           <Route path="hero-journal" element={<HeroJournalWrapper />} />
           <Route path="quick-mission" element={<QuickMissionWrapper />} />
           <Route path="admin" element={<Suspense fallback={<div className="p-6">Carregando...</div>}><AdminDashboardLazy /></Suspense>} />
           <Route path="shop" element={<Shop />} />
+          <Route path="premium-center" element={<PremiumCenter />} />
+          <Route path="premium" element={<PremiumCenter />} />
           <Route path="premium" element={<PremiumCenter />} />
           {/* Estábulo com sub-rotas para Mascotes e Montarias */}
           <Route path="stable" element={<StableHub />}>
@@ -492,7 +485,7 @@ function App() {
             <Route path="pets" element={<ErrorBoundary fallback={<div className="p-6 rounded bg-red-900/40 border border-red-700 text-red-200">Falha ao carregar Mascotes</div>}><PetsPanel /></ErrorBoundary>} />
             <Route path="mounts" element={<MountsPanel />} />
           </Route>
-          <Route path="duel-arena" element={<DuelArena />} />
+          {/* Arena de Duelos removida para modo single-player */}
           <Route path="inventory" element={<Inventory />} />
           <Route path="hero-forge" element={<HeroForge />} />
           <Route path="training" element={<Training />} />

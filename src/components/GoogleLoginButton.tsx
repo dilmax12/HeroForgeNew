@@ -10,6 +10,9 @@ declare global {
 
 const GoogleLoginButton: React.FC = () => {
   const btnRef = useRef<HTMLDivElement>(null);
+  const gsiInitDoneRef = useRef(false);
+  const gsiScriptAddedRef = useRef(false);
+  const gsiButtonRenderedRef = useRef(false);
   const login = useAuthStore((s) => s.login);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
@@ -17,25 +20,32 @@ const GoogleLoginButton: React.FC = () => {
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    if (!clientId || isAuthenticated) return;
+    const validClientId = clientId && clientId.includes('.apps.googleusercontent.com');
+    if (!validClientId || isAuthenticated) return;
     const init = () => {
       if (!window.google || !btnRef.current) return;
       try {
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: async (resp: any) => {
-            try {
-              setLoading(true);
-              const u = await loginWithGoogleCredential(resp.credential);
-              login(u, resp.credential);
-              try { notificationBus.emit({ type: 'achievement', title: 'Login Google', message: 'Autenticado com sucesso', icon: '✅', duration: 2500 }); } catch {}
-            } catch (err) {
-              console.error('Login Google falhou', err);
-              try { notificationBus.emit({ type: 'error', title: 'Falha no Login Google', message: 'Verifique configuração e tente novamente', duration: 3500 }); } catch {}
-            } finally { setLoading(false); }
-          }
-        });
-        window.google.accounts.id.renderButton(btnRef.current, { theme: 'outline', size: 'large' });
+        if (!gsiInitDoneRef.current) {
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: async (resp: any) => {
+              try {
+                setLoading(true);
+                const u = await loginWithGoogleCredential(resp.credential);
+                login(u, resp.credential);
+                try { notificationBus.emit({ type: 'achievement', title: 'Login Google', message: 'Autenticado com sucesso', icon: '✅', duration: 2500 }); } catch {}
+              } catch (err) {
+                console.error('Login Google falhou', err);
+                try { notificationBus.emit({ type: 'error', title: 'Falha no Login Google', message: 'Verifique configuração e tente novamente', duration: 3500 }); } catch {}
+              } finally { setLoading(false); }
+            }
+          });
+          gsiInitDoneRef.current = true;
+        }
+        if (!gsiButtonRenderedRef.current && btnRef.current.childElementCount === 0) {
+          window.google.accounts.id.renderButton(btnRef.current, { theme: 'outline', size: 'large' });
+          gsiButtonRenderedRef.current = true;
+        }
       } catch (err) {
         console.error('Erro inicializando Google Identity', err);
       }
@@ -43,15 +53,18 @@ const GoogleLoginButton: React.FC = () => {
     if (window.google) {
       init();
     } else {
-      const s = document.createElement('script');
-      s.src = 'https://accounts.google.com/gsi/client';
-      s.async = true;
-      s.defer = true;
-      s.onload = init;
-      s.onerror = () => {};
-      document.head.appendChild(s);
+      if (!gsiScriptAddedRef.current && !document.querySelector('script[src="https://accounts.google.com/gsi/client"]')) {
+        const s = document.createElement('script');
+        s.src = 'https://accounts.google.com/gsi/client';
+        s.async = true;
+        s.defer = true;
+        s.onload = init;
+        s.onerror = () => {};
+        document.head.appendChild(s);
+        gsiScriptAddedRef.current = true;
+      }
     }
-  }, [login, isAuthenticated]);
+  }, [isAuthenticated]);
 
   if (isAuthenticated) {
     return (
@@ -65,7 +78,8 @@ const GoogleLoginButton: React.FC = () => {
   }
 
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-  if (!clientId) {
+  const validClientId = clientId && clientId.includes('.apps.googleusercontent.com');
+  if (!validClientId) {
     return <span className="text-xs text-red-300">Google Login não configurado</span>;
   }
 

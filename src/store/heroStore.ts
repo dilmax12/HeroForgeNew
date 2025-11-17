@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { Hero, HeroCreationData, HeroAttributes, DerivedAttributes, Quest, Achievement, Guild, CombatResult, Title } from '../types/hero';
-import type { HeroInventory, Party } from '../types/hero';
+import type { HeroInventory } from '../types/hero';
 import type { ReferralInvite } from '../types/hero';
 import type { EnhancedQuestChoice } from '../types/hero';
 import { generateQuestBoard, QUEST_ACHIEVEMENTS } from '../utils/quests';
@@ -23,22 +23,24 @@ import { supabase } from '../lib/supabaseClient';
 import { saveHero } from '../services/heroesService';
 import { notificationBus } from '../components/NotificationSystem';
 import { rankSystem } from '../utils/rankSystem';
+import { RANK_XP_BONUS_PERCENT } from '../types/ranks';
 import { computeSynergyBonus } from '../utils/synergy';
 import { getNewSkillsForLevel } from '../utils/skillSystem';
 import { updateProgressDelta } from '../services/progressService';
 import { worldStateManager } from '../utils/worldState';
+import { runTick as runNPCTick, seedPersonality } from '../utils/npcAI';
+import { playAmbient, playVoiceCue } from '../utils/audio';
 import { getGameSettings, useGameSettingsStore } from './gameSettingsStore';
 import { getMonetization } from './monetizationStore';
 import { generateMysteryEgg, identifyEgg as utilIdentifyEgg, incubateEgg, canHatch, markReadyToHatch, hatchPet, accelerateIncubation, EGG_IDENTIFY_COST, INCUBATION_MS, addPetXP } from '../utils/pets';
 import { ATTRIBUTE_CONSTRAINTS, getMaxAttributeForRank, getTotalAttributePointsCapForRank } from '../utils/attributeSystem';
 import { ATTRIBUTE_POINTS_PER_LEVEL, checkLevelUp } from '../utils/progression';
 
-interface HeroState {
+  interface HeroState {
   heroes: Hero[];
   selectedHeroId: string | null;
   availableQuests: Quest[];
   guilds: Guild[];
-  parties: Party[];
   referralInvites: ReferralInvite[];
   dmOverrideLine?: string;
   // Mascotes e Ovos
@@ -64,6 +66,8 @@ interface HeroState {
   refreshQuests: (heroLevel?: number) => void;
   acceptQuest: (heroId: string, questId: string) => boolean;
   completeQuest: (heroId: string, questId: string, autoResolve?: boolean) => CombatResult | null;
+  abandonQuest: (heroId: string, questId: string) => boolean;
+  clearActiveQuests: (heroId: string) => boolean;
   
   // === SISTEMA DE PROGRESSÃO ===
   gainXP: (heroId: string, xp: number) => void;
@@ -162,17 +166,6 @@ interface HeroState {
   getHeroQuests: (heroId: string) => Quest[];
   getHeroGuild: (heroId: string) => Guild | undefined;
 
-  // === SISTEMA DE PARTY ===
-  createParty: (heroId: string, name: string) => Party | null;
-  joinParty: (heroId: string, partyId: string) => boolean;
-  leaveParty: (heroId: string) => boolean;
-  getHeroParty: (heroId: string) => Party | undefined;
-  inviteHeroToParty: (partyId: string, inviterId: string, targetHeroId: string) => boolean;
-  acceptPartyInvite: (heroId: string, partyId: string) => boolean;
-  transferPartyLeadership: (partyId: string, actorId: string, newLeaderId: string) => boolean;
-  togglePartySharedLoot: (partyId: string, actorId: string, value?: boolean) => boolean;
-  togglePartySharedXP: (partyId: string, actorId: string, value?: boolean) => boolean;
-  removeMemberFromParty: (partyId: string, actorId: string, targetHeroId: string) => boolean;
 
   // === SISTEMA DE CONVITES ===
   createReferralInvite: (inviterHeroId: string) => ReferralInvite | null;
@@ -189,6 +182,11 @@ interface HeroState {
   // === NARRATIVA ===
   setDMOverrideLine: (line?: string) => void;
   appendJourneyNarrativeForSelected: (summary: string, title?: string) => boolean;
+
+  createNPCAdventurer: (overrides?: Partial<HeroCreationData & { name: string }>) => Hero;
+  ensureNPCAdventurersSeedExists: (targetCount?: number) => void;
+  startNPCSimulation: () => void;
+  stopNPCSimulation: () => void;
 }
 
 // === VALIDAÇÃO E CÁLCULOS ===
@@ -554,8 +552,8 @@ export const useHeroStore = create<HeroState>()(
       selectedHeroId: null,
       availableQuests: [],
       guilds: [],
-      parties: [],
       referralInvites: [],
+      
       dmOverrideLine: undefined,
       
       // === AÇÕES BÁSICAS ===
@@ -644,9 +642,12 @@ export const useHeroStore = create<HeroState>()(
           activeQuests: [],
           completedQuests: [],
           reputationFactions: [
-            { id: 'ordem', name: 'Ordem', reputation: 0, level: 'neutral' },
-            { id: 'sombra', name: 'Sombra', reputation: 0, level: 'neutral' },
-            { id: 'livre', name: 'Livre', reputation: 0, level: 'neutral' }
+            { id: 'guarda', name: 'Guarda da Cidade', reputation: 0, level: 'neutral' },
+            { id: 'ladroes', name: 'Ladrões', reputation: 0, level: 'neutral' },
+            { id: 'clero', name: 'Clero', reputation: 0, level: 'neutral' },
+            { id: 'cultistas', name: 'Cultistas', reputation: 0, level: 'neutral' },
+            { id: 'comerciantes', name: 'Comerciantes', reputation: 0, level: 'neutral' },
+            { id: 'exploradores', name: 'Exploradores', reputation: 0, level: 'neutral' }
           ],
           dailyGoals: [],
           achievements: TITLE_ACHIEVEMENTS.map(a => ({ ...a })),
@@ -657,7 +658,8 @@ export const useHeroStore = create<HeroState>()(
             lastActiveAt: timestamp,
             trainingsToday: 0,
             lastTrainingDate: timestamp,
-            trainingDailyLimit: 5
+            trainingDailyLimit: 10,
+            trainingAttemptsByStatus: {}
           },
           createdAt: timestamp,
           updatedAt: timestamp
@@ -675,6 +677,14 @@ export const useHeroStore = create<HeroState>()(
           max: 100,
           lastRecovery: timestamp,
           recoveryRate: 5
+        };
+        newHero.dungeon = {
+          stamina: { current: 50, max: 50, lastRecovery: timestamp, recoveryRate: 5 },
+          maxFloor: 0,
+          eternalBuffs: [],
+          rareItemBonusPercent: 0,
+          specialSkills: [],
+          permanentBonusAttributes: {}
         };
         
         set(state => ({
@@ -695,6 +705,142 @@ export const useHeroStore = create<HeroState>()(
         get().refreshQuests(1);
         
         return newHero;
+      },
+
+      createNPCAdventurer: (overrides) => {
+        const races: import('../types/hero').HeroRace[] = ['humano','elfo','anao','orc','halfling'];
+        const classes: import('../types/hero').HeroClass[] = ['guerreiro','mago','ladino','clerigo','patrulheiro','paladino','arqueiro','bardo','monge','assassino','barbaro','lanceiro','druida','feiticeiro'];
+        const elements: import('../types/hero').Element[] = ['fire','water','earth','air','thunder','light','dark','physical'];
+        const names = ['Alenna','Borin','Calyra','Darius','Eldric','Fiora','Garruk','Hellan','Ilyon','Jorvik','Kaelis','Lyra','Morth','Nerion','Orla','Peren','Quen','Ragna','Sylas','Thorin'];
+        const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random()*arr.length)];
+        let attrs: HeroAttributes = { forca: 3, destreza: 3, constituicao: 3, inteligencia: 3, sabedoria: 3, carisma: 3 };
+        if (overrides?.attributes) {
+          attrs = { ...attrs, ...overrides.attributes } as HeroAttributes;
+        }
+        const heroData: HeroCreationData = {
+          name: overrides?.name || pick(names),
+          race: overrides?.race || pick(races),
+          class: overrides?.class || pick(classes),
+          attributes: attrs,
+          element: overrides?.element || pick(elements),
+          skills: overrides?.skills || []
+        } as HeroCreationData;
+        const h = get().createHero(heroData);
+        seedPersonality(h);
+        get().updateHero(h.id, { origin: 'npc', controlledByAI: true, npcPersonality: h.npcPersonality, npcRoutine: h.npcRoutine, npcMemory: h.npcMemory, socialRelations: {} });
+        return get().heroes.find(x => x.id === h.id)!;
+      },
+
+      ensureNPCAdventurersSeedExists: (targetCount = 5) => {
+        const current = get().heroes.filter(h => h.origin === 'npc').length;
+        const needed = Math.max(0, targetCount - current);
+        for (let i = 0; i < needed; i++) { get().createNPCAdventurer({}); }
+      },
+      startNPCSimulation: () => {
+        const anySelf = useHeroStore as unknown as { _npcTimer?: any };
+        if (anySelf._npcTimer) return;
+        const tick = () => {
+          const player = get().getSelectedHero();
+          const npcs = get().heroes.filter(h => h.origin === 'npc');
+          runNPCTick(player, npcs, (n) => notificationBus.emit(n));
+          playAmbient(0.02);
+          if (Math.random() < 0.4) playVoiceCue(420 + Math.floor(Math.random()*80), 180);
+          npcs.forEach(n => {
+            const compBonus = computeCompanionBonus(n);
+            const derived = calculateDerivedAttributes(n.attributes, n.class, n.progression.level, n.inventory, n.activeTitle, compBonus);
+            get().updateHero(n.id, { attributes: n.attributes, progression: n.progression, stats: n.stats, completedQuests: n.completedQuests, derivedAttributes: derived, socialRelations: n.socialRelations, npcMemory: n.npcMemory });
+          });
+          if (player) {
+            npcs.forEach(n => {
+              const wantsParty = n.npcPersonality?.archetype === 'colaborativo' && n.npcPersonality?.prefersParty;
+              if (!wantsParty) return;
+              const pParty = get().getHeroParty(player.id);
+              const nParty = get().getHeroParty(n.id);
+              if (pParty && (pParty.members.includes(n.id) || (pParty.invites || []).includes(n.id))) return;
+              if (!nParty) {
+                const created = get().createParty(n.id, `Companhia de ${n.name}`);
+                if (!created) return;
+                get().inviteHeroToParty(created.id, n.id, player.id);
+                notificationBus.emit({ type: 'quest', title: 'Convite de Party', message: `${n.name} convidou você para ${created.name}`, icon: '👥', duration: 3000 });
+              } else {
+                if (!nParty.members.includes(player.id) && !(nParty.invites || []).includes(player.id)) {
+                  get().inviteHeroToParty(nParty.id, n.id, player.id);
+                  notificationBus.emit({ type: 'quest', title: 'Convite de Party', message: `${n.name} te convidou para ${nParty.name}`, icon: '👥', duration: 3000 });
+                }
+              }
+            });
+          }
+          const heroes = get().heroes;
+          const lbs = generateAllLeaderboards(heroes);
+          trackMetric.custom?.('npc_tick', { npcs: npcs.length, ts: Date.now() });
+        };
+        anySelf._npcTimer = setInterval(tick, 10000);
+      },
+      stopNPCSimulation: () => {
+        const anySelf = useHeroStore as unknown as { _npcTimer?: any };
+        if (anySelf._npcTimer) {
+          clearInterval(anySelf._npcTimer);
+          anySelf._npcTimer = undefined;
+        }
+      },
+
+      // === PARTY: implementação básica ===
+      getHeroParty: (heroId: string) => {
+        const state = get();
+        return state.parties.find(p => Array.isArray(p.members) && p.members.includes(heroId));
+      },
+
+      createParty: (heroId: string, name: string) => {
+        const state = get();
+        const existing = state.parties.find(p => Array.isArray(p.members) && p.members.includes(heroId));
+        if (existing) return existing;
+        const party = {
+          id: `party-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+          name: String(name).slice(0, 40),
+          leaderId: heroId,
+          members: [heroId],
+          invites: [],
+          createdAt: new Date().toISOString(),
+          sharedLoot: true,
+          sharedXP: true
+        } as Party;
+        set(s => ({ parties: [...s.parties, party] }));
+        return party;
+      },
+
+      inviteHeroToParty: (partyId: string, inviterId: string, targetHeroId: string) => {
+        const state = get();
+        const party = state.parties.find(p => p.id === partyId);
+        if (!party) return false;
+        if (party.leaderId !== inviterId && !party.members.includes(inviterId)) return false;
+        party.invites = Array.isArray(party.invites) ? party.invites : [];
+        if (!party.invites.includes(targetHeroId) && !party.members.includes(targetHeroId)) {
+          party.invites.push(targetHeroId);
+          set(s => ({ parties: s.parties.map(p => p.id === partyId ? party : p) }));
+          return true;
+        }
+        return false;
+      },
+
+      acceptPartyInvite: (heroId: string, partyId: string) => {
+        const state = get();
+        const party = state.parties.find(p => p.id === partyId);
+        if (!party) return false;
+        party.invites = (party.invites || []).filter(id => id !== heroId);
+        if (!party.members.includes(heroId)) party.members.push(heroId);
+        set(s => ({ parties: s.parties.map(p => p.id === partyId ? party : p) }));
+        return true;
+      },
+
+      leaveParty: (heroId: string) => {
+        const state = get();
+        const party = state.parties.find(p => Array.isArray(p.members) && p.members.includes(heroId));
+        if (!party) return false;
+        party.members = party.members.filter(id => id !== heroId);
+        if (party.leaderId === heroId) party.leaderId = party.members[0] || party.leaderId;
+        const parties = party.members.length ? state.parties.map(p => p.id === party.id ? party : p) : state.parties.filter(p => p.id !== party.id);
+        set({ parties });
+        return true;
       },
 
       // === SISTEMA DE OVOS E MASCOTES ===
@@ -1766,6 +1912,8 @@ export const useHeroStore = create<HeroState>()(
       },
       
       selectHero: (id) => {
+        const hero = get().heroes.find(h => h.id === id);
+        if (!hero || hero.origin === 'npc') return;
         set({ selectedHeroId: id });
       },
 
@@ -1814,11 +1962,19 @@ export const useHeroStore = create<HeroState>()(
         }
         
         console.log('🔄 Gerando missões - Herói Level:', heroLevel, 'Guilda Level:', guildLevel);
-        const newQuests = generateQuestBoard(heroLevel, guildLevel);
+        const heroRank = selectedHero ? rankSystem.calculateRank(selectedHero) : 'F';
+        const newQuests = generateQuestBoard(heroLevel, guildLevel, heroRank as any);
 
         // Manter missões sticky da lista anterior (evitar desaparecer em refresh)
         const previousSticky = state.availableQuests.filter(q => q.sticky);
         const stickyIds = new Set(previousSticky.map(q => q.id));
+
+        // Preservar missões ATIVAS dos heróis durante o refresh
+        // Coleta todos os IDs de missões ativas para evitar que sumam da aba "Ativas"
+        const activeIds = new Set<string>(
+          state.heroes.flatMap(h => h.activeQuests || [])
+        );
+        const carryOverActive = state.availableQuests.filter(q => activeIds.has(q.id));
 
         // Inserir Missão de Desafio da Guilda para Promoção de Rank, se elegível
         if (selectedHero) {
@@ -1835,7 +1991,7 @@ export const useHeroStore = create<HeroState>()(
               type: 'historia',
               difficulty: 'epica',
               levelRequirement: Math.max(1, selectedHero.progression.level),
-              timeLimit: 3,
+              timeLimit: Math.floor(Math.random() * 61) + 120,
               enemies: [{ type: 'Campeão da Guilda', count: 1, level: selectedHero.progression.level }],
               rewards: { gold: 200, xp: 150, items: [{ id: 'pergaminho-xp', qty: 1 }] },
               repeatable: false,
@@ -1853,10 +2009,18 @@ export const useHeroStore = create<HeroState>()(
           }
         });
 
+        // Reaplicar missões ativas anteriores (não-sticky) para manter detalhes visíveis
+        const existingIds = new Set(newQuests.map(q => q.id));
+        carryOverActive.forEach(aq => {
+          if (!existingIds.has(aq.id)) {
+            newQuests.push(aq);
+          }
+        });
+
         console.log('📋 Missões geradas:', newQuests.length, 'total,', newQuests.filter(q => q.isGuildQuest).length, 'de guilda');
         set({ availableQuests: newQuests });
       },
-      
+
       acceptQuest: (heroId: string, questId: string) => {
         console.log('🔍 acceptQuest chamada:', { heroId, questId });
         const state = get();
@@ -1878,6 +2042,11 @@ export const useHeroStore = create<HeroState>()(
           console.log('ℹ️ Missão já ativa:', questId);
           try { notificationBus.emit({ type: 'quest', title: 'Missão já ativa', message: `${quest.title}`, duration: 2000, icon: '🐾' }); } catch {}
           return true;
+        }
+        if ((hero.completedQuests || []).includes(questId)) {
+          console.log('ℹ️ Missão já concluída anteriormente:', questId);
+          try { notificationBus.emit({ type: 'quest', title: 'Já concluída', message: `${quest.title}`, duration: 2000, icon: '✅' }); } catch {}
+          return false;
         }
         if (hero.activeQuests.length >= 3) {
           console.log('❌ Máximo de missões ativas atingido:', hero.activeQuests.length);
@@ -1902,7 +2071,7 @@ export const useHeroStore = create<HeroState>()(
         console.log('📋 Missão encontrada:', quest ? `${quest.title} (Level ${quest.levelRequirement})` : 'Não encontrada');
         console.log('🔍 Missão está ativa?', hero?.activeQuests.includes(questId));
         
-        if (!hero || !quest || !hero.activeQuests.includes(questId)) {
+        if (!hero || !quest) {
           console.log('❌ Falha na validação inicial');
           return null;
         }
@@ -1939,11 +2108,11 @@ export const useHeroStore = create<HeroState>()(
                 get().gainGold(heroId, -quest.failurePenalty.gold);
               }
               if (quest.failurePenalty.reputation) {
-                const factionFail = quest.isGuildQuest ? 'Ordem' : (quest.type === 'exploracao' ? 'Livre' : 'Ordem');
+                const factionFail = quest.isGuildQuest ? 'Guarda da Cidade' : (quest.type === 'exploracao' ? 'Exploradores' : 'Guarda da Cidade');
                 state.updateReputation(factionFail, quest.failurePenalty.reputation);
               }
             }
-            return combatResult;
+            // Continua fluxo de conclusão com recompensas reduzidas
           }
         }
         
@@ -2042,7 +2211,7 @@ export const useHeroStore = create<HeroState>()(
         if (quest.isGuildQuest) {
           const repByDifficulty: Record<string, number> = { 'facil': 5, 'medio': 8, 'dificil': 12, 'epica': 20 };
           const change = repByDifficulty[quest.difficulty] ?? 6;
-          state.updateReputation('Ordem', change);
+          state.updateReputation('Guarda da Cidade', change);
           try {
             const curStats = hero.stats || ({} as any);
             const compDone = (curStats.companionQuestsCompleted || 0) + 1;
@@ -2053,8 +2222,12 @@ export const useHeroStore = create<HeroState>()(
           inferred.forEach(({ factionName, change }) => state.updateReputation(factionName, change));
         }
         
-        // Atualizar estatísticas
+        // Atualizar estatísticas e remover missão ativa (com limpeza de missionRunState)
         const updatedHero = get().heroes.find(h => h.id === heroId)!;
+        const ms = { ...(updatedHero.stats as any) };
+        if (ms.missionRunState) {
+          try { delete ms.missionRunState[String(questId)]; } catch {}
+        }
         get().updateHero(heroId, {
           activeQuests: updatedHero.activeQuests.filter(id => id !== questId),
           completedQuests: [...updatedHero.completedQuests, questId],
@@ -2062,7 +2235,8 @@ export const useHeroStore = create<HeroState>()(
             ...updatedHero.stats,
             questsCompleted: updatedHero.stats.questsCompleted + 1,
             totalCombats: updatedHero.stats.totalCombats + (quest.enemies?.length || 0),
-            lastActiveAt: new Date().toISOString()
+            lastActiveAt: new Date().toISOString(),
+            missionRunState: ms.missionRunState
           }
         });
 
@@ -2147,6 +2321,31 @@ export const useHeroStore = create<HeroState>()(
         console.log('✅ completeQuest finalizada com sucesso!');
         return combatResult;
       },
+
+      abandonQuest: (heroId: string, questId: string) => {
+        try {
+          const state = get();
+          const hero = state.heroes.find(h => h.id === heroId);
+          if (!hero) return false;
+          if (!hero.activeQuests.includes(questId)) return false;
+          const nextActive = hero.activeQuests.filter(id => id !== questId);
+          get().updateHero(heroId, { activeQuests: nextActive });
+          try { notificationBus.emit({ type: 'quest', title: 'Missão abandonada', message: `${questId}`, duration: 2000, icon: '🗑️' }); } catch {}
+          return true;
+        } catch { return false; }
+      },
+
+      clearActiveQuests: (heroId: string) => {
+        try {
+          const state = get();
+          const hero = state.heroes.find(h => h.id === heroId);
+          if (!hero) return false;
+          if (!(hero.activeQuests || []).length) return true;
+          get().updateHero(heroId, { activeQuests: [] });
+          try { notificationBus.emit({ type: 'quest', title: 'Missões removidas', message: 'Limpeza de missões ativas concluída', duration: 2500, icon: '🧹' }); } catch {}
+          return true;
+        } catch { return false; }
+      },
       
       // Fluxo de escolhas narrativas removido
 
@@ -2159,7 +2358,9 @@ export const useHeroStore = create<HeroState>()(
         const gs = getGameSettings();
         const buffPercent = Math.max(0, Math.min(100, gs.guildXpBuffPercent || 0));
         const synergyPercent = computeSynergyBonus(hero) * 100;
-        const effectiveXP = Math.floor(xp * (1 + (buffPercent + synergyPercent) / 100));
+        const currentRank = rankSystem.calculateRank(hero);
+        const rankPercent = RANK_XP_BONUS_PERCENT[currentRank] || 0;
+        const effectiveXP = Math.floor(xp * (1 + (buffPercent + synergyPercent + rankPercent) / 100));
 
         const newXP = Math.max(0, hero.progression.xp + effectiveXP);
         const newLevel = checkLevelUp(newXP, hero.progression.level);
@@ -3531,25 +3732,6 @@ export const useHeroStore = create<HeroState>()(
         return true;
       },
 
-      // === Alianças de Party ===
-      requestPartyAlliance: (partyId: string, guildId: string, requesterHeroId: string) => {
-        const state = get();
-        const guild = state.guilds.find(g => g.id === guildId);
-        const party = state.parties.find(p => p.id === partyId);
-        if (!guild || !party) return false;
-        const request = {
-          id: uuidv4(),
-          partyId,
-          partyName: party.name,
-          requestedBy: requesterHeroId,
-          status: 'pending' as const,
-          requestedAt: new Date().toISOString()
-        };
-        set(state => ({
-          guilds: state.guilds.map(g => g.id === guildId ? { ...g, pendingAlliances: [...(g.pendingAlliances || []), request] } : g)
-        }));
-        return true;
-      },
 
       approvePartyAlliance: (guildId: string, actorId: string, requestId: string) => {
         const state = get();
@@ -3585,88 +3767,6 @@ export const useHeroStore = create<HeroState>()(
         return true;
       },
 
-      // === SISTEMA DE PARTY ===
-      createParty: (heroId: string, name: string) => {
-        const hero = get().heroes.find(h => h.id === heroId);
-        if (!hero) return null;
-        const party: Party = { id: uuidv4(), name, members: [heroId], createdAt: new Date().toISOString(), sharedLoot: true, sharedXP: true, leaderId: heroId, invites: [] };
-        set(state => ({ parties: [...state.parties, party] }));
-        // Atribuir partyId ao herói
-        get().updateHero(heroId, { progression: { ...hero.progression, partyId: party.id } as any });
-        return party;
-      },
-      joinParty: (heroId: string, partyId: string) => {
-        const hero = get().heroes.find(h => h.id === heroId);
-        const party = get().parties.find(p => p.id === partyId);
-        if (!hero || !party) return false;
-        if (party.members.includes(heroId)) return true;
-        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, members: [...p.members, heroId], invites: (p.invites || []).filter(id => id !== heroId) } : p) }));
-        get().updateHero(heroId, { progression: { ...hero.progression, partyId } as any });
-        return true;
-      },
-      leaveParty: (heroId: string) => {
-        const hero = get().heroes.find(h => h.id === heroId);
-        if (!hero || !hero.progression.partyId) return false;
-        const partyId = hero.progression.partyId;
-        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, members: p.members.filter(id => id !== heroId), leaderId: p.leaderId === heroId ? p.members.find(id => id !== heroId) : p.leaderId } : p) }));
-        get().updateHero(heroId, { progression: { ...hero.progression, partyId: undefined } as any });
-        return true;
-      },
-      getHeroParty: (heroId: string) => {
-        const hero = get().heroes.find(h => h.id === heroId);
-        if (!hero || !hero.progression.partyId) return undefined;
-        return get().parties.find(p => p.id === hero.progression.partyId);
-      },
-      inviteHeroToParty: (partyId: string, inviterId: string, targetHeroId: string) => {
-        const party = get().parties.find(p => p.id === partyId);
-        if (!party || party.leaderId !== inviterId) return false;
-        if (party.members.includes(targetHeroId)) return false;
-        if ((party.invites || []).includes(targetHeroId)) return true;
-        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, invites: [...(p.invites || []), targetHeroId] } : p) }));
-        return true;
-      },
-      acceptPartyInvite: (heroId: string, partyId: string) => {
-        const party = get().parties.find(p => p.id === partyId);
-        const hero = get().heroes.find(h => h.id === heroId);
-        if (!party || !hero) return false;
-        if (!(party.invites || []).includes(heroId)) return false;
-        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, members: [...p.members, heroId], invites: (p.invites || []).filter(id => id !== heroId) } : p) }));
-        get().updateHero(heroId, { progression: { ...hero.progression, partyId } as any });
-        return true;
-      },
-      transferPartyLeadership: (partyId: string, actorId: string, newLeaderId: string) => {
-        const party = get().parties.find(p => p.id === partyId);
-        if (!party || party.leaderId !== actorId) return false;
-        if (!party.members.includes(newLeaderId)) return false;
-        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, leaderId: newLeaderId } : p) }));
-        return true;
-      },
-      togglePartySharedLoot: (partyId: string, actorId: string, value?: boolean) => {
-        const party = get().parties.find(p => p.id === partyId);
-        if (!party || party.leaderId !== actorId) return false;
-        const newValue = value !== undefined ? value : !party.sharedLoot;
-        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, sharedLoot: newValue } : p) }));
-        return true;
-      },
-      togglePartySharedXP: (partyId: string, actorId: string, value?: boolean) => {
-        const party = get().parties.find(p => p.id === partyId);
-        if (!party || party.leaderId !== actorId) return false;
-        const newValue = value !== undefined ? value : !party.sharedXP;
-        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, sharedXP: newValue } : p) }));
-        return true;
-      },
-      removeMemberFromParty: (partyId: string, actorId: string, targetHeroId: string) => {
-        const party = get().parties.find(p => p.id === partyId);
-        if (!party || party.leaderId !== actorId) return false;
-        if (targetHeroId === actorId) return false;
-        if (!party.members.includes(targetHeroId)) return false;
-        set(state => ({ parties: state.parties.map(p => p.id === partyId ? { ...p, members: p.members.filter(id => id !== targetHeroId) } : p) }));
-        const hero = get().heroes.find(h => h.id === targetHeroId);
-        if (hero) {
-          get().updateHero(targetHeroId, { progression: { ...hero.progression, partyId: undefined } as any });
-        }
-        return true;
-      },
        
        // === SISTEMA DE TÍTULOS E REPUTAÇÃO ===
        
@@ -4036,9 +4136,6 @@ export const useHeroStore = create<HeroState>()(
         }
 
         const totalAfter = Object.values(newAttributes).reduce((s, v) => s + v, 0);
-        if (totalAfter > totalCap) {
-          return false;
-        }
 
         // Atualizar herói: atributos, pontos restantes e derivados
         const remainingPoints = Math.max(0, availablePoints - pointsToSpend);
@@ -4251,7 +4348,7 @@ export const useHeroStore = create<HeroState>()(
           .map(hero => rankSystem.createComparison(hero, 0))
           .sort((a, b) => {
             // Ordenar por rank primeiro, depois por pontos
-            const rankOrder = ['S', 'A', 'B', 'C', 'D', 'E', 'F'];
+            const rankOrder = ['SSS', 'SS', 'S', 'A', 'B', 'C', 'D', 'E', 'F'];
             const aRankIndex = rankOrder.indexOf(a.rank);
             const bRankIndex = rankOrder.indexOf(b.rank);
             
@@ -4286,7 +4383,6 @@ export const useHeroStore = create<HeroState>()(
         selectedHeroId: state.selectedHeroId,
         availableQuests: state.availableQuests,
         guilds: state.guilds,
-        parties: state.parties,
         referralInvites: state.referralInvites
       }),
       migrate: (persistedState: any, _version: number) => {
@@ -4296,9 +4392,12 @@ export const useHeroStore = create<HeroState>()(
             const migratedHero = {
               ...hero,
               reputationFactions: hero.reputationFactions || [
-                { id: 'ordem', name: 'Ordem', reputation: 0, level: 'neutral' },
-                { id: 'sombra', name: 'Sombra', reputation: 0, level: 'neutral' },
-                { id: 'livre', name: 'Livre', reputation: 0, level: 'neutral' }
+                { id: 'guarda', name: 'Guarda da Cidade', reputation: 0, level: 'neutral' },
+                { id: 'ladroes', name: 'Ladrões', reputation: 0, level: 'neutral' },
+                { id: 'clero', name: 'Clero', reputation: 0, level: 'neutral' },
+                { id: 'cultistas', name: 'Cultistas', reputation: 0, level: 'neutral' },
+                { id: 'comerciantes', name: 'Comerciantes', reputation: 0, level: 'neutral' },
+                { id: 'exploradores', name: 'Exploradores', reputation: 0, level: 'neutral' }
               ],
               dailyGoals: hero.dailyGoals || [],
               achievements: hero.achievements || [],

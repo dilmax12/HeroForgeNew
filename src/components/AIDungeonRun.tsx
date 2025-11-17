@@ -45,7 +45,6 @@ const getStageCountByRank = (rank?: 'F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S') => 
 
 export default function AIDungeonRun() {
   const hero = useHeroStore(s => s.getSelectedHero());
-  const getHeroParty = useHeroStore(s => s.getHeroParty);
   const updateHero = useHeroStore(s => s.updateHero);
   const gainXP = useHeroStore(s => s.gainXP);
   const gainGold = useHeroStore(s => s.gainGold);
@@ -333,7 +332,7 @@ export default function AIDungeonRun() {
           hero={hero}
           enemies={battleEnemies as any}
           floor={stageIndex + 1}
-          partyRarityBonusPercent={(getHeroParty(hero.id)?.members.length || 0) >= 4 ? 5 : 0}
+          partyRarityBonusPercent={0}
           onClose={() => setShowBattle(false)}
           onResult={(res) => {
             // aplicar recompensas e narrativa pós-batalha

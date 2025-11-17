@@ -194,7 +194,7 @@ export async function generateRumorsAI(scope: TavernScope = 'global', extraConte
   try {
     // Coleta de contexto leve: últimas mensagens aprovadas do escopo
     let contextPieces: string[] = [];
-    if (supabaseConfigured) {
+    if (supabaseConfigured && !import.meta.env.DEV) {
       const list = await listMessages(scope, 10);
       if (list.data && list.data.length > 0) {
         const parts = list.data.slice(0, 5).map(m => `Autor: ${m.author}; Conteúdo: ${m.content}`);

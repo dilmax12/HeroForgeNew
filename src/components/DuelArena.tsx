@@ -602,20 +602,7 @@ export default function DuelArena() {
                 <div className="font-semibold">{heroE?.name || selectedHero.name}</div>
                 <div>FOR {heroE?.forca || selectedHero.attributes.forca} • DES {heroE?.destreza || selectedHero.attributes.destreza}</div>
                 <div>CON {heroE?.constituicao || selectedHero.attributes.constituicao} • ARM {heroE?.armor || selectedHero.derivedAttributes.armorClass}</div>
-                <div className="mt-1">Alinhamento: {selectedHero.alignment.split('-').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ')}</div>
-                <div className="text-[11px] text-indigo-700" title="Impacto do alinhamento">
-                  {(() => {
-                    const [axis, moralRaw] = selectedHero.alignment.split('-');
-                    const moral = moralRaw === 'puro' ? 'neutro' : moralRaw;
-                    const effects: string[] = [];
-                    if (axis === 'leal') effects.push('+10% acerto');
-                    if (axis === 'caotico') effects.push('+10% crítico', '-5% acerto');
-                    if (moral === 'bom') effects.push('+20% dano vs dark');
-                    if (moral === 'mal') effects.push('drena 20% HP');
-                    if (moral === 'neutro') effects.push('+4% loot bônus');
-                    return effects.join(' • ');
-                  })()}
-                </div>
+                
               </div>
               <div className="text-right">
                 <div className="font-semibold">{enemyE?.name || '—'}</div>

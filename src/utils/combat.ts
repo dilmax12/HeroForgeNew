@@ -2,8 +2,9 @@
  * Sistema de Combate - RNG + Atributos
  */
 
-import { Hero, CombatResult, QuestEnemy, Item, Skill, Element, Alignment } from '../types/hero';
+import { Hero, CombatResult, QuestEnemy, Item, Skill, Element } from '../types/hero';
 import { SHOP_ITEMS } from './shop';
+import { getWeeklyMutatorEnemyElement, getGlobalCritBonus, getEnemyDamageMultiplier } from './replayModifiers';
 import { dungeonConfig } from './dungeonConfig';
 import { getElementMultiplier, generateRandomElement, computeElementMultiplier, calculateElementalAffinity } from './elementSystem';
 
@@ -25,7 +26,6 @@ interface CombatEntity {
     atk: number;
     critChance?: number;
   };
-  alignment?: Alignment;
 }
 
 interface AttackResult {
@@ -168,19 +168,16 @@ function heroToCombatEntity(hero: Hero): CombatEntity {
     carisma: hero.attributes.carisma,
     armor: hero.derivedAttributes.armorClass,
     weapon: { name: 'Arma Básica', atk: 2, critChance: 0.05 },
-    alignment: hero.alignment
+    
   };
 }
 
-export function resolveAttack(attacker: CombatEntity, defender: CombatEntity, opts?: { ramp?: number; attackElement?: Element; defendElement?: Element; skillBonus?: number; atkAffinity?: number; defResistance?: number }): AttackResult {
+export function resolveAttack(attacker: CombatEntity, defender: CombatEntity, opts?: { ramp?: number; attackElement?: Element; defendElement?: Element; skillBonus?: number; atkAffinity?: number; defResistance?: number; isEnemyAttack?: boolean }): AttackResult {
   // Calcular chance de acerto baseada em destreza
   let baseHit = 50 + (attacker.destreza - defender.destreza) * 3;
+  if ((opts?.attackElement || 'physical') === 'thunder') baseHit += 5;
   let hitChance = Math.max(5, Math.min(95, baseHit));
-  if (attacker.alignment) {
-    const [axis] = String(attacker.alignment).split('-');
-    if (axis === 'leal') hitChance = Math.min(95, hitChance + 10);
-    if (axis === 'caotico') hitChance = Math.max(5, hitChance - 5);
-  }
+  
   
   const roll = Math.floor(Math.random() * 100) + 1;
   
@@ -191,13 +188,9 @@ export function resolveAttack(attacker: CombatEntity, defender: CombatEntity, op
     
     // Verificar crítico
     let critChance = attacker.weapon?.critChance || 0.05;
-    if (attacker.alignment) {
-      const [, moralRaw] = String(attacker.alignment).split('-');
-      const moral = moralRaw === 'puro' ? 'neutro' : moralRaw;
-      const axis = String(attacker.alignment).split('-')[0];
-      if (axis === 'caotico') critChance = Math.min(0.95, critChance + 0.10);
-      if (moral === 'bom' && (opts?.defendElement === 'dark')) baseDamage = Math.floor(baseDamage * 1.20);
-    }
+    critChance = Math.min(0.95, critChance + getGlobalCritBonus());
+    if ((opts?.attackElement || 'physical') === 'air') critChance = Math.min(0.95, critChance + 0.10);
+    
     const isCrit = Math.random() < critChance;
     
     // Multiplicadores: crítico, ramp de dano e elemento
@@ -208,20 +201,22 @@ export function resolveAttack(attacker: CombatEntity, defender: CombatEntity, op
       opts?.atkAffinity || 0,
       opts?.defResistance || 0
     );
+    const effectiveArmor = Math.floor((defender.armor || 0) * (((opts?.defendElement || 'physical') === 'earth') ? 1.20 : 1.0));
+    const enemyMult = opts?.isEnemyAttack ? getEnemyDamageMultiplier() : 1;
     const finalDamage = Math.max(1, Math.floor(
-      baseDamage * (isCrit ? 1.5 : 1) * ramp * elemMult - defender.armor
+      baseDamage * (isCrit ? 1.5 : 1) * ramp * elemMult * enemyMult - effectiveArmor
     ));
     
     const weaponName = attacker.weapon?.name || 'punhos';
     const critText = isCrit ? ' CRÍTICO!' : '';
     const elemText = elemMult > 1 ? ' (super efetivo!)' : (elemMult < 1 ? ' (pouco efetivo)' : '');
     
-    return {
-      hit: true,
-      damage: finalDamage,
-      crit: isCrit,
-      message: `${attacker.name} ataca com ${weaponName} e causa ${finalDamage} de dano${critText}${elemText}`
-    };
+  return {
+    hit: true,
+    damage: finalDamage,
+    crit: isCrit,
+    message: `${attacker.name} ataca com ${weaponName} e causa ${finalDamage} de dano${critText}${elemText}`
+  };
   } else {
     return {
       hit: false,
@@ -333,10 +328,17 @@ export function resolveSkillUse(user: Hero, target: Hero | CombatEntity, skill: 
   
   if (skill.type === 'attack') {
     const targetDefense = (target as any).constituicao || target.constituicao || 0;
-    finalDamage = Math.max(0, Math.floor(basePower * elementMultiplier) - (targetDefense * 0.3));
+    let dmg = Math.max(0, Math.floor(basePower * elementMultiplier) - (targetDefense * 0.3));
+    if ((user.element || 'physical') === 'light' && (skill.element || 'physical') === 'light') {
+      dmg = Math.floor(dmg * 1.05);
+    }
+    finalDamage = dmg;
     console.debug('[combat] attack calc', { targetDefense, finalDamage });
   } else if (skill.type === 'support' && skill.name.includes('Cura')) {
-    healing = Math.floor(basePower);
+    let healVal = Math.floor(basePower);
+    if ((user.element || 'physical') === 'water') healVal = Math.floor(healVal * 1.10);
+    if ((user.element || 'physical') === 'light') healVal = Math.floor(healVal * 1.05);
+    healing = healVal;
     console.debug('[combat] healing calc', { healing });
   }
   
@@ -356,7 +358,10 @@ export function resolveSkillUse(user: Hero, target: Hero | CombatEntity, skill: 
       finalDamage = Math.floor(finalDamage * 2);
     }
     if (e.special === 'lifesteal_small' && finalDamage > 0) {
-      healing += Math.floor(finalDamage * 0.2);
+      let ls = Math.floor(finalDamage * 0.2);
+      if ((user.element || 'physical') === 'water') ls = Math.floor(ls * 1.10);
+      if ((user.element || 'physical') === 'light') ls = Math.floor(ls * 1.05);
+      healing += ls;
     }
     if (e.special === 'heal_over_time') {
       healing += e.heal ? e.heal : Math.floor(basePower * 0.5);
@@ -435,18 +440,30 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
   for (const questEnemy of enemies) {
     for (let i = 0; i < questEnemy.count; i++) {
       const enemy = createEnemyFromTemplate(questEnemy.type, questEnemy.level || 1);
-      const enemyElement: Element = generateRandomElement();
+      const enemyElement: Element = (getWeeklyMutatorEnemyElement() as Element) || generateRandomElement();
       combatLog.push(`\n--- Enfrentando ${enemy.name} ---`);
       combatLog.push(`Elemento do inimigo: ${enemyElement}`);
+      let enemyBurn = 0;
+      let heroBurn = 0;
       
       // Combate por turnos
       let turn = 1;
       let enemyFled = false;
       const maxTurns = 20; // aumentar teto de turnos
       while (heroEntity.hp > 0 && enemy.hp > 0 && turn <= maxTurns) {
-        // Determinar quem ataca primeiro (baseado em destreza)
-        const heroFirst = heroEntity.destreza >= enemy.destreza;
+        // Determinar quem ataca primeiro (baseado em destreza, Raio +1)
+        const heroFirst = (heroEntity.destreza + (heroElement === 'thunder' ? 1 : 0)) >= (enemy.destreza + (enemyElement === 'thunder' ? 1 : 0));
         const ramp = 1 + Math.min(0.10 + turn * 0.06, 2.0); // ramp de dano progressivo
+        if (enemyBurn > 0 && enemy.hp > 0) {
+          enemy.hp = Math.max(0, enemy.hp - enemyBurn);
+          combatLog.push(`🔥 Queimadura causa ${enemyBurn} dano contínuo no inimigo`);
+          enemyBurn = 0;
+        }
+        if (heroBurn > 0 && heroEntity.hp > 0) {
+          heroEntity.hp = Math.max(0, heroEntity.hp - heroBurn);
+          combatLog.push(`🔥 Queimadura causa ${heroBurn} dano contínuo em ${heroEntity.name}`);
+          heroBurn = 0;
+        }
         
         if (heroFirst) {
           // Herói ataca primeiro
@@ -467,11 +484,15 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
             const heroAttack = resolveAttack(heroEntity, enemy, { ramp, attackElement: atkElem, defendElement: enemyElement, atkAffinity: atkElem !== 'physical' && atkElem === heroElement ? 10 : 0, defResistance: 0 });
             enemy.hp = Math.max(0, enemy.hp - heroAttack.damage);
             combatLog.push(`Turno ${turn}: ${heroAttack.message}`);
-            if ((hero.alignment || '').includes('mal') && heroAttack.damage > 0) {
-              const leech = Math.floor(heroAttack.damage * 0.20);
-              if (leech > 0) {
-                heroEntity.hp = Math.min(heroEntity.maxHp, heroEntity.hp + leech);
-                combatLog.push(`🩸 ${heroEntity.name} drena ${leech} HP`);
+            if (heroAttack.damage > 0 && (atkElem === 'fire')) {
+              enemyBurn = Math.floor(heroAttack.damage * 0.10);
+            }
+            
+            if (atkElem === 'dark' && heroAttack.damage > 0) {
+              const ls = Math.floor(heroAttack.damage * 0.05);
+              if (ls > 0) {
+                heroEntity.hp = Math.min(heroEntity.maxHp, heroEntity.hp + ls);
+                combatLog.push(`💀 ${heroEntity.name} rouba ${ls} HP`);
               }
             }
           }
@@ -509,9 +530,12 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
               petDamageTotal += extraD;
             }
             if (extraH > 0) {
-              heroEntity.hp = Math.min(heroEntity.maxHp, heroEntity.hp + extraH);
-              combatLog.push(`✨ Companheiro restaura ${extraH} HP`);
-              petHealingTotal += extraH;
+              let h = extraH;
+              if ((heroElement || 'physical') === 'water') h = Math.floor(h * 1.10);
+              if ((heroElement || 'physical') === 'light') h = Math.floor(h * 1.05);
+              heroEntity.hp = Math.min(heroEntity.maxHp, heroEntity.hp + h);
+              combatLog.push(`✨ Companheiro restaura ${h} HP`);
+              petHealingTotal += h;
             }
             if (petStun) {
               stunned = true;
@@ -532,16 +556,36 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
           
           const enemyStunned = stunned;
           if (enemy.hp > 0 && !enemyStunned) {
-          const enemyAttack = resolveAttack(enemy, heroEntity, { ramp, attackElement: enemyElement, defendElement: heroElement, atkAffinity: 0, defResistance: 0 });
+          const enemyAttack = resolveAttack(enemy, heroEntity, { ramp, attackElement: enemyElement, defendElement: heroElement, atkAffinity: 0, defResistance: 0, isEnemyAttack: true });
           heroEntity.hp = Math.max(0, heroEntity.hp - enemyAttack.damage);
           combatLog.push(`${enemyAttack.message}`);
+          if (enemyAttack.damage > 0 && enemyElement === 'fire') {
+            heroBurn = Math.floor(enemyAttack.damage * 0.10);
+          }
+          if (enemyElement === 'dark' && enemyAttack.damage > 0) {
+            const ls = Math.floor(enemyAttack.damage * 0.05);
+            if (ls > 0) {
+              enemy.hp = Math.min(enemy.maxHp, enemy.hp + ls);
+              combatLog.push(`💀 ${enemy.name} rouba ${ls} HP`);
+            }
+          }
           }
           if (heroElementOverrideTurns > 0) heroElementOverrideTurns = Math.max(0, heroElementOverrideTurns - 1);
         } else {
           // Inimigo ataca primeiro
-          const enemyAttack = resolveAttack(enemy, heroEntity, { ramp, attackElement: enemyElement, defendElement: heroElement, atkAffinity: 0, defResistance: 0 });
+          const enemyAttack = resolveAttack(enemy, heroEntity, { ramp, attackElement: enemyElement, defendElement: heroElement, atkAffinity: 0, defResistance: 0, isEnemyAttack: true });
           heroEntity.hp = Math.max(0, heroEntity.hp - enemyAttack.damage);
           combatLog.push(`Turno ${turn}: ${enemyAttack.message}`);
+          if (enemyAttack.damage > 0 && enemyElement === 'fire') {
+            heroBurn = Math.floor(enemyAttack.damage * 0.10);
+          }
+          if (enemyElement === 'dark' && enemyAttack.damage > 0) {
+            const ls = Math.floor(enemyAttack.damage * 0.05);
+            if (ls > 0) {
+              enemy.hp = Math.min(enemy.maxHp, enemy.hp + ls);
+              combatLog.push(`💀 ${enemy.name} rouba ${ls} HP`);
+            }
+          }
           
           if (heroEntity.hp > 0) {
             const useSkill = (hero.skills && hero.skills.length > 0) && Math.random() < 0.35;
@@ -560,11 +604,21 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
               const heroAttack = resolveAttack(heroEntity, enemy, { ramp, attackElement: atkElem, defendElement: enemyElement, atkAffinity: atkElem !== 'physical' && atkElem === heroElement ? 10 : 0, defResistance: 0 });
               enemy.hp = Math.max(0, enemy.hp - heroAttack.damage);
               combatLog.push(`${heroAttack.message}`);
+              if (heroAttack.damage > 0 && (atkElem === 'fire')) {
+                enemyBurn = Math.floor(heroAttack.damage * 0.10);
+              }
               if ((hero.alignment || '').includes('mal') && heroAttack.damage > 0) {
                 const leech = Math.floor(heroAttack.damage * 0.20);
                 if (leech > 0) {
                   heroEntity.hp = Math.min(heroEntity.maxHp, heroEntity.hp + leech);
                   combatLog.push(`🩸 ${heroEntity.name} drena ${leech} HP`);
+                }
+              }
+              if (atkElem === 'dark' && heroAttack.damage > 0) {
+                const ls = Math.floor(heroAttack.damage * 0.05);
+                if (ls > 0) {
+                  heroEntity.hp = Math.min(heroEntity.maxHp, heroEntity.hp + ls);
+                  combatLog.push(`💀 ${heroEntity.name} rouba ${ls} HP`);
                 }
               }
             }
@@ -633,9 +687,6 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
         const heroHealthy = heroEntity.hp / heroEntity.maxHp >= 0.5;
         if (!enemyFled && turn >= 8 && enemyLow && heroHealthy) {
           let fleeChance = 0.5 + (0.2 * (heroEntity.destreza > enemy.destreza ? 1 : 0));
-          if ((hero.alignment || '').startsWith('leal')) {
-            fleeChance = Math.max(0, fleeChance - 0.15);
-          }
           if (Math.random() < fleeChance) {
             enemyFled = true;
             combatLog.push(`${enemy.name} tenta fugir e consegue! Combate encerrado.`);
@@ -698,9 +749,6 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
         const accList = [hero.inventory?.equippedRingLeft, hero.inventory?.equippedRingRight, hero.inventory?.equippedNecklace, hero.inventory?.equippedEarringLeft, hero.inventory?.equippedEarringRight].filter(Boolean) as string[];
         const ringBonus = accList.some(id => /anel|ring/i.test(String(id))) ? 2 : 0;
         let bonusChance = Math.min(0.05 + (floorBias + partyBonus + ringBonus) / 100, 0.35);
-        if ((hero.alignment || '').includes('neutro')) {
-          bonusChance = Math.min(0.45, bonusChance + 0.04);
-        }
 
         if (Math.random() < bonusChance) {
           const eligibleTypes = new Set(['weapon', 'armor', 'accessory']);

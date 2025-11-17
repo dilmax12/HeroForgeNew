@@ -1,15 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useHeroStore } from '../store/heroStore';
-import { supabase, supabaseConfigured } from '../lib/supabaseClient';
-import { listMessages, sendMessage, sendMessageForApproval, moderateMessage, TavernMessage, TavernScope, reportMessage, adminListPendingMessages, adminSetMessageApproval, generateRumorsAI } from '../services/tavernService';
 import { getWeeklyDungeonHighlights } from '../services/dungeonService';
 import { activityManager, logActivity } from '../utils/activitySystem';
-import { recordDiceEvent, getWeeklyDiceLeadersServer, getWeeklyChampions, getTavernSettings, incrementRerollUsage, getRerollUsage } from '../services/tavernService';
 import { useMonetizationStore } from '../store/monetizationStore';
 import { seasonalThemes, getSeasonalButtonGradient } from '../styles/medievalTheme';
 import { notificationBus } from './NotificationSystem';
+import NPCPresenceLayer from './NPCPresenceLayer';
+import DialogueFrame from './DialogueFrame';
+import { getNPCDialogue } from '../services/npcDialogueService';
+import { runTick } from '../utils/npcAI';
+import { getTavernSettings, recordDiceEvent, incrementRerollUsage, generateRumorsAI } from '../services/tavernService';
 
-type Tab = 'chat' | 'mural' | 'eventos' | 'moderacao';
+type Tab = 'npcs' | 'mural' | 'eventos';
 
 const sampleRumors = (heroName?: string) => {
   const today = new Date().toISOString().slice(0, 10);
@@ -39,19 +41,14 @@ const Tavern: React.FC = () => {
   const selectedHero = getSelectedHero();
   const { activeSeasonalTheme } = useMonetizationStore();
 
-  const [tab, setTab] = useState<Tab>('chat');
-  const [scope, setScope] = useState<TavernScope>('global');
-  const [messages, setMessages] = useState<TavernMessage[]>([]);
+  const [tab, setTab] = useState<Tab>('npcs');
   const [mural, setMural] = useState<string[]>([]);
   const [generatedRumors, setGeneratedRumors] = useState<string[]>([]);
   const [rumorsLoading, setRumorsLoading] = useState<boolean>(false);
   const [rumorsError, setRumorsError] = useState<string | undefined>(undefined);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [rumorFilter, setRumorFilter] = useState<'all'|'player'|'npc'>('all');
+  const [lastRumorTs, setLastRumorTs] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
-  const [reportingId, setReportingId] = useState<string | null>(null);
-  const [reportReason, setReportReason] = useState<string>('');
-  const [reportSending, setReportSending] = useState<boolean>(false);
   // Descanso
   const [restMessage, setRestMessage] = useState<string | null>(null);
   // Dados: Noite de Dados Especial
@@ -59,14 +56,6 @@ const Tavern: React.FC = () => {
   const [lastRoll, setLastRoll] = useState<number | null>(null);
   const [criticalGlow, setCriticalGlow] = useState<boolean>(false);
   const [diceMessage, setDiceMessage] = useState<string | null>(null);
-  const [opponentId, setOpponentId] = useState<string>('');
-  const [betAmount, setBetAmount] = useState<number>(0);
-  const [critOnly, setCritOnly] = useState<boolean>(false);
-  const [betsOnly, setBetsOnly] = useState<boolean>(false);
-  const [serverDiceEntries, setServerDiceEntries] = useState<any[] | null>(null);
-  const [weeklyChampions, setWeeklyChampions] = useState<any[] | null>(null);
-  const [serverLoading, setServerLoading] = useState<boolean>(false);
-  const [serverError, setServerError] = useState<string | null>(null);
   const [rerollCap, setRerollCap] = useState<number>(5);
   const getRerollTokens = () => {
     const hero = useHeroStore.getState().getSelectedHero();
@@ -82,37 +71,70 @@ const Tavern: React.FC = () => {
     const count = sameDay ? Number(s.tavernRerollCount || 0) : 0;
     return { count, cap: rerollCap };
   };
-  // Estados de moderação
-  const [adminToken, setAdminToken] = useState<string>('');
-  const [pending, setPending] = useState<TavernMessage[]>([]);
-  const [loadingPending, setLoadingPending] = useState<boolean>(false);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const offlineRumors = useMemo(() => sampleRumors(selectedHero?.name), [selectedHero?.name]);
   const todayEvent = useMemo(() => pickDailyEvent(), []);
+  const heroes = useHeroStore.getState().heroes;
+  const npcs = useMemo(() => heroes.filter(h => h.origin === 'npc'), [heroes.length]);
+  const [activeDialogue, setActiveDialogue] = useState<string | null>(null);
+
+  const injectTavernQuests = () => {
+    const state = useHeroStore.getState();
+    const existing = state.availableQuests || [];
+    const ids = new Set(existing.map(q => String(q.id)));
+    const hero = state.getSelectedHero();
+    const baseLevel = Math.max(1, hero?.progression.level || 1);
+    const quests = [
+      {
+        id: 'tavern-delivery',
+        title: 'Entrega de Barris',
+        description: 'Leve barris do depósito à área do balcão sem derramar.',
+        type: 'contrato', difficulty: 'facil', levelRequirement: baseLevel,
+        rewards: { gold: 20, xp: 25 }, repeatable: true, sticky: true,
+        categoryHint: 'controle', biomeHint: 'cidade', narrative: { intro: 'O taberneiro precisa de ajuda com um carregamento.' , situation: 'Mover barris com cuidado pelo salão.' }
+      },
+      {
+        id: 'tavern-help',
+        title: 'Ajudar o Taberneiro',
+        description: 'Sirva clientes e acalme uma discussão antes que vire confusão.',
+        type: 'historia', difficulty: 'medio', levelRequirement: baseLevel,
+        rewards: { gold: 30, xp: 40 }, repeatable: true, sticky: true,
+        categoryHint: 'especial', biomeHint: 'cidade', narrative: { intro: 'Hora do pico, o salão está cheio.' , situation: 'Manter a ordem e atender pedidos.' }
+      },
+      {
+        id: 'tavern-bard',
+        title: 'Evento do Bardo',
+        description: 'Auxilie o bardo com o set, promova o show e gerencie o público.',
+        type: 'historia', difficulty: 'medio', levelRequirement: baseLevel,
+        rewards: { gold: 25, xp: 50 }, repeatable: true, sticky: true,
+        categoryHint: 'especial', biomeHint: 'cidade', narrative: { intro: 'O bardo itinerante precisa de suporte.' , situation: 'Garantir que o espetáculo ocorra sem incidentes.' }
+      }
+    ] as any[];
+    const toAdd = quests.filter(q => !ids.has(String(q.id)));
+    if (toAdd.length) {
+      useHeroStore.setState({ availableQuests: [...toAdd, ...existing] });
+    }
+  };
 
   useEffect(() => {
-    // Inicializa rumores gerados com o fallback offline
     if (!generatedRumors.length) {
       setGeneratedRumors(offlineRumors);
+      setLastRumorTs(new Date().toISOString());
     }
   }, [offlineRumors]);
 
-  const refreshServerData = async () => {
-    setServerLoading(true);
-    setServerError(null);
-    try {
-      const res = await getWeeklyDiceLeadersServer();
-      if (res.entries && res.entries.length) setServerDiceEntries(res.entries as any[]);
-      if (res.error) setServerError(res.error);
-    } catch (e: any) { setServerError(e?.message || 'Erro ao obter ranking'); }
-    try {
-      const res2 = await getWeeklyChampions();
-      if (res2.champions) setWeeklyChampions(res2.champions as any[]);
-      if (res2.error) setServerError(res2.error);
-    } catch (e: any) { setServerError(e?.message || 'Erro ao obter campeões'); }
-    setServerLoading(false);
-  };
-  useEffect(() => { refreshServerData(); }, []);
+  useEffect(() => {
+    let timer: any = null;
+    if (tab === 'npcs') {
+      timer = setInterval(() => {
+        try { runTick(selectedHero, npcs, notificationBus.emit); } catch {}
+      }, 30000);
+    }
+    return () => { if (timer) try { clearInterval(timer); } catch {} };
+  }, [tab, selectedHero?.id, npcs.length]);
+
+  useEffect(() => {
+    injectTavernQuests();
+  }, [selectedHero?.id]);
 
   useEffect(() => {
     (async () => {
@@ -125,42 +147,28 @@ const Tavern: React.FC = () => {
     })();
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      const res = await listMessages(scope, 50);
-      if (cancelled) return;
-      setLoading(false);
-      setError(res.error);
-      setMessages(res.data);
-    };
-    load();
-    return () => { cancelled = true; };
-  }, [scope]);
+  useEffect(() => { setError(undefined); }, [tab]);
 
-  const handleSend = async () => {
-    if (!selectedHero) {
-      setError('Selecione um herói para participar do chat.');
-      return;
+  useEffect(() => {
+    let timer: any = null;
+    if (tab === 'mural') {
+      timer = setInterval(() => { try { handleGenerateRumors(); } catch {} }, Math.max(10, rumorIntervalSec) * 1000);
     }
-    const mod = moderateMessage(input);
-    if (!mod.ok) {
-      setError(mod.reason || 'Mensagem não permitida.');
-      setInput(mod.sanitized);
-      return;
-    }
-    setError(undefined);
-    const res = supabaseConfigured
-      ? await sendMessageForApproval(selectedHero.name, mod.sanitized, scope)
-      : await sendMessage(selectedHero.name, mod.sanitized, scope);
-    if (!res.ok || !res.message) {
-      setError(res.error || 'Falha ao enviar.');
-      return;
-    }
-    setInput('');
-    // Se for offline, apenas adiciona localmente
-    setMessages(prev => [res.message!, ...prev]);
+    return () => { if (timer) { try { clearInterval(timer); } catch {} } };
+  }, [tab, rumorFilter, rumorIntervalSec]);
+
+  const startDialogueWithNPC = () => {
+    try {
+      const player = useHeroStore.getState().getSelectedHero();
+      const pool = npcs.length ? npcs : [];
+      const npc = pool.length ? pool[Math.floor(Math.random() * pool.length)] : undefined;
+      if (npc && player) {
+        const line = getNPCDialogue(npc, player, 'taverna — ambiente social');
+        setActiveDialogue(line);
+      } else {
+        setActiveDialogue('Nenhum NPC disponível agora.');
+      }
+    } catch { setActiveDialogue('Falha ao iniciar diálogo.'); }
   };
 
   const promoteToMural = (content: string) => {
@@ -170,102 +178,90 @@ const Tavern: React.FC = () => {
   const handleGenerateRumors = async () => {
     setRumorsError(undefined);
     setRumorsLoading(true);
-    // Contexto adicional: destaques semanais da dungeon e atividades recentes
-    let extraContext = selectedHero ? `Herói em destaque: ${selectedHero.name}\n` : '';
     try {
-      const { data, offline } = await getWeeklyDungeonHighlights();
-      if (data?.bestRun) {
-        extraContext += `Melhor run da semana: ${data.bestRun.hero_name} chegou ao ${data.bestRun.max_floor_reached}º andar.\n`;
-      }
-      if (data?.biggestLoot) {
-        extraContext += `Maior saque: ${data.biggestLoot.hero_name} acumulou ${data.biggestLoot.total_gold} ouro em uma run.\n`;
-      }
-      if (offline) {
-        // Em modo offline, usar atividades locais como contexto
-        const now = new Date();
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const feed = activityManager.getActivityFeed({
-          dateRange: { start: weekAgo, end: now },
-          showOnlyPublic: true
+      const state = useHeroStore.getState();
+      const player = state.getSelectedHero();
+      const heroesAll = state.heroes || [];
+      const npcsLocal = heroesAll.filter(h => h.origin === 'npc');
+      const now = new Date();
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const feed = activityManager.getActivityFeed({ dateRange: { start: weekAgo, end: now }, showOnlyPublic: true });
+      const acts = feed.activities;
+
+      const makeTag = (t: string) => {
+        if (t.includes('quest')) return 'quest';
+        if (t.includes('rank')) return 'rank';
+        if (t.includes('dice')) return 'tavern-dice';
+        if (t.includes('rest')) return 'tavern-rest';
+        if (t.includes('guild')) return 'guild';
+        if (t.includes('pet')) return 'pet';
+        if (t.includes('combat')) return 'combat';
+        return 'misc';
+      };
+      const importance = (type: string) => {
+        return type === 'epic-quest-completed' ? 10
+          : type === 'rank-promotion' ? 9
+          : type === 'quest-completed' ? 7
+          : type === 'combat-victory' ? 6
+          : type === 'tavern-dice' ? 5
+          : type === 'tavern-rest' ? 3
+          : type === 'item-used' ? 2
+          : 1;
+      };
+      const recencyBoost = (d: Date) => {
+        const diff = Math.max(0, now.getTime() - d.getTime());
+        const hours = diff / 3_600_000;
+        return hours <= 6 ? 3 : hours <= 24 ? 2 : hours <= 72 ? 1 : 0;
+      };
+      const playerActs = player ? acts.filter(a => a.data.heroId === player.id) : [];
+      const npcRumorFromMemory = (n: any) => {
+        const last = (n.npcMemory?.interactions || []).slice(-5);
+        const lines = last.map((m: any) => {
+          const t = String(m.summary || '');
+          const date = new Date(m.ts || Date.now());
+          const tag = t.includes('missao') ? 'quest' : t.includes('social') ? 'social' : t.includes('treino') ? 'training' : t.includes('mercado') ? 'market' : t.includes('exploracao') ? 'exploration' : 'npc';
+          const base = t.includes('missao') ? 6 : t.includes('social_hostil') ? 5 : t.includes('social_amigavel') ? 4 : t.includes('exploracao') ? 3 : 2;
+          const weight = base + recencyBoost(date);
+          const msg = tag === 'quest' ? `${n.name} concluiu uma missão recente — rumores dizem que foi arriscada.`
+            : tag === 'social' ? `${n.name} esteve envolvido em uma interação social (${t.replace('social_','')}).`
+            : tag === 'training' ? `${n.name} treinou duro hoje, dizem que ganhou vigor.`
+            : tag === 'market' ? `${n.name} fez trocas no mercado; alguns itens chamaram atenção.`
+            : `${n.name} explorou áreas próximas e voltou com histórias.`;
+          return { content: msg, tag, date, weight, source: 'npc' as const };
         });
-        const epic = feed.activities.find((a: any) => a.type === 'epic-quest-completed');
-        if (epic?.data?.questName) {
-          extraContext += `Missão épica concluída: ${epic.data.heroName} venceu “${epic.data.questName}”.\n`;
-        }
-      }
-    } catch {}
-    const { rumors, error } = await generateRumorsAI(scope, extraContext.trim());
-    setRumorsLoading(false);
-    if (error) {
-      setRumorsError(error);
-      return;
-    }
-    setGeneratedRumors(rumors.length ? rumors : offlineRumors);
-  };
+        return lines;
+      };
 
-  const startReport = (id: string) => {
-    setReportingId(id);
-    setReportReason('');
-  };
+      const wrapPlayer = playerActs.map(a => {
+        const tag = makeTag(a.type);
+        const w = importance(a.type) + recencyBoost(a.timestamp);
+        const msg = a.type === 'epic-quest-completed' ? `Fala-se que ${a.data.heroName} venceu uma missão épica: "${a.data.questName}".`
+          : a.type === 'quest-completed' ? `${a.data.heroName} concluiu "${a.data.questName}" (${a.data.questDifficulty || '—'}).`
+          : a.type === 'rank-promotion' ? `${a.data.heroName} foi promovido ao Rank ${a.data.newRank}.`
+          : a.type === 'combat-victory' ? `${a.data.heroName} derrotou ${Array.isArray(a.data.enemiesDefeated) ? (a.data.enemiesDefeated.length === 1 ? a.data.enemiesDefeated[0] : `${a.data.enemiesDefeated.length} inimigos`) : 'inimigos'}.`
+          : a.type === 'tavern-dice' ? `${a.data.heroName} rolou ${((a.data as any).roll)} na Noite de Dados${(a.data as any).critical ? ' — dizem que foi CRÍTICO!' : ''}.`
+          : a.type === 'tavern-rest' ? `${a.data.heroName} descansou na taverna e recuperou ${a.data.fatigueRecovered || 0} de Fadiga.`
+          : a.type === 'item-used' ? `${a.data.heroName} usou ${a.data.itemName || 'um item'} (${a.data.hpRecovered ? `+${a.data.hpRecovered} HP` : ''}${a.data.mpRecovered ? ` +${a.data.mpRecovered} MP` : ''}).`
+          : `${a.data.heroName} realizou ${a.type}.`;
+        return { content: msg, tag, date: a.timestamp, weight: w, source: 'player' as const };
+      });
 
-  const cancelReport = () => {
-    setReportingId(null);
-    setReportReason('');
-  };
-
-  const submitReport = async () => {
-    if (!reportingId || !reportReason.trim()) return;
-    setReportSending(true);
-    try {
-      let userId: string | undefined = undefined;
-      if (supabaseConfigured) {
-        const { data } = await supabase.auth.getUser();
-        userId = data?.user?.id;
-      }
-      const res = await reportMessage(reportingId, reportReason.trim(), false /* autoHide */, userId);
-      if (!res.ok) {
-        setError(res.error || 'Falha ao denunciar mensagem.');
-      } else {
-        setError(undefined);
-        cancelReport();
-      }
+      const npcLines = npcsLocal.flatMap(n => npcRumorFromMemory(n));
+      const merge = [...wrapPlayer, ...npcLines].sort((a, b) => b.weight - a.weight);
+      const count = Math.min(10, merge.length);
+      const playerCount = Math.floor(count * 0.5);
+      const npcCount = count - playerCount;
+      const playerPool = merge.filter(r => r.source === 'player').slice(0, playerCount);
+      const npcPool = merge.filter(r => r.source === 'npc').slice(0, npcCount);
+      const selected = [...playerPool, ...npcPool].sort((a,b) => b.date.getTime() - a.date.getTime());
+      const filtered = rumorFilter === 'all' ? selected : selected.filter(r => r.source === rumorFilter);
+      const lines = filtered.map(r => `${r.content} (${r.date.toISOString().slice(0,10)}) [#${r.tag}]`);
+      setGeneratedRumors(lines);
+      setLastRumorTs(new Date().toISOString());
+    } catch (e: any) {
+      setRumorsError(e?.message || 'Falha ao gerar rumores.');
     } finally {
-      setReportSending(false);
-    }
-  };
-
-  const loadPending = async () => {
-    if (!adminToken.trim()) {
-      setError('Forneça um token admin para moderar.');
-      return;
-    }
-    setLoadingPending(true);
-    const res = await adminListPendingMessages(adminToken.trim());
-    setLoadingPending(false);
-    if (res.error) {
-      setError(res.error);
-      setPending([]);
-    } else {
-      setError(undefined);
-      setPending(res.pending || []);
-    }
-  };
-
-  const setApproval = async (id: string, approved: boolean) => {
-    if (!adminToken.trim()) {
-      setError('Token admin ausente.');
-      return;
-    }
-    setUpdatingId(id);
-    try {
-      const res = await adminSetMessageApproval(id, approved, adminToken.trim());
-      if (res.ok) {
-        setPending(prev => prev.filter(m => m.id !== id));
-      } else {
-        setError(res.error || 'Falha ao atualizar aprovação.');
-      }
-    } finally {
-      setUpdatingId(null);
+      setRumorsLoading(false);
     }
   };
 
@@ -302,18 +298,16 @@ const Tavern: React.FC = () => {
           <div className="text-3xl">🧙‍♂️</div>
         </div>
 
-        {!supabaseConfigured && (
-          <div className="mt-3 bg-amber-900/30 border border-amber-500/40 text-amber-200 text-xs md:text-sm px-3 py-2 rounded">
-            Modo offline: chat funciona localmente e o mural exibe rumores simulados.
-          </div>
-        )}
+        <div className="mt-3 bg-amber-900/30 border border-amber-500/40 text-amber-200 text-xs md:text-sm px-3 py-2 rounded">
+          Ambiente focado em single-player: interaja com NPCs, eventos e descanso.
+        </div>
 
         <div className="mt-4 flex gap-2">
           <button
-            onClick={() => setTab('chat')}
-            className={`px-3 py-2 rounded ${tab === 'chat' ? 'bg-amber-600 text-black' : 'bg-gray-800 text-gray-200 hover:bg-gray-700'}`}
+            onClick={() => setTab('npcs')}
+            className={`px-3 py-2 rounded ${tab === 'npcs' ? 'bg-amber-600 text-black' : 'bg-gray-800 text-gray-200 hover:bg-gray-700'}`}
           >
-            💬 Chat
+            🧑‍🎤 NPCs
           </button>
           <button
             onClick={() => setTab('mural')}
@@ -327,102 +321,26 @@ const Tavern: React.FC = () => {
           >
             🎉 Eventos da Taverna
           </button>
-          {supabaseConfigured && (
-            <button
-              onClick={() => setTab('moderacao')}
-              className={`px-3 py-2 rounded ${tab === 'moderacao' ? 'bg-amber-600 text-black' : 'bg-gray-800 text-gray-200 hover:bg-gray-700'}`}
-            >
-              🛡️ Moderação
-            </button>
-          )}
         </div>
 
-        {tab === 'chat' && (
-          <div className="mt-6">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-300">Escopo:</div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setScope('global')}
-                  className={`px-3 py-1 rounded text-sm ${scope === 'global' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-200 hover:bg-gray-700'}`}
-                >
-                  Global
-                </button>
-                <button
-                  onClick={() => setScope('local')}
-                  className={`px-3 py-1 rounded text-sm ${scope === 'local' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-200 hover:bg-gray-700'}`}
-                >
-                  Local (simulado)
+        {tab === 'npcs' && (
+          <div className="mt-6 space-y-4">
+            <DialogueFrame>
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-amber-300">Interações com NPCs</h2>
+                <button onClick={startDialogueWithNPC} className={`px-3 py-2 rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white`}>
+                  Conversar
                 </button>
               </div>
-            </div>
-
-            <div className="mt-4 bg-gray-900/40 border border-white/10 rounded p-4 max-h-[380px] overflow-y-auto">
-              {loading && <div className="text-gray-400 text-sm">Carregando mensagens…</div>}
-              {!loading && messages.length === 0 && (
-                <div className="text-gray-400 text-sm">Nenhuma mensagem ainda. Diga algo para começar!</div>
+              {activeDialogue && (
+                <div className="mt-3 text-gray-200 text-sm">{activeDialogue}</div>
               )}
-              <ul className="space-y-3">
-                {messages.map(msg => (
-                  <li key={msg.id} className="bg-gray-800/60 border border-white/10 rounded p-3">
-                    <div className="text-xs text-gray-400">
-                      <span className="font-semibold text-amber-300">{msg.author}</span> • {new Date(msg.created_at).toLocaleString()} • {msg.scope}
-                    </div>
-                    <div className="text-gray-200 mt-1">{msg.content}</div>
-                    <div className="mt-2">
-                      <button
-                        onClick={() => promoteToMural(msg.content)}
-                        className="text-xs px-2 py-1 rounded bg-amber-700 text-black hover:bg-amber-600"
-                      >
-                        Fixar no mural
-                      </button>
-                      <button
-                        onClick={() => startReport(msg.id)}
-                        className="ml-2 text-xs px-2 py-1 rounded bg-red-700 text-white hover:bg-red-600"
-                      >
-                        Denunciar
-                      </button>
-                    </div>
-                    {reportingId === msg.id && (
-                      <div className="mt-3 bg-gray-900/50 border border-red-600/40 rounded p-2">
-                        <div className="text-xs text-gray-300 mb-1">Descreva o motivo da denúncia:</div>
-                        <textarea
-                          value={reportReason}
-                          onChange={e => setReportReason(e.target.value)}
-                          rows={2}
-                          className="w-full px-2 py-1 rounded bg-gray-800 text-gray-200 border border-white/10 focus:outline-none focus:ring-2 focus:ring-red-500"
-                        />
-                        <div className="mt-2 flex gap-2">
-                          <button
-                            onClick={submitReport}
-                            disabled={reportSending || !reportReason.trim()}
-                            className={`text-xs px-3 py-1 rounded ${reportSending ? 'bg-gray-600' : 'bg-red-600 hover:bg-red-500'} text-white`}
-                          >
-                            {reportSending ? 'Enviando…' : 'Enviar denúncia'}
-                          </button>
-                          <button
-                            onClick={cancelReport}
-                            className="text-xs px-3 py-1 rounded bg-gray-700 text-gray-200 hover:bg-gray-600"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {error && (
-              <div className="mt-3 text-xs text-red-300">{error}</div>
-            )}
-
-            {/* Log de Eventos Recentes da Taverna */}
+            </DialogueFrame>
+            <NPCPresenceLayer />
             {(() => {
               const recent = activityManager.getRecentActivities(15).filter(a => a.type === 'tavern-rest' || a.type === 'tavern-dice');
               return (
-                <div className="mt-6 bg-gray-900/40 border border-white/10 rounded p-4">
+                <div className="bg-gray-900/40 border border-white/10 rounded p-4">
                   <h3 className="text-lg font-semibold text-amber-300">📜 Eventos Recentes da Taverna</h3>
                   {recent.length === 0 ? (
                     <div className="text-xs text-gray-400 mt-2">Nenhum evento recente registrado.</div>
@@ -442,21 +360,6 @@ const Tavern: React.FC = () => {
                 </div>
               );
             })()}
-
-            <div className="mt-4 flex gap-2">
-              <input
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                placeholder="Diga algo para a taverna…"
-                className="flex-1 px-3 py-2 rounded bg-gray-800 text-gray-200 border border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-500"
-              />
-              <button
-                onClick={handleSend}
-                className="px-4 py-2 rounded bg-amber-600 text-black hover:bg-amber-700"
-              >
-                Enviar
-              </button>
-            </div>
           </div>
         )}
 
@@ -470,19 +373,37 @@ const Tavern: React.FC = () => {
                 className={`px-3 py-2 rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}
               >
                 {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
-                <span>{rumorsLoading ? 'Gerando…' : 'Gerar Rumores IA'}</span>
+                <span>{rumorsLoading ? 'Gerando…' : 'Gerar Rumores (Auto)'}</span>
               </button>
+              <div className="flex items-center gap-2 text-xs">
+                <label className="flex items-center gap-1"><input type="radio" name="rumor-filter" checked={rumorFilter==='all'} onChange={() => setRumorFilter('all')} />Todos</label>
+                <label className="flex items-center gap-1"><input type="radio" name="rumor-filter" checked={rumorFilter==='player'} onChange={() => setRumorFilter('player')} />Jogador</label>
+                <label className="flex items-center gap-1"><input type="radio" name="rumor-filter" checked={rumorFilter==='npc'} onChange={() => setRumorFilter('npc')} />NPCs</label>
+                <select value={rumorIntervalSec} onChange={e => setRumorIntervalSec(Number(e.target.value) || 60)} className="ml-2 px-2 py-1 bg-gray-800 text-white border border-white/10 rounded">
+                  <option value={30}>30s</option>
+                  <option value={60}>60s</option>
+                  <option value={120}>120s</option>
+                </select>
+                {lastRumorTs && (<span className="ml-2 text-gray-400">Gerado: {new Date(lastRumorTs).toLocaleString()}</span>)}
+              </div>
               {rumorsError && <span className="text-xs text-red-300">{rumorsError}</span>}
             </div>
             <ul className="space-y-2">
-              {(mural.length > 0 ? mural : (generatedRumors.length > 0 ? generatedRumors : offlineRumors)).map((r, idx) => (
+              {(mural.length > 0 ? mural : generatedRumors).map((r, idx) => (
                 <li key={idx} className="bg-gray-800/60 border border-white/10 rounded p-3 text-gray-200">
                   {r}
                 </li>
               ))}
             </ul>
-            {mural.length === 0 && (
-              <div className="text-xs text-gray-400 mt-2">Use a IA para sugerir rumores, ou adicione mensagens do chat ao mural para construir a história viva da taverna.</div>
+            {Object.keys(rumorStats).length > 0 && (
+              <div className="mt-2 text-xs text-gray-400">
+                {Object.entries(rumorStats).sort((a,b)=>b[1]-a[1]).map(([k,v]) => (
+                  <span key={k} className="inline-flex items-center px-2 py-1 bg-gray-800 border border-white/10 rounded mr-2">{k}: {v}</span>
+                ))}
+              </div>
+            )}
+            {mural.length === 0 && generatedRumors.length === 0 && (
+              <div className="text-xs text-gray-400 mt-2">Sem rumores gerados: jogue e interaja para criar fatos; então gere novamente.</div>
             )}
           </div>
         )}
@@ -495,6 +416,42 @@ const Tavern: React.FC = () => {
             </div>
             <div className="text-xs text-gray-400 mt-2">
               Uma fofoca diferente surge a cada dia. Participe para ganhar prestígio!
+            </div>
+
+            <div className="mt-6 bg-gray-900/40 border border-white/10 rounded p-4">
+              <h3 className="text-lg font-semibold text-amber-300">🪵 Missões Locais da Taverna</h3>
+              <div className="text-xs text-gray-400">Ajude o ambiente e conquiste pequenas recompensas.</div>
+              {(() => {
+                const list = (useHeroStore.getState().availableQuests || []).filter(q => String(q.id).startsWith('tavern-'));
+                const hero = useHeroStore.getState().getSelectedHero();
+                if (!hero) {
+                  return <div className="mt-3 text-xs text-gray-400">Selecione um herói para aceitar missões.</div>;
+                }
+                if (list.length === 0) {
+                  return <div className="mt-3 text-xs text-gray-400">Nenhuma missão local disponível no momento.</div>;
+                }
+                return (
+                  <ul className="mt-3 space-y-2">
+                    {list.slice(0, 5).map(q => (
+                      <li key={q.id} className="flex items-center justify-between bg-gray-800/60 border border-white/10 rounded px-3 py-2">
+                        <div className="text-gray-200 text-sm">
+                          <div className="font-semibold">{q.title}</div>
+                          <div className="text-xs text-gray-400">{q.description}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-amber-300 text-xs">+{q.rewards?.xp || 0} XP • +{q.rewards?.gold || 0} 🪙</span>
+                          <button
+                            onClick={() => {
+                              try { useHeroStore.getState().acceptQuest(hero.id, String(q.id)); notificationBus.emit({ type: 'quest', title: 'Missão aceita', message: q.title, icon: '📜', duration: 2500 }); } catch {}
+                            }}
+                            className={`px-3 py-1 rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white text-xs`}
+                          >Aceitar</button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
             </div>
 
             {/* Noite de Dados Especial */}
@@ -616,209 +573,7 @@ const Tavern: React.FC = () => {
               </div>
             </div>
 
-            {/* Leaderboard Semanal de Rolagens */}
-            {(() => {
-              const now = new Date();
-              const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-              const feed = activityManager.getActivityFeed({ dateRange: { start: weekAgo, end: now }, showOnlyPublic: true });
-              const entries = (() => {
-                if (serverDiceEntries && serverDiceEntries.length) {
-                  let list = serverDiceEntries.map((e: any) => ({ name: e.heroName, best: e.best, crits: e.crits, count: e.count }));
-                  if (critOnly) list = list.map(e => e).filter(e => e.crits > 0);
-                  if (betsOnly) list = list; // servidor não retorna bets; filtro local não aplicável
-                  return list.slice(0, 10);
-                }
-                const diceActivitiesRaw = feed.activities.filter(a => a.type === 'tavern-dice');
-                let diceActivities = critOnly ? diceActivitiesRaw.filter(a => !!(a.data as any).critical) : diceActivitiesRaw;
-                if (betsOnly) diceActivities = diceActivities.filter(a => typeof (a.data as any).betAmount === 'number' && (a.data as any).betAmount > 0);
-                const map: Record<string, { name: string; best: number; crits: number; count: number }> = {};
-                diceActivities.forEach(a => {
-                  const name = a.data.heroName;
-                  const r = (a.data as any).roll ?? 0;
-                  const crit = !!(a.data as any).critical;
-                  const cur = map[name] || { name, best: 0, crits: 0, count: 0 };
-                  cur.best = Math.max(cur.best, r);
-                  cur.crits += crit ? 1 : 0;
-                  cur.count += 1;
-                  map[name] = cur;
-                });
-                return Object.values(map).sort((a,b) => {
-                  if (b.best !== a.best) return b.best - a.best;
-                  if (b.crits !== a.crits) return b.crits - a.crits;
-                  return b.count - a.count;
-                }).slice(0,10);
-              })();
-              return (
-                <div className="mt-6 bg-gray-900/40 border border-white/10 rounded p-4">
-                  <h3 className="text-lg font-semibold text-amber-300 flex items-center gap-2">🏆 Painel de Líderes — Melhores Rolagens (7 dias)</h3>
-                  <div className="mt-2 flex items-center gap-2">
-                    <button onClick={refreshServerData} className="px-2 py-1 rounded bg-amber-600 text-black hover:bg-amber-700 text-xs">Atualizar</button>
-                  </div>
-                  {serverLoading && (<div className="mt-2 text-xs text-gray-300">Carregando…</div>)}
-                  {serverError && (<div className="mt-2 text-xs text-red-300">{serverError}</div>)}
-                  <div className="mt-2 flex items-center gap-3 text-xs text-gray-300">
-                    <label className="flex items-center gap-1">
-                      <input type="checkbox" checked={critOnly} onChange={e => setCritOnly(e.target.checked)} />
-                      Mostrar apenas críticos
-                    </label>
-                    <label className="flex items-center gap-1">
-                      <input type="checkbox" checked={betsOnly} onChange={e => setBetsOnly(e.target.checked)} />
-                      Mostrar somente apostas
-                    </label>
-                  </div>
-                  {entries.length === 0 ? (
-                    <div className="text-xs text-gray-400 mt-2">Nenhum dado registrado na última semana.</div>
-                  ) : (
-                    <ul className="mt-3 space-y-2">
-                      {entries.map((e, idx) => (
-                        <li key={e.name} className="flex items-center justify-between bg-gray-800/60 border border-white/10 rounded px-3 py-2">
-                          <span className="text-gray-200 text-sm">
-                            <span className="mr-2 text-xl">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '⭐'}</span>
-                            {e.name}
-                          </span>
-                          <span className="text-amber-300 text-sm">Melhor: {e.best} • Críticos: {e.crits} • Rolagens: {e.count}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              );
-            })()}
-
-            {(() => {
-              const now = new Date();
-              const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-              const feed = activityManager.getActivityFeed({ dateRange: { start: weekAgo, end: now }, showOnlyPublic: true });
-              const tavernActs = feed.activities.filter(a => a.type === 'tavern-dice' || a.type === 'tavern-rest');
-              const scoreMap: Record<string, { name: string; score: number; rolls: number; crits: number; rests: number }> = {};
-              tavernActs.forEach(a => {
-                const name = a.data.heroName;
-                const isDice = a.type === 'tavern-dice';
-                const isRest = a.type === 'tavern-rest';
-                const crit = isDice ? (Number(!!(a.data as any).critical)) : 0;
-                const cur = scoreMap[name] || { name, score: 0, rolls: 0, crits: 0, rests: 0 };
-                if (isDice) {
-                  cur.rolls += 1;
-                  cur.crits += crit;
-                  cur.score += crit * 10 + 2;
-                }
-                if (isRest) {
-                  cur.rests += 1;
-                  cur.score += 1;
-                }
-                scoreMap[name] = cur;
-              });
-              const entries = Object.values(scoreMap).sort((a,b) => b.score - a.score).slice(0,10);
-              return (
-                <div className="mt-6 bg-gray-900/40 border border-white/10 rounded p-4">
-                  <h3 className="text-lg font-semibold text-amber-300 flex items-center gap-2">🏅 Ranking Semanal da Taverna</h3>
-                  {entries.length === 0 ? (
-                    <div className="text-xs text-gray-400 mt-2">Nenhuma atividade registrada na última semana.</div>
-                  ) : (
-                    <ul className="mt-3 space-y-2">
-                      {entries.map((e, idx) => (
-                        <li key={e.name} className="flex items-center justify-between bg-gray-800/60 border border-white/10 rounded px-3 py-2">
-                          <span className="text-gray-200 text-sm">
-                            <span className="mr-2 text-xl">{idx === 0 ? '👑' : idx < 3 ? '🥇' : '⭐'}</span>
-                            {e.name}
-                          </span>
-                          <span className="text-amber-300 text-sm">Score: {e.score} • Rolagens: {e.rolls} • Críticos: {e.crits} • Descansos: {e.rests}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              );
-            })()}
-
-            {weeklyChampions && weeklyChampions.length > 0 && (
-              <div className="mt-6 bg-gray-900/40 border border-white/10 rounded p-4">
-                <h3 className="text-lg font-semibold text-amber-300 flex items-center gap-2">🏛️ Hall da Taverna — Campeões Semanais</h3>
-                <div className="mt-2 flex items-center gap-2">
-                  <button onClick={refreshServerData} className="px-2 py-1 rounded bg-amber-600 text-black hover:bg-amber-700 text-xs">Atualizar</button>
-                </div>
-                {serverLoading && (<div className="mt-2 text-xs text-gray-300">Carregando…</div>)}
-                {serverError && (<div className="mt-2 text-xs text-red-300">{serverError}</div>)}
-                <ul className="mt-3 space-y-2">
-                  {weeklyChampions.slice(0, 6).map((c: any) => (
-                    <li key={`${c.week_start}-${c.hero_name}`} className="flex items-center justify-between bg-gray-800/60 border border-white/10 rounded px-3 py-2">
-                      <span className="text-gray-200 text-sm">{new Date(c.week_start).toLocaleDateString()} • {c.hero_name}</span>
-                      <span className="text-amber-300 text-sm">Score: {c.score}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Apostas Amigáveis */}
-                {selectedHero && (
-                  <div className="mt-6 bg-gray-900/40 border border-white/10 rounded p-4">
-                    <h3 className="text-lg font-semibold text-amber-300">🤝 Apostas Amigáveis</h3>
-                    <p className="text-sm text-gray-300 mt-1">Desafie outro herói para um duelo de dados (d20). Apenas diversão, sem transferência de ouro.</p>
-                    <div className="mt-3 flex items-center gap-2 flex-wrap">
-                      {(() => {
-                        const heroes = useHeroStore.getState().heroes.filter(h => h.id !== selectedHero!.id);
-                        return (
-                          <>
-                            <label className="text-sm text-gray-200">Oponente:</label>
-                            <select value={opponentId} onChange={e => setOpponentId(e.target.value)} className="px-3 py-2 rounded bg-gray-800 text-gray-200 border border-white/10">
-                              <option value="">Selecione…</option>
-                              {heroes.map(h => (
-                                <option key={h.id} value={h.id}>{h.name} • Nível {h.progression.level}</option>
-                              ))}
-                            </select>
-                            <label className="text-sm text-gray-200">Aposta:</label>
-                            <input type="number" min={0} value={betAmount} onChange={e => setBetAmount(Math.max(0, parseInt(e.target.value || '0', 10)))} className="w-24 px-3 py-2 rounded bg-gray-800 text-gray-200 border border-white/10" />
-                            <button
-                              onClick={async () => {
-                                const opp = (useHeroStore.getState().heroes || []).find(h => h.id === opponentId);
-                                if (!opp) return;
-                                const rollA = Math.floor(Math.random() * 20) + 1;
-                                const rollB = Math.floor(Math.random() * 20) + 1;
-                                const winner = rollA === rollB ? null : (rollA > rollB ? selectedHero : opp);
-                                try {
-                                  logActivity.tavernDice({ heroId: selectedHero.id, heroName: selectedHero.name, heroClass: selectedHero.class, heroLevel: selectedHero.progression.level, roll: rollA, opponentName: opp.name, betAmount: betAmount > 0 ? betAmount : undefined } as any);
-                                  logActivity.tavernDice({ heroId: opp.id, heroName: opp.name, heroClass: opp.class, heroLevel: opp.progression.level, roll: rollB, opponentName: selectedHero.name, betAmount: betAmount > 0 ? betAmount : undefined } as any);
-                                } catch {}
-                                try {
-                                  await recordDiceEvent({ heroId: selectedHero.id, heroName: selectedHero.name, roll: rollA, betAmount: betAmount > 0 ? betAmount : undefined, opponentName: opp.name });
-                                  await recordDiceEvent({ heroId: opp.id, heroName: opp.name, roll: rollB, betAmount: betAmount > 0 ? betAmount : undefined, opponentName: selectedHero.name });
-                                } catch {}
-                                try {
-                                  const heroA = useHeroStore.getState().getSelectedHero();
-                                  if (heroA) {
-                                    const sa = { ...(heroA.stats || {}) } as any;
-                                    sa.tavernDiceRolls = (sa.tavernDiceRolls || 0) + 1;
-                                    sa.tavernBestRoll = Math.max(rollA, sa.tavernBestRoll || 0);
-                                    useHeroStore.getState().updateHero(heroA.id, { stats: sa });
-                                  }
-                                  const heroB = (useHeroStore.getState().heroes || []).find(h => h.id === opp.id);
-                                  if (heroB) {
-                                    const sb = { ...(heroB.stats || {}) } as any;
-                                    sb.tavernDiceRolls = (sb.tavernDiceRolls || 0) + 1;
-                                    sb.tavernBestRoll = Math.max(rollB, sb.tavernBestRoll || 0);
-                                    useHeroStore.getState().updateHero(heroB.id, { stats: sb });
-                                  }
-                                } catch {}
-                                const stake = betAmount > 0 ? ` • aposta: ${betAmount} 🪙` : '';
-                                const msg = winner
-                                  ? `${winner.name} venceu (${winner.id === selectedHero.id ? rollA : rollB} vs ${winner.id === selectedHero.id ? rollB : rollA})${stake}`
-                                  : `Empate (${rollA} vs ${rollB})${stake}`;
-                                setDiceMessage(msg);
-                                try {
-                                  notificationBus.emit({ type: 'achievement', title: 'Duelo de Dados', message: msg, icon: '🎲', duration: 3000 });
-                                } catch {}
-                              }}
-                              className={`px-3 py-2 rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white`}
-                            >
-                              Duelo de Dados
-                            </button>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                )}
+            {/* Módulos de ranking e apostas desativados para modo single-player */}
 
           {/* Descanso pago na Taverna */}
             <div className="mt-6 bg-gray-900/40 border border-white/10 rounded p-4">
@@ -885,69 +640,7 @@ const Tavern: React.FC = () => {
           </div>
         )}
 
-        {tab === 'moderacao' && (
-          <div className="mt-6">
-            <h2 className="text-xl font-semibold text-amber-300 mb-2">Painel de Moderação</h2>
-            {!supabaseConfigured && (
-              <div className="mt-3 bg-red-900/30 border border-red-500/40 text-red-200 text-xs md:text-sm px-3 py-2 rounded">
-                Supabase desabilitado: a moderação requer banco de dados configurado.
-              </div>
-            )}
-            {supabaseConfigured && (
-              <div className="bg-gray-900/40 border border-white/10 rounded p-3">
-                <div className="text-sm text-gray-300">Forneça seu token de administração:</div>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    value={adminToken}
-                    onChange={e => setAdminToken(e.target.value)}
-                    placeholder="ADMIN_API_TOKEN"
-                    className="flex-1 px-3 py-2 rounded bg-gray-800 text-gray-200 border border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                  <button
-                    onClick={loadPending}
-                    disabled={loadingPending}
-                    className="px-4 py-2 rounded bg-amber-600 text-black hover:bg-amber-700"
-                  >
-                    {loadingPending ? 'Carregando…' : 'Listar pendentes'}
-                  </button>
-                </div>
-                {pending.length > 0 ? (
-                  <ul className="mt-4 space-y-3">
-                    {pending.map(msg => (
-                      <li key={msg.id} className="bg-gray-800/60 border border-white/10 rounded p-3">
-                        <div className="text-xs text-gray-400">
-                          <span className="font-semibold text-amber-300">{msg.author}</span> • {new Date(msg.created_at).toLocaleString()} • {msg.scope}
-                        </div>
-                        <div className="text-gray-200 mt-1">{msg.content}</div>
-                        <div className="mt-2 flex gap-2">
-                          <button
-                            onClick={() => setApproval(msg.id, true)}
-                            disabled={!!updatingId}
-                            className="text-xs px-3 py-1 rounded bg-green-600 text-white hover:bg-green-500"
-                          >
-                            {updatingId === msg.id ? 'Atualizando…' : 'Aprovar'}
-                          </button>
-                          <button
-                            onClick={() => setApproval(msg.id, false)}
-                            disabled={!!updatingId}
-                            className="text-xs px-3 py-1 rounded bg-gray-700 text-gray-200 hover:bg-gray-600"
-                          >
-                            {updatingId === msg.id ? 'Atualizando…' : 'Ocultar'}
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="mt-4 text-xs text-gray-400">{loadingPending ? 'Buscando…' : 'Nenhuma mensagem pendente encontrada.'}</div>
-                )}
-              </div>
-            )}
-            <div className="text-xs text-gray-400 mt-2">
-              Dica: o token admin deve corresponder ao esperado pelo endpoint `/api/tavern-approve`.
-            </div>
-          </div>
-        )}
+        {/* Painel de moderação removido no modo single-player */}
       </div>
     </div>
   );

@@ -45,9 +45,7 @@ const Leaderboards: React.FC = () => {
 
   useEffect(() => {
     if (viewHero) {
-      // Gerar dados mock para demonstração
-      const allHeroes = generateMockLeaderboardData(viewHero);
-      const generatedLeaderboards = generateAllLeaderboards(allHeroes);
+      const generatedLeaderboards = generateAllLeaderboards(heroes);
       setLeaderboards(generatedLeaderboards);
 
       // Carregar ranking diário e resumo
@@ -75,7 +73,7 @@ const Leaderboards: React.FC = () => {
   }
 
   const currentLeaderboard = leaderboards.find(lb => lb.id === selectedLeaderboard);
-  const heroRanking = getHeroRanking(viewHero, generateMockLeaderboardData(viewHero));
+  const heroRanking = getHeroRanking(viewHero, heroes);
   const config = LEADERBOARD_CONFIGS.find(c => c.id === selectedLeaderboard);
 
   const renderLeaderboardEntry = (entry: LeaderboardEntry, isCurrentHero: boolean = false) => (
@@ -99,6 +97,7 @@ const Leaderboards: React.FC = () => {
           <div className="flex items-center space-x-2">
             <h3 className={`font-semibold ${isCurrentHero ? 'text-amber-400' : 'text-white'}`}>
               {entry.heroName}
+              {entry.isNPC && <span className="ml-2 text-xs bg-gray-600 px-2 py-1 rounded">NPC</span>}
               {isCurrentHero && <span className="ml-2 text-xs bg-amber-600 px-2 py-1 rounded">VOCÊ</span>}
             </h3>
           </div>

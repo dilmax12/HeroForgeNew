@@ -754,14 +754,13 @@ window.addEventListener('beforeunload', () => {
     const frameSwitches = featureEvents.filter(e => String(e.data?.feature) === 'frame-switch').length;
     const body = { kpi, installs, purchases };
     (body as any).customizations = { themeSwitches, frameSwitches };
-    const apiBase = (import.meta as any)?.env?.DEV ? '' : 'http://localhost:3001';
-    const url = `${apiBase}/api/metrics/ingest`;
+    const isDev = Boolean((import.meta as any)?.env?.DEV);
+    if (isDev) return;
+    const url = `http://localhost:3001/api/metrics/ingest`;
     try {
       if (navigator && typeof navigator.sendBeacon === 'function') {
         const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
         navigator.sendBeacon(url, blob);
-      } else {
-        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {});
       }
     } catch {}
   } catch {}

@@ -5,80 +5,39 @@
 
 import { Element } from '../types/hero';
 
-export const ELEMENT_ADVANTAGES: Record<Element, { beats?: Element; weak?: Element }> = {
-  fire: { beats: 'ice', weak: 'earth' },
-  ice: { beats: 'thunder', weak: 'fire' },
-  thunder: { beats: 'earth', weak: 'ice' },
-  earth: { beats: 'fire', weak: 'thunder' },
+export const ELEMENT_ADVANTAGES: Record<Element, { beats?: Element | Element[]; weak?: Element | Element[] }> = {
+  fire:  { beats: 'earth', weak: 'water' },
+  water: { beats: 'fire', weak: 'thunder' },
+  earth: { beats: 'thunder', weak: 'fire' },
+  air:   { },
+  thunder: { beats: 'water', weak: 'earth' },
   light: { beats: 'dark', weak: 'dark' },
-  dark: { beats: 'light', weak: 'light' },
-  physical: {} // Neutro
+  dark:  { beats: ['fire','water','earth','air','thunder'], weak: 'light' },
+  physical: {}
 };
 
 export const ELEMENT_INFO: Record<Element, { name: string; icon: string; color: string; description: string }> = {
-  fire: {
-    name: 'Fogo',
-    icon: '🔥',
-    color: '#FF4500',
-    description: 'Elemento do poder e destruição. Forte contra Gelo, fraco contra Terra.'
-  },
-  ice: {
-    name: 'Gelo',
-    icon: '❄️',
-    color: '#00BFFF',
-    description: 'Elemento do controle e preservação. Forte contra Trovão, fraco contra Fogo.'
-  },
-  thunder: {
-    name: 'Trovão',
-    icon: '⚡',
-    color: '#FFD700',
-    description: 'Elemento da velocidade e energia. Forte contra Terra, fraco contra Gelo.'
-  },
-  earth: {
-    name: 'Terra',
-    icon: '🌍',
-    color: '#8B4513',
-    description: 'Elemento da resistência e estabilidade. Forte contra Fogo, fraco contra Trovão.'
-  },
-  light: {
-    name: 'Luz',
-    icon: '✨',
-    color: '#FFFF00',
-    description: 'Elemento da pureza e cura. Forte contra Sombra, mas também vulnerável a ela.'
-  },
-  dark: {
-    name: 'Sombra',
-    icon: '🌑',
-    color: '#4B0082',
-    description: 'Elemento do mistério e poder oculto. Forte contra Luz, mas também vulnerável a ela.'
-  },
-  physical: {
-    name: 'Físico',
-    icon: '⚔️',
-    color: '#808080',
-    description: 'Elemento neutro sem vantagens ou desvantagens elementais.'
-  }
+  fire:     { name: 'Fogo',    icon: '🔥', color: '#FF4500', description: '+10% dano contínuo; vence Terra; perde para Água' },
+  water:    { name: 'Água',    icon: '🌊', color: '#1E90FF', description: '+10% cura recebida; vence Fogo; perde para Raio' },
+  earth:    { name: 'Terra',   icon: '🌱', color: '#8B4513', description: '+20% defesa base; vence Raio; perde para Fogo' },
+  air:      { name: 'Ar',      icon: '🌪', color: '#87CEEB', description: '+10% chance de crítico; instável' },
+  thunder:  { name: 'Raio',    icon: '⚡', color: '#FFD700', description: '+10% velocidade; vence Água; perde para Terra' },
+  light:    { name: 'Luz',     icon: '✨', color: '#FFFF00', description: '+5% cura e dano sagrado; vence Trevas' },
+  dark:     { name: 'Trevas',  icon: '💀', color: '#4B0082', description: 'Roubo de vida 5%; vence todos exceto Luz' },
+  physical: { name: 'Físico',  icon: '⚔️', color: '#808080', description: 'Neutro' }
 };
 
 /**
  * Calcula o multiplicador de dano elemental
  */
 export function getElementMultiplier(attackElement: Element, defendElement: Element): number {
-  if (attackElement === defendElement) {
-    return 1.0; // Mesmo elemento = neutro
-  }
-  
-  const advantage = ELEMENT_ADVANTAGES[attackElement];
-  
-  if (advantage.beats === defendElement) {
-    return 1.3; // Vantagem = +30% dano
-  }
-  
-  if (advantage.weak === defendElement) {
-    return 0.7; // Desvantagem = -30% dano
-  }
-  
-  return 1.0; // Neutro
+  if (attackElement === defendElement) return 1.0;
+  const adv = ELEMENT_ADVANTAGES[attackElement];
+  const beats = Array.isArray(adv.beats) ? adv.beats : adv.beats ? [adv.beats] : [];
+  const weaks = Array.isArray(adv.weak) ? adv.weak : adv.weak ? [adv.weak] : [];
+  if (beats.includes(defendElement)) return 1.3;
+  if (weaks.includes(defendElement)) return 0.7;
+  return 1.0;
 }
 
 /**
@@ -114,7 +73,7 @@ export function getElementAdvantageInfo(element: Element): {
  * Gera um elemento aleatório
  */
 export function generateRandomElement(): Element {
-  const elements: Element[] = ['fire', 'ice', 'thunder', 'earth', 'light', 'dark'];
+  const elements: Element[] = ['fire','water','earth','air','thunder','light','dark'];
   return elements[Math.floor(Math.random() * elements.length)];
 }
 
@@ -123,15 +82,14 @@ export function generateRandomElement(): Element {
  */
 export function getRecommendedElements(heroClass: string): Element[] {
   const recommendations: Record<string, Element[]> = {
-    guerreiro: ['earth', 'fire', 'physical'],
-    mago: ['fire', 'ice', 'thunder'],
-    arqueiro: ['physical', 'thunder', 'earth'],
-    clerigo: ['light', 'earth', 'physical'],
-    ladino: ['dark', 'physical', 'thunder'],
-    patrulheiro: ['earth', 'physical', 'ice'],
-    paladino: ['light', 'fire', 'earth']
+    guerreiro: ['earth','fire','physical'],
+    mago: ['fire','water','thunder'],
+    arqueiro: ['air','thunder','earth'],
+    clerigo: ['light','water','earth'],
+    ladino: ['dark','air','thunder'],
+    patrulheiro: ['earth','air','water'],
+    paladino: ['light','fire','earth']
   };
-  
   return recommendations[heroClass.toLowerCase()] || ['physical'];
 }
 
@@ -151,12 +109,13 @@ export function getElementInfoSafe(element: Element | string) {
 }
 
 export const ELEMENT_ADV: Record<Element, { beats: Element[]; weak?: Element[] }> = {
-  fire: { beats: ['ice'], weak: ['earth'] },
-  ice: { beats: ['thunder'] },
-  thunder: { beats: ['earth'] },
-  earth: { beats: ['fire'] },
-  light: { beats: ['dark'] },
-  dark: { beats: ['light'] },
+  fire: { beats: ['earth'], weak: ['water'] },
+  water: { beats: ['fire'], weak: ['thunder'] },
+  earth: { beats: ['thunder'], weak: ['fire'] },
+  air: { beats: [] },
+  thunder: { beats: ['water'], weak: ['earth'] },
+  light: { beats: ['dark'], weak: ['dark'] },
+  dark: { beats: ['fire','water','earth','air','thunder'], weak: ['light'] },
   physical: { beats: [] }
 };
 

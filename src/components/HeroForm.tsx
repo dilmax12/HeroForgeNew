@@ -248,7 +248,7 @@ const HeroForm = () => {
   const handleClassChange = (newClass: HeroClass) => {
     const meta = CLASS_METADATA[newClass];
     if (meta?.requirements) {
-      const check = meta.requirements({ alignment: formData.alignment as any, attributes: formData.attributes, race: formData.race });
+      const check = meta.requirements({ attributes: formData.attributes, race: formData.race });
       if (!check.ok) { setLimitWarning(check.message || 'Requisitos da classe não atendidos.'); return; }
     }
     const newSkills = getClassSkills(newClass);
@@ -431,7 +431,7 @@ const HeroForm = () => {
     e.preventDefault();
     const meta = CLASS_METADATA[formData.class];
     if (meta?.requirements) {
-      const check = meta.requirements({ alignment: formData.alignment as Alignment, attributes: formData.attributes, race: formData.race });
+      const check = meta.requirements({ attributes: formData.attributes, race: formData.race });
       if (!check.ok) {
         setLimitWarning(check.message || 'Requisitos da classe não atendidos.');
         return;
@@ -521,7 +521,7 @@ const HeroForm = () => {
         </select>
         <button
           type="button"
-          onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify({ name: formData.name, race: formData.race, class: formData.class, alignment: formData.alignment, attributes: formData.attributes, element: formData.element, plannedTalents: formData.plannedTalents || [] })); } catch {} }}
+          onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify({ name: formData.name, race: formData.race, class: formData.class, attributes: formData.attributes, element: formData.element, plannedTalents: formData.plannedTalents || [] })); } catch {} }}
           className="px-3 py-1 rounded bg-indigo-600 text-white text-xs hover:bg-indigo-700"
         >
           Exportar build
@@ -533,7 +533,7 @@ const HeroForm = () => {
             try {
               const b = JSON.parse(raw)
               if (b && typeof b === 'object') {
-                setFormData(prev => ({ ...prev, name: b.name || prev.name, race: b.race || prev.race, class: b.class || prev.class, alignment: b.alignment || prev.alignment, attributes: b.attributes || prev.attributes, element: b.element || prev.element, plannedTalents: Array.isArray(b.plannedTalents) ? b.plannedTalents : (prev.plannedTalents || []) }))
+                setFormData(prev => ({ ...prev, name: b.name || prev.name, race: b.race || prev.race, class: b.class || prev.class, attributes: b.attributes || prev.attributes, element: b.element || prev.element, plannedTalents: Array.isArray(b.plannedTalents) ? b.plannedTalents : (prev.plannedTalents || []) }))
               }
             } catch {}
           }}
@@ -571,7 +571,7 @@ const HeroForm = () => {
         <button
           type="button"
           onClick={() => {
-            setFormData(prev => ({ ...prev, name: '', race: 'humano', class: 'guerreiro', alignment: 'neutro-puro', attributes: createInitialAttributes(), element: 'physical', plannedTalents: [] }))
+            setFormData(prev => ({ ...prev, name: '', race: 'humano', class: 'guerreiro', attributes: createInitialAttributes(), element: 'physical', plannedTalents: [] }))
             setLimitWarning('Build resetado')
           }}
           className="px-3 py-1 rounded bg-gray-600 text-white text-xs hover:bg-gray-700"
@@ -695,7 +695,7 @@ const HeroForm = () => {
                   <div className="mt-2 text-xs text-gray-400">Atributos base: {Object.entries(meta.baseAttributes).map(([k,v]) => `${k}:${v}`).join(' • ')}</div>
                   <div className="mt-2 text-xs text-emerald-300">Vantagens: {meta.advantages.join(', ')}</div>
                   {meta.disadvantages.length > 0 && <div className="mt-1 text-xs text-red-300">Desvantagens: {meta.disadvantages.join(', ')}</div>}
-                  {meta.requirements && (() => { const c = meta.requirements({ alignment: formData.alignment as any, attributes: formData.attributes, race: formData.race }); return <div className={`mt-1 text-xs ${c.ok ? 'text-emerald-300' : 'text-yellow-300'}`}>{c.ok ? 'Requisitos atendidos' : c.message || 'Requisitos pendentes'}</div>; })()}
+                  {meta.requirements && (() => { const c = meta.requirements({ attributes: formData.attributes, race: formData.race }); return <div className={`mt-1 text-xs ${c.ok ? 'text-emerald-300' : 'text-yellow-300'}`}>{c.ok ? 'Requisitos atendidos' : c.message || 'Requisitos pendentes'}</div>; })()}
                 </button>
               ))}
             </div>
@@ -1144,44 +1144,7 @@ const HeroForm = () => {
           />
         </div>
 
-        {/* Informações Adicionais */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300">Alinhamento</label>
-            <select
-              value={formData.alignment}
-              onChange={(e) => setFormData({...formData, alignment: e.target.value as Alignment})}
-              className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            >
-              <option value="leal-bom">Leal e Bom</option>
-              <option value="neutro-bom">Neutro e Bom</option>
-              <option value="caotico-bom">Caótico e Bom</option>
-              <option value="leal-neutro">Leal e Neutro</option>
-              <option value="neutro-puro">Verdadeiramente Neutro</option>
-              <option value="caotico-neutro">Caótico e Neutro</option>
-              <option value="leal-mal">Leal e Mau</option>
-              <option value="neutro-mal">Neutro e Mau</option>
-              <option value="caotico-mal">Caótico e Mau</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300">Antecedente</label>
-            <select
-              value={formData.background}
-              onChange={(e) => setFormData({...formData, background: e.target.value})}
-              className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            >
-              <option value="">Selecione um antecedente</option>
-              <option value="acolyte">Acólito</option>
-              <option value="criminal">Criminoso</option>
-              <option value="folk-hero">Herói do Povo</option>
-              <option value="noble">Nobre</option>
-              <option value="sage">Sábio</option>
-              <option value="soldier">Soldado</option>
-            </select>
-          </div>
-        </div>
+        
         
         {/* História */}
         <div>
@@ -1208,7 +1171,7 @@ const HeroForm = () => {
               onClick={async () => {
                 setLoadingHFStory(true);
                 try {
-                  const contexto = `${formData.name || 'Herói'}, classe ${formData.class}, raça ${formData.race}, elemento ${formData.element}, alinhamento ${formData.alignment}${formData.background ? ', antecedente ' + formData.background : ''}`;
+                  const contexto = `${formData.name || 'Herói'}, classe ${formData.class}, raça ${formData.race}, elemento ${formData.element}`;
                   const historia = await gerarTexto('historia', contexto);
                   setFormData(prev => ({ ...prev, backstory: historia }));
                   notificationBus.emit({

@@ -166,7 +166,7 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
               onChange={(e) => selectHero(e.target.value)}
               className="bg-white text-indigo-800 px-2 py-1 rounded shadow-sm"
             >
-              {heroes.map(h => (
+              {heroes.filter(h => h.origin !== 'npc').map(h => (
                 <option key={h.id} value={h.id}>{h.name}</option>
               ))}
             </select>
@@ -387,17 +387,22 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
                 <h3 className="text-xl font-bold mb-4 text-gray-800">👥 Membros</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {currentGuild.members.map(memberId => {
-                    // Em uma implementação real, você buscaria os dados do herói pelo ID
                     const isCurrentHero = memberId === hero.id;
+                    const ref = heroes.find(h => h.id === memberId);
+                    const isNPC = ref?.origin === 'npc';
+                    const displayName = isCurrentHero ? hero.name : (ref?.name || `Membro ${memberId.slice(-4)}`);
+                    const displayClass = isCurrentHero ? `${hero.class} • Nível ${hero.progression.level}` : (ref ? `${ref.class} • Nível ${ref.progression.level}` : 'Aventureiro');
+                    const avatar = isCurrentHero ? hero.avatar : (ref?.avatar || '👤');
                     return (
                       <div key={memberId} className={`p-3 rounded-lg border ${isCurrentHero ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
                         <div className="flex items-center space-x-3">
-                          <div className="text-2xl">{isCurrentHero ? hero.avatar : '👤'}</div>
+                          <div className="text-2xl">{avatar}</div>
                           <div>
-                            <div className="font-medium">{isCurrentHero ? hero.name : `Membro ${memberId.slice(-4)}`}</div>
-                            <div className="text-sm text-gray-600">
-                              {isCurrentHero ? `${hero.class} • Nível ${hero.progression.level}` : 'Aventureiro'}
+                            <div className="font-medium flex items-center gap-2">
+                              <span>{displayName}</span>
+                              {isNPC && <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded">NPC</span>}
                             </div>
+                            <div className="text-sm text-gray-600">{displayClass}</div>
                           </div>
                           {isCurrentHero && <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Você</span>}
                           {currentGuild.roles && currentGuild.roles[memberId] && (

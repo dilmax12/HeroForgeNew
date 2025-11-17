@@ -22,6 +22,17 @@ export interface GameSettingsState {
   inviteRewardGold: number;
   inviteRewardXP: number;
 
+  // NPC Immersive mode and dialogue fine-tuning
+  npcImmersiveModeEnabled?: boolean;
+  npcDialogueWhisperProb?: number; // 0..1
+  npcDialogueThoughtProb?: number; // 0..1
+  npcBiomeLexiconEnabled?: boolean;
+  npcSeedTarget?: number;
+  npcVisibleCap?: number;
+  npcRotationSeconds?: number;
+  npcNotificationsMode?: 'off' | 'compact' | 'normal';
+  npcNotifyMaxPerTick?: number;
+
   updateSettings: (updates: Partial<GameSettingsState>) => void;
   resetDefaults: () => void;
   applyGuildBuffs: (params: {
@@ -46,6 +57,15 @@ const DEFAULTS = {
   inviteShareIncludeContacts: false,
   inviteRewardGold: 100,
   inviteRewardXP: 150,
+  npcImmersiveModeEnabled: false,
+  npcDialogueWhisperProb: 0.25,
+  npcDialogueThoughtProb: 0.35,
+  npcBiomeLexiconEnabled: true,
+  npcSeedTarget: 30,
+  npcVisibleCap: 6,
+  npcRotationSeconds: 60,
+  npcNotificationsMode: 'compact' as const,
+  npcNotifyMaxPerTick: 3,
 };
 
 export const useGameSettingsStore = create<GameSettingsState>()(
@@ -100,6 +120,15 @@ export const useGameSettingsStore = create<GameSettingsState>()(
         inviteShareIncludeContacts: state.inviteShareIncludeContacts,
         inviteRewardGold: state.inviteRewardGold,
         inviteRewardXP: state.inviteRewardXP,
+        npcImmersiveModeEnabled: state.npcImmersiveModeEnabled,
+        npcDialogueWhisperProb: state.npcDialogueWhisperProb,
+        npcDialogueThoughtProb: state.npcDialogueThoughtProb,
+        npcBiomeLexiconEnabled: state.npcBiomeLexiconEnabled,
+        npcSeedTarget: state.npcSeedTarget,
+        npcVisibleCap: state.npcVisibleCap,
+        npcRotationSeconds: state.npcRotationSeconds,
+        npcNotificationsMode: state.npcNotificationsMode,
+        npcNotifyMaxPerTick: state.npcNotifyMaxPerTick,
       }),
     }
   )

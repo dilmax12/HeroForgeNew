@@ -163,6 +163,7 @@ const Training: React.FC = () => {
   const [tick, setTick] = useState(0); // força re-render para atualizar contador
   const currentRank = selectedHero?.rankData?.currentRank || (selectedHero ? rankSystem.calculateRank(selectedHero) : undefined);
   const maxAttr = currentRank ? getMaxAttributeForRank(currentRank) : undefined;
+  const attemptsByStatus = { ...(selectedHero?.stats as any)?.trainingAttemptsByStatus || {} } as Record<string, number>;
 
   // Atualiza o contador em tempo real enquanto houver treinamento ativo
   useEffect(() => {
@@ -172,6 +173,15 @@ const Training: React.FC = () => {
     }, 500);
     return () => clearInterval(id);
   }, [activeTraining, trainingEndTime]);
+
+  useEffect(() => {
+    if (!selectedHero) return;
+    const last = selectedHero.stats.lastTrainingDate ? new Date(selectedHero.stats.lastTrainingDate).toDateString() : '';
+    const today = new Date().toDateString();
+    if (last !== today) {
+      updateHero(selectedHero.id, { stats: { ...selectedHero.stats, trainingsToday: 0, trainingAttemptsByStatus: {}, lastTrainingDate: new Date().toISOString() } });
+    }
+  }, [selectedHero?.id]);
 
   // Retomar/Concluir treino baseado em stats persistidos
   useEffect(() => {
@@ -252,17 +262,17 @@ const Training: React.FC = () => {
       }
     }
 
-    // Verificar limite diário de treinos e reset se mudou o dia
+    // Verificar limite diário por status e reset se mudou o dia
     const now = new Date();
     const nowISO = now.toISOString();
     const lastDateStr = selectedHero.stats.lastTrainingDate ? new Date(selectedHero.stats.lastTrainingDate).toDateString() : '';
     const todayStr = now.toDateString();
-    let trainingsToday = selectedHero.stats.trainingsToday || 0;
-    const dailyLimit = selectedHero.stats.trainingDailyLimit || 5;
+    const attemptsByStatus = { ...(selectedHero.stats as any).trainingAttemptsByStatus || {} } as Record<string, number>;
+    const dailyLimitPerStatus = 10;
 
     if (lastDateStr !== todayStr) {
       // Reset diário
-      trainingsToday = 0;
+      for (const k of Object.keys(attemptsByStatus)) delete attemptsByStatus[k];
       updateHero(selectedHero.id, {
         stats: {
           ...selectedHero.stats,
@@ -272,9 +282,12 @@ const Training: React.FC = () => {
       });
     }
 
-    if (trainingsToday >= dailyLimit) {
-      alert(`Limite diário de treinos atingido (${dailyLimit}). Volte amanhã.`);
-      return;
+    if (option.rewards.attributes) {
+      const blocked = Object.keys(option.rewards.attributes).some(attr => (attemptsByStatus[attr] || 0) >= dailyLimitPerStatus);
+      if (blocked) {
+        alert('Limite diário de treino por status atingido (10). Volte amanhã.');
+        return;
+      }
     }
 
     // Deduzir custo conforme a moeda
@@ -345,13 +358,19 @@ const Training: React.FC = () => {
     // Incrementar contador diário de treinos
     const nowISO = new Date().toISOString();
     const trainingsToday = (selectedHero.stats.trainingsToday || 0) + 1;
-    const dailyLimit = selectedHero.stats.trainingDailyLimit || 5;
+    const attemptsByStatus = { ...(selectedHero.stats as any).trainingAttemptsByStatus || {} } as Record<string, number>;
+    if (option.rewards.attributes) {
+      Object.keys(option.rewards.attributes).forEach(attr => {
+        attemptsByStatus[attr] = (attemptsByStatus[attr] || 0) + 1;
+      });
+    }
 
     updates.stats = {
       ...selectedHero.stats,
       trainingsToday,
       lastTrainingDate: nowISO,
-      trainingDailyLimit: dailyLimit,
+      trainingDailyLimit: 10,
+      trainingAttemptsByStatus: attemptsByStatus,
       // limpar status de treino ativo
       trainingActiveUntil: undefined,
       trainingActiveName: undefined
@@ -414,8 +433,23 @@ const Training: React.FC = () => {
         </div>
         <div className="mt-2 bg-green-100 border border-green-400 rounded-lg p-2 inline-block ml-2">
           <span className="text-green-800 font-medium">
-            🗓️ Treinos restantes hoje: {(selectedHero.stats.trainingDailyLimit || 5) - (selectedHero.stats.trainingsToday || 0)}
+            🗓️ Limite por status: 10 tentativas por atributo
           </span>
+        </div>
+        <div className="mt-2 flex flex-wrap justify-center gap-2">
+          {(['forca','destreza','constituicao','inteligencia','sabedoria','carisma'] as const)
+            .slice()
+            .sort((a,b) => (attemptsByStatus[b]||0) - (attemptsByStatus[a]||0))
+            .map(attr => {
+              const used = attemptsByStatus[attr] || 0;
+              const blocked = used >= 10;
+              const boxCls = blocked ? 'bg-red-100 border border-red-400 text-red-800' : 'bg-gray-100 border border-gray-300 text-gray-800';
+              return (
+                <div key={attr} className={`${boxCls} rounded px-3 py-1 text-sm`}> 
+                  <span className="font-medium capitalize">{attr}</span>: {used}/10
+                </div>
+              );
+            })}
         </div>
       </div>
 
@@ -441,14 +475,14 @@ const Training: React.FC = () => {
         {TRAINING_OPTIONS.map((option) => {
           const canAfford = canAffordTraining(option);
           const meetsReqs = meetsRequirements(option);
-          const trainingsToday = selectedHero.stats.trainingsToday || 0;
-          const dailyLimit = selectedHero.stats.trainingDailyLimit || 5;
-          const remaining = Math.max(0, dailyLimit - trainingsToday);
+          const attemptsByStatus = { ...(selectedHero.stats as any).trainingAttemptsByStatus || {} } as Record<string, number>;
+          const dailyLimitPerStatus = 10;
           const attrCapBlocked = option.rewards.attributes && maxAttr !== undefined ? Object.entries(option.rewards.attributes).some(([attr]) => {
             const current = (selectedHero.attributes as any)[attr] || 0;
             return current >= (maxAttr as number);
           }) : false;
-          const isAvailable = canAfford && meetsReqs && !activeTraining && remaining > 0 && !attrCapBlocked;
+          const perStatusBlocked = option.rewards.attributes ? Object.keys(option.rewards.attributes).some(attr => (attemptsByStatus[attr] || 0) >= dailyLimitPerStatus) : false;
+          const isAvailable = canAfford && meetsReqs && !activeTraining && !attrCapBlocked && !perStatusBlocked;
 
           return (
             <div
@@ -502,11 +536,17 @@ const Training: React.FC = () => {
                   {option.rewards.gold && (
                     <div className="text-xs text-yellow-600">+{option.rewards.gold} Ouro</div>
                   )}
-                  {option.rewards.attributes && Object.entries(option.rewards.attributes).map(([attr, value]) => (
-                    <div key={attr} className="text-xs text-green-600">
-                      +{value} {attr.charAt(0).toUpperCase() + attr.slice(1)}
-                    </div>
-                  ))}
+                  {option.rewards.attributes && Object.entries(option.rewards.attributes).map(([attr, value]) => {
+                    const used = attemptsByStatus[attr] || 0;
+                    const blocked = used >= 10;
+                    const cls = blocked ? 'text-red-600' : 'text-green-600';
+                    return (
+                      <div key={attr} className={`text-xs ${cls}`}>
+                        +{value} {attr.charAt(0).toUpperCase() + attr.slice(1)}
+                        <span className={blocked ? 'ml-2 text-red-600' : 'ml-2 text-gray-500'}>({used}/10 hoje)</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -524,7 +564,7 @@ const Training: React.FC = () => {
                  !meetsReqs ? 'Requisitos não atendidos' :
                  attrCapBlocked ? 'Atributo no limite' :
                  activeTraining ? 'Treinamento em andamento' :
-                 remaining <= 0 ? 'Limite diário atingido' :
+                 perStatusBlocked ? 'Limite por status atingido' :
                  'Iniciar Treinamento'}
               </button>
             </div>

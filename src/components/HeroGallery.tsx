@@ -56,6 +56,7 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
   // Filtrar heróis baseado nos critérios
   const filteredHeroes = useMemo(() => {
     return heroes.filter(hero => {
+      if (hero.origin === 'npc') return false;
       const q = debouncedSearch.toLowerCase();
       const matchesSearch = hero.name.toLowerCase().includes(q) ||
                            hero.class.toLowerCase().includes(q) ||
@@ -88,7 +89,7 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
     return sortedHeroes.slice(0, visibleCount);
   }, [sortedHeroes, visibleCount]);
 
-  const useVirtualization = viewMode === 'list' && visibleHeroes.length > 100;
+  const useVirtualization = viewMode === 'list' && visibleHeroes.length > 500;
 
   useEffect(() => {
     if (!useVirtualization) return;
@@ -278,7 +279,7 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
     } catch {}
   };
 
-  const onGridKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
+    const onGridKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
     if (e.key === 'ArrowRight') { e.preventDefault(); moveFocus(1); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); moveFocus(-1); }
     else if (e.key === 'Enter') { const el = document.activeElement as HTMLElement | null; el?.click(); }
@@ -287,8 +288,8 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
     else if (e.key.toLowerCase() === 'v') { setViewMode(m => m === 'grid' ? 'list' : 'grid'); }
     else if (e.key === 'Home') { e.preventDefault(); moveFocus(-9999); }
     else if (e.key === 'End') { e.preventDefault(); moveFocus(9999); }
-    else if (e.key === 'PageDown') { window.scrollBy({ top: window.innerHeight, behavior: 'smooth' }); }
-    else if (e.key === 'PageUp') { window.scrollBy({ top: -window.innerHeight, behavior: 'smooth' }); }
+    else if (e.key === 'PageDown') { (listContainerRef.current || window).scrollBy?.({ top: (listContainerRef.current?.clientHeight || window.innerHeight), behavior: 'smooth' } as any); }
+    else if (e.key === 'PageUp') { (listContainerRef.current || window).scrollBy?.({ top: -(listContainerRef.current?.clientHeight || window.innerHeight), behavior: 'smooth' } as any); }
   };
 
   return (

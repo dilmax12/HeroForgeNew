@@ -5,7 +5,6 @@ import { SHOP_ITEMS } from '../utils/shop';
 import { notificationBus } from './NotificationSystem';
 import { getDungeonLeaderboard, getWeeklyDungeonHighlights } from '../services/dungeonService';
 import { activityManager } from '../utils/activitySystem';
-import PartySystem from './PartySystem';
 import { EnhancedQuestBoard } from './EnhancedQuestBoard';
 import Training from './Training';
 import Leaderboards from './Leaderboards';
@@ -14,11 +13,14 @@ import ReputationPanel from './ReputationPanel';
 import RankProgressComponent from './RankProgress';
 import { useMonetizationStore } from '../store/monetizationStore';
 import { seasonalThemes } from '../styles/medievalTheme';
+import { useGameSettingsStore } from '../store/gameSettingsStore';
+import NPCPresenceLayer from './NPCPresenceLayer';
 
 const EggIdentificationNPC = React.lazy(() => import('./EggIdentificationNPC'));
 
 const AdventurersGuildHub: React.FC = () => {
-  const { guilds, ensureDefaultGuildExists, refreshQuests, availableQuests, heroes, getSelectedHero, sellItem, getHeroRankProgress, activateGuildEvent, clearGuildEvent, approvePartyAlliance, rejectPartyAlliance } = useHeroStore();
+  const { guilds, ensureDefaultGuildExists, refreshQuests, availableQuests, heroes, getSelectedHero, sellItem, getHeroRankProgress, activateGuildEvent, clearGuildEvent, approvePartyAlliance, rejectPartyAlliance, ensureNPCAdventurersSeedExists, startNPCSimulation, stopNPCSimulation } = useHeroStore();
+  const npcSeedTarget = useGameSettingsStore(s => s.npcSeedTarget || 30);
   const selectedHero = getSelectedHero();
   const rankProgress = selectedHero ? getHeroRankProgress(selectedHero.id) : null;
   const { activeSeasonalTheme } = useMonetizationStore();
@@ -26,11 +28,14 @@ const AdventurersGuildHub: React.FC = () => {
   const [qtyByItem, setQtyByItem] = useState<Record<string, number>>({});
   const [selectedType, setSelectedType] = useState<'todos' | 'consumable' | 'weapon' | 'armor' | 'accessory' | 'material'>('todos');
   const [selectedRarity, setSelectedRarity] = useState<'todas' | 'comum' | 'raro' | 'epico' | 'lendario'>('todas');
-  const [activeSection, setActiveSection] = useState<'salao' | 'recrutamento' | 'treinamento' | 'sala-herois' | 'conselho' | 'cofre' | 'zoologo'>('salao');
+  const [activeSection, setActiveSection] = useState<'salao' | 'treinamento' | 'sala-herois' | 'conselho' | 'cofre' | 'zoologo'>('salao');
 
   useEffect(() => {
     ensureDefaultGuildExists();
-  }, [ensureDefaultGuildExists]);
+    ensureNPCAdventurersSeedExists(npcSeedTarget);
+    startNPCSimulation();
+    return () => { stopNPCSimulation(); };
+  }, [ensureDefaultGuildExists, npcSeedTarget]);
 
   const defaultGuild = guilds.find(g => g.name === 'Foja dos Herois');
   const guildLevel = defaultGuild ? (defaultGuild.level ?? Math.max(1, Math.floor(defaultGuild.guildXP / 250) + 1)) : 1;
@@ -267,6 +272,8 @@ const AdventurersGuildHub: React.FC = () => {
             <h1 className="text-3xl font-bold text-gray-800">🏰 Foja dos Herois</h1>
             <p className="text-gray-600 mt-2">Hub central: missões, recrutamento, ranks, treino e tesouro.</p>
           </div>
+
+          <NPCPresenceLayer />
           <div className="text-4xl">🛡️</div>
         </div>
         {defaultGuild && (
@@ -289,7 +296,6 @@ const AdventurersGuildHub: React.FC = () => {
         <div className="mt-6 flex flex-wrap gap-2">
           {[
             { id: 'salao', label: 'Salão Principal', icon: '🏛️' },
-            { id: 'recrutamento', label: 'Recrutamento / Party', icon: '👥' },
             { id: 'treinamento', label: 'Sala de Treinamento', icon: '🏋️' },
             { id: 'sala-herois', label: 'Salão dos Heróis', icon: '🏆' },
             { id: 'conselho', label: 'Conselho da Guilda', icon: '🎖️' },
@@ -331,6 +337,9 @@ const AdventurersGuildHub: React.FC = () => {
                     <div className="flex items-center space-x-3">
                       <span className="text-xl">{idx + 1}.</span>
                       <span className="font-semibold text-gray-800">{e.heroName}</span>
+                      {heroes.find(h => h.id === e.heroId)?.origin === 'npc' && (
+                        <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded">NPC</span>
+                      )}
                     </div>
                     <span className="text-sm text-gray-600">Nível {e.value}</span>
                   </li>
@@ -395,7 +404,6 @@ const AdventurersGuildHub: React.FC = () => {
               <h2 className="text-2xl font-bold text-gray-800">🗝️ Dungeon Infinita</h2>
               <div className="flex gap-2">
                 <a href="/dungeon-infinita" className="px-4 py-2 rounded bg-purple-600 text-white hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">Jogar</a>
-                <a href="/messenger" className="px-4 py-2 rounded bg-amber-600 text-black hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">Cartas</a>
               </div>
             </div>
             {dungeonOffline && (
@@ -600,27 +608,7 @@ const AdventurersGuildHub: React.FC = () => {
 
       {/* Quadro de Missões removido por enquanto */}
 
-      {activeSection === 'recrutamento' && (
-        <div className="bg-white p-6 rounded-lg border border-gray-200 text-gray-800">
-          <h2 className="text-2xl font-bold text-gray-800 mb-4">👥 Recrutamento e Party Finder</h2>
-          {selectedHero ? (
-            <>
-              {defaultGuild && (defaultGuild.pendingAlliances || []).filter(r => r.status === 'pending').length > 0 && (
-                <div className="mb-4 p-3 rounded border border-yellow-300 bg-yellow-50 text-yellow-800">
-                  Existem {(defaultGuild.pendingAlliances || []).filter(r => r.status === 'pending').length} solicitações de aliança pendentes no Conselho.
-                </div>
-              )}
-              <PartySystem hero={selectedHero} />
-            </>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              <div className="text-5xl mb-2">🦸</div>
-              <p>Selecione um herói para criar ou entrar em parties.</p>
-              <a href="/" className="mt-4 inline-block px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300">Selecionar Herói</a>
-            </div>
-          )}
-        </div>
-      )}
+      
 
       {activeSection === 'treinamento' && (
         <div className="bg-white p-6 rounded-lg border border-gray-200 text-gray-800">

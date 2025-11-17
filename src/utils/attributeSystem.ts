@@ -9,7 +9,6 @@ import { RankLevel, RANK_ORDER } from '../types/ranks';
 export const ATTRIBUTE_CONSTRAINTS = {
   MIN_ATTRIBUTE: 1,
   MAX_ATTRIBUTE: 10,
-  TOTAL_POINTS: 18,
   STARTING_POINTS_PER_ATTRIBUTE: 1
 };
 
@@ -20,7 +19,7 @@ export function getMaxAttributeForRank(rank: RankLevel): number {
 
 export function getTotalAttributePointsCapForRank(rank: RankLevel): number {
   const idx = Math.max(0, RANK_ORDER.indexOf(rank));
-  return ATTRIBUTE_CONSTRAINTS.TOTAL_POINTS + idx * 10;
+  return (ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE + idx * 10) * 6;
 }
 
 export const ATTRIBUTE_INFO = {
@@ -73,9 +72,8 @@ export function createInitialAttributes(): HeroAttributes {
 /**
  * Calcula pontos restantes para distribuir
  */
-export function calculateRemainingPoints(attributes: HeroAttributes): number {
-  const totalUsed = Object.values(attributes).reduce((sum, value) => sum + value, 0);
-  return ATTRIBUTE_CONSTRAINTS.TOTAL_POINTS - totalUsed;
+export function calculateRemainingPoints(_attributes: HeroAttributes): number {
+  return 0;
 }
 
 /**
@@ -88,10 +86,7 @@ export function validateAttributes(attributes: HeroAttributes): {
   remainingPoints: number;
 } {
   const errors: string[] = [];
-  const totalPoints = Object.values(attributes).reduce((sum, value) => sum + value, 0);
-  const remainingPoints = ATTRIBUTE_CONSTRAINTS.TOTAL_POINTS - totalPoints;
-
-  // Verifica valores mínimos
+  // Verifica valores mínimos/máximos por atributo
   Object.entries(attributes).forEach(([attr, value]) => {
     if (value < ATTRIBUTE_CONSTRAINTS.MIN_ATTRIBUTE) {
       errors.push(`${ATTRIBUTE_INFO[attr as keyof HeroAttributes].name} deve ter pelo menos ${ATTRIBUTE_CONSTRAINTS.MIN_ATTRIBUTE} ponto`);
@@ -100,21 +95,12 @@ export function validateAttributes(attributes: HeroAttributes): {
       errors.push(`${ATTRIBUTE_INFO[attr as keyof HeroAttributes].name} não pode ter mais que ${ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE} pontos`);
     }
   });
-
-  // Verifica total de pontos
-  if (totalPoints > ATTRIBUTE_CONSTRAINTS.TOTAL_POINTS) {
-    errors.push(`Total de pontos (${totalPoints}) excede o limite de ${ATTRIBUTE_CONSTRAINTS.TOTAL_POINTS}`);
-  }
-
-  if (totalPoints < ATTRIBUTE_CONSTRAINTS.TOTAL_POINTS) {
-    errors.push(`Você ainda tem ${remainingPoints} pontos para distribuir`);
-  }
-
+  const totalPoints = Object.values(attributes).reduce((sum, value) => sum + value, 0);
   return {
     valid: errors.length === 0,
     errors,
     totalPoints,
-    remainingPoints
+    remainingPoints: 0
   };
 }
 
@@ -126,9 +112,7 @@ export function canIncreaseAttribute(
   attribute: keyof HeroAttributes
 ): boolean {
   const currentValue = attributes[attribute];
-  const remainingPoints = calculateRemainingPoints(attributes);
-  
-  return currentValue < ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE && remainingPoints > 0;
+  return currentValue < ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE;
 }
 
 /**
@@ -181,32 +165,12 @@ export function decreaseAttribute(
  */
 export function autoDistributePoints(baseAttributes?: Partial<HeroAttributes>): HeroAttributes {
   const attributes = createInitialAttributes();
-  let remainingPoints = calculateRemainingPoints(attributes);
-  
-  // Se há atributos base preferidos, prioriza eles
   if (baseAttributes) {
     Object.entries(baseAttributes).forEach(([attr, bonus]) => {
       const key = attr as keyof HeroAttributes;
-      const maxIncrease = Math.min(
-        bonus || 0,
-        ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE - attributes[key],
-        remainingPoints
-      );
-      attributes[key] += maxIncrease;
-      remainingPoints -= maxIncrease;
+      const inc = Math.min(bonus || 0, ATTRIBUTE_CONSTRAINTS.MAX_ATTRIBUTE - attributes[key]);
+      attributes[key] += inc;
     });
   }
-  
-  // Distribui pontos restantes aleatoriamente
-  while (remainingPoints > 0) {
-    const attributeKeys = Object.keys(attributes) as (keyof HeroAttributes)[];
-    const randomAttr = attributeKeys[Math.floor(Math.random() * attributeKeys.length)];
-    
-    if (canIncreaseAttribute(attributes, randomAttr)) {
-      attributes[randomAttr]++;
-      remainingPoints--;
-    }
-  }
-  
   return attributes;
 }
