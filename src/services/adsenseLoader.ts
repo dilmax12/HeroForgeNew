@@ -11,6 +11,7 @@ export function loadAdSense(clientId?: string) {
   s.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(clientId)}`;
   (s as any).crossOrigin = 'anonymous';
   s.onload = () => { adsenseLoaded = true; };
+  s.onerror = () => { adsenseLoaded = true; };
   document.head.appendChild(s);
 }
 

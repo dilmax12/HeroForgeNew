@@ -324,7 +324,6 @@ function App() {
       // Configurar Content Security Policy via meta tag
       const cspMeta = document.createElement('meta');
       cspMeta.httpEquiv = 'Content-Security-Policy';
-      // Permite vercel.live para preview em produção e conexões ao Supabase
       const sbUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
       let sbOrigin = '';
       try { sbOrigin = sbUrl ? new URL(sbUrl).origin : ''; } catch {}
@@ -339,13 +338,20 @@ function App() {
       const adsOrigins = [
         'https://pagead2.googlesyndication.com',
         'https://tpc.googlesyndication.com',
-        'https://googleads.g.doubleclick.net'
+        'https://googleads.g.doubleclick.net',
+        'https://ep1.adtrafficquality.google'
+      ];
+      const fontOrigins = [
+        'https://fonts.gstatic.com',
+        'https://vercel.live',
+        'https://*.vercel.live'
       ];
       cspMeta.content = [
         "default-src 'self'",
         `frame-src 'self' https://vercel.live https://*.vercel.live ${adsOrigins.join(' ')}`,
         `connect-src ${connectSrc} ${adsOrigins.join(' ')}`,
-        "style-src 'self' 'unsafe-inline'",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        `font-src 'self' ${fontOrigins.join(' ')} data:`,
         `script-src 'self' ${adsOrigins.join(' ')} https://vercel.live https://*.vercel.live`,
         "img-src 'self' data: blob: https:"
       ].join('; ') + ';';

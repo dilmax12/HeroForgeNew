@@ -32,6 +32,7 @@ async function fetchWithRetry(input: RequestInfo | URL, init?: RequestInit, retr
 }
 
 // Stub seguro para quando o Supabase não está configurado: não quebra a app e retorna erro amigável.
+let warnedOnce = false;
 function createDisabledClient() {
   const errorPayload = {
     data: null,
@@ -67,7 +68,13 @@ function createDisabledClient() {
       async signInWithOAuth() { return { data: null, error: { message: 'Supabase não configurado', code: 'ENV_MISSING' } }; }
     }
   } as any;
-  console.error('[Supabase] Variáveis de ambiente ausentes. Configure .env.local com VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY');
+  try {
+    const shouldWarn = Boolean((import.meta as any)?.env?.PROD) && !supabaseDisabled;
+    if (shouldWarn && !warnedOnce) {
+      console.warn('[Supabase] Variáveis de ambiente ausentes. Configure .env.local com VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY');
+      warnedOnce = true;
+    }
+  } catch {}
   return client;
 }
 
