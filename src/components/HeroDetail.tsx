@@ -113,7 +113,8 @@ const HeroDetail = () => {
         ['og:description', descText],
         ['og:type', 'website'],
         ['og:url', canonicalHref],
-        ['og:image', hero.image || '']
+        ['og:image', hero.image || ''],
+        ['og:site_name', 'Forjador de Heróis']
       ];
       ogPairs.forEach(([prop, val]) => {
         if (!val) return;

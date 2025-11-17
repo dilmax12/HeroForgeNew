@@ -133,6 +133,23 @@ export default function AIDungeonRun() {
     );
   }
 
+  const currentRank = hero.rankData?.currentRank || rankSystem.calculateRank(hero);
+  const locked = (() => {
+    const order: Record<string, number> = { F: 0, E: 1, D: 2, C: 3, B: 4, A: 5, S: 6 };
+    return (order[String(currentRank)] || 0) < (order['D'] || 2);
+  })();
+  if (locked) {
+    return (
+      <div className="max-w-3xl mx-auto p-6">
+        <div className="mb-4 p-4 rounded-lg bg-red-900/30 border border-red-600/40">
+          <div className="text-white font-semibold">Masmorra Infinita bloqueada</div>
+          <div className="text-sm text-red-200">Requer Rank D ou superior. Avance nos treinos e missões para desbloquear.</div>
+          <div className="mt-2 flex gap-2"><a href="/training" className="px-3 py-2 rounded bg-amber-600 text-black text-xs">Treinar</a><a href="/quests" className="px-3 py-2 rounded bg-gray-800 text-white text-xs">Missões</a></div>
+        </div>
+      </div>
+    );
+  }
+
   const STAMINA_COST_PER_STAGE = 2;
   const applyStaminaCost = (amount: number) => {
     worldStateManager.consumeStamina(hero, amount);
@@ -274,6 +291,13 @@ export default function AIDungeonRun() {
 
   return (
     <div className="max-w-3xl mx-auto p-6">
+      {locked && (
+        <div className="mb-4 p-4 rounded-lg bg-red-900/30 border border-red-600/40">
+          <div className="text-white font-semibold">Masmorra Infinita bloqueada</div>
+          <div className="text-sm text-red-200">Requer Rank D ou superior. Avance nos treinos e missões para desbloquear.</div>
+          <div className="mt-2 flex gap-2"><a href="/training" className="px-3 py-2 rounded bg-amber-600 text-black text-xs">Treinar</a><a href="/quests" className="px-3 py-2 rounded bg-gray-800 text-white text-xs">Missões</a></div>
+        </div>
+      )}
       <h2 className="text-2xl font-bold text-white">Masmorra IA</h2>
       <p className="text-gray-300">Etapa {stageIndex + 1} de {stagesTotal} • Dificuldade: {difficulty}</p>
       <div className={`mt-4 p-4 border rounded bg-gray-800 ${seasonalBorder}`}>

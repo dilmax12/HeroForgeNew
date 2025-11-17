@@ -187,6 +187,7 @@ export class OnboardingManager {
   private completedSteps: Set<string> = new Set();
   private isActive: boolean = false;
   private callbacks: Map<string, Function[]> = new Map();
+  private validatedSteps: Set<string> = new Set();
 
   static getInstance(): OnboardingManager {
     if (!OnboardingManager.instance) {
@@ -212,6 +213,7 @@ export class OnboardingManager {
     this.isActive = true;
     this.emit('flow-started', { flow });
     this.emit('step-changed', { step: this.getCurrentStep() });
+    this.saveState();
     return true;
   }
 
@@ -225,6 +227,13 @@ export class OnboardingManager {
 
     const currentStep = this.getCurrentStep();
     if (currentStep) {
+      if (currentStep.validation) {
+        const ok = this.isStepValidated(currentStep.id);
+        if (!ok) {
+          this.emit('validation-required', { step: currentStep });
+          return false;
+        }
+      }
       this.markStepCompleted(currentStep.id);
       this.emit('step-completed', { step: currentStep });
     }
@@ -237,6 +246,7 @@ export class OnboardingManager {
     }
 
     this.emit('step-changed', { step: this.getCurrentStep() });
+    this.saveState();
     return true;
   }
 
@@ -245,6 +255,7 @@ export class OnboardingManager {
     
     this.currentStepIndex--;
     this.emit('step-changed', { step: this.getCurrentStep() });
+    this.saveState();
     return true;
   }
 
@@ -252,7 +263,9 @@ export class OnboardingManager {
     const currentStep = this.getCurrentStep();
     if (!currentStep || !currentStep.skippable) return false;
     
-    return this.nextStep();
+    const moved = this.nextStep();
+    if (moved) this.saveState();
+    return moved;
   }
 
   completeFlow(): void {
@@ -261,6 +274,7 @@ export class OnboardingManager {
     this.completedFlows.add(this.currentFlow.id);
     this.emit('flow-completed', { flow: this.currentFlow });
     this.reset();
+    this.saveState();
   }
 
   reset(): void {
@@ -268,14 +282,26 @@ export class OnboardingManager {
     this.currentStepIndex = 0;
     this.isActive = false;
     this.emit('onboarding-reset');
+    this.saveState();
   }
 
   markStepCompleted(stepId: string): void {
     this.completedSteps.add(stepId);
+    this.saveState();
   }
 
   isStepCompleted(stepId: string): boolean {
     return this.completedSteps.has(stepId);
+  }
+
+  markStepValidated(stepId: string): void {
+    this.validatedSteps.add(stepId);
+    this.emit('step-validated', { stepId });
+    this.saveState();
+  }
+
+  isStepValidated(stepId: string): boolean {
+    return this.validatedSteps.has(stepId);
   }
 
   isFlowCompleted(flowId: string): boolean {
@@ -335,6 +361,7 @@ export class OnboardingManager {
     const state = {
       completedFlows: Array.from(this.completedFlows),
       completedSteps: Array.from(this.completedSteps),
+      validatedSteps: Array.from(this.validatedSteps),
       currentFlow: this.currentFlow?.id,
       currentStepIndex: this.currentStepIndex,
       isActive: this.isActive
@@ -349,6 +376,7 @@ export class OnboardingManager {
         const state = JSON.parse(saved);
         this.completedFlows = new Set(state.completedFlows || []);
         this.completedSteps = new Set(state.completedSteps || []);
+        this.validatedSteps = new Set(state.validatedSteps || []);
         this.currentStepIndex = state.currentStepIndex || 0;
         this.isActive = state.isActive || false;
         

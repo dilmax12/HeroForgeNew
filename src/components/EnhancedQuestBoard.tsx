@@ -42,15 +42,28 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
 
   const generateMissions = () => {
     const missions: EnhancedQuest[] = [];
-    
-    // Gerar 3-5 missões baseadas no nível e estado do mundo
-    const missionCount = Math.floor(Math.random() * 3) + 3;
-    
+    const currentRank = hero.rankData?.currentRank || rankSystem.calculateRank(hero);
+    const basicsMastered = (() => {
+      try {
+        const raw = localStorage.getItem('heroforge-onboarding');
+        const st = raw ? JSON.parse(raw) : {};
+        const steps: string[] = Array.isArray(st?.validatedSteps) ? st.validatedSteps : [];
+        const hasTraining = localStorage.getItem('hfn_training_basic_done') === '1';
+        return steps.includes('create-hero') && steps.includes('accept-quest') && hasTraining;
+      } catch { return false; }
+    })();
+    if (currentRank === 'F' && !basicsMastered) {
+      setAvailableMissions([]);
+      return;
+    }
+    const missionCount = (() => {
+      if (currentRank === 'E') return 3;
+      return Math.floor(Math.random() * 3) + 3;
+    })();
     for (let i = 0; i < missionCount; i++) {
       const mission = enhancedMissionGenerator.generateEnhancedMission(hero);
       missions.push(mission);
     }
-    
     setAvailableMissions(missions);
   };
 
@@ -128,6 +141,28 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
 
   return (
     <div className="space-y-6">
+      {(() => {
+        const currentRank = hero.rankData?.currentRank || rankSystem.calculateRank(hero);
+        const basicsMastered = (() => {
+          try {
+            const raw = localStorage.getItem('heroforge-onboarding');
+            const st = raw ? JSON.parse(raw) : {};
+            const steps: string[] = Array.isArray(st?.validatedSteps) ? st.validatedSteps : [];
+            const hasTraining = localStorage.getItem('hfn_training_basic_done') === '1';
+            return steps.includes('create-hero') && steps.includes('accept-quest') && hasTraining;
+          } catch { return false; }
+        })();
+        if (currentRank === 'F' && !basicsMastered) {
+          return (
+            <div className={`rounded-lg p-4 border-2 border-amber-500 bg-amber-900/20`}>
+              <div className="text-white font-semibold">Recursos bloqueados para Novatos</div>
+              <div className="text-sm text-amber-200 mt-1">Complete o treinamento básico e aceite sua primeira missão para liberar este painel.</div>
+              <div className="mt-2"><a href="/training" className="px-3 py-2 rounded bg-amber-600 text-black text-xs">Ir para Treinamento</a></div>
+            </div>
+          );
+        }
+        return null;
+      })()}
       {/* Header com Stamina */}
       <div className={`bg-gray-800 rounded-lg p-4 border ${seasonalBorder}`}>
         <div className="flex justify-between items-center">

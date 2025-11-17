@@ -270,6 +270,18 @@ export function generateQuestBoard(heroLevel: number = 1, guildLevel: number = 0
   console.log('🎯 generateQuestBoard chamada:', { heroLevel, guildLevel });
   const quests: Quest[] = [];
   const profile = RANK_MISSION_PROFILE[heroRank] || RANK_MISSION_PROFILE['F'];
+  const basicsMastered = (() => {
+    try {
+      const raw = localStorage.getItem('heroforge-onboarding');
+      const st = raw ? JSON.parse(raw) : {};
+      const steps: string[] = Array.isArray(st?.validatedSteps) ? st.validatedSteps : [];
+      const hasTraining = localStorage.getItem('hfn_training_basic_done') === '1';
+      return steps.includes('create-hero') && steps.includes('accept-quest') && hasTraining;
+    } catch { return false; }
+  })();
+  if (heroRank === 'F' && !basicsMastered) {
+    return [];
+  }
   
   // 2 missões rápidas
   quests.push(generateQuest('rapida', heroLevel));
@@ -314,7 +326,9 @@ export function generateQuestBoard(heroLevel: number = 1, guildLevel: number = 0
       xp: Math.floor((q.rewards?.xp || 0) * profile.rewardMultiplier)
     }
   }));
-
+  if (heroRank === 'F' && basicsMastered) {
+    return tuned.filter(q => q.categoryHint === 'coleta');
+  }
   return tuned;
 }
 

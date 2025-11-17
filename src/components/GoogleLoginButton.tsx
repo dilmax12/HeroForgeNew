@@ -79,6 +79,7 @@ const GoogleLoginButton: React.FC = () => {
 
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   const validClientId = clientId && clientId.includes('.apps.googleusercontent.com');
+  const supabaseOAuthGoogleEnabled = String(import.meta.env.VITE_SUPABASE_OAUTH_GOOGLE_ENABLED || '').toLowerCase() === 'true';
   if (!validClientId) {
     return <span className="text-xs text-red-300">Google Login não configurado</span>;
   }
@@ -86,7 +87,7 @@ const GoogleLoginButton: React.FC = () => {
   return (
     <div className="flex items-center gap-2">
       <div ref={btnRef} />
-      {supabaseConfigured && (
+      {supabaseConfigured && supabaseOAuthGoogleEnabled && (
         <button
           onClick={async () => {
             try {

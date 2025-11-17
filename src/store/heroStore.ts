@@ -711,6 +711,8 @@ export const useHeroStore = create<HeroState>()(
         get().ensureDefaultGuildExists();
         // Gerar missões iniciais
         get().refreshQuests(1);
+        try { onboardingManager.markStepValidated('create-hero'); } catch {}
+        try { onboardingManager.saveState(); } catch {}
         
         return newHero;
       },
@@ -2132,6 +2134,7 @@ export const useHeroStore = create<HeroState>()(
         get().updateHero(heroId, { activeQuests: [...hero.activeQuests, questId] });
         try { notificationBus.emit({ type: 'quest', title: 'Missão aceita', message: `${quest.title}`, duration: 2500, icon: '✅' }); } catch {}
         console.log('🎉 Missão aceita com sucesso!');
+        try { onboardingManager.markStepValidated('accept-quest'); onboardingManager.saveState(); } catch {}
         return true;
       },
       

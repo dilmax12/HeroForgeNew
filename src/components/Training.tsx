@@ -4,6 +4,7 @@ import { useGameSettingsStore } from '../store/gameSettingsStore';
 import { useHeroStore } from '../store/heroStore';
 import { getMaxAttributeForRank } from '../utils/attributeSystem';
 import { rankSystem } from '../utils/rankSystem';
+import { onboardingManager } from '../utils/onboardingSystem';
 
 interface TrainingOption {
   id: string;
@@ -394,6 +395,8 @@ const Training: React.FC = () => {
     setTrainingEndTime(null);
 
     alert(`Treinamento concluído! Efetividade ${Math.round(effectiveness*100)}%. Recompensas de ${option.name} aplicadas.`);
+    try { localStorage.setItem('hfn_training_basic_done', '1'); } catch {}
+    try { onboardingManager.markStepValidated('basic-training'); onboardingManager.saveState(); } catch {}
   };
 
   const getRemainingTime = () => {

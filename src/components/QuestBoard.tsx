@@ -595,6 +595,25 @@ const QuestBoard: React.FC = () => {
 
   return (
     <div className="container mx-auto p-6">
+      {(() => {
+        try {
+          const currentRank = selectedHero.rankData?.currentRank || 'F';
+          const raw = localStorage.getItem('heroforge-onboarding');
+          const st = raw ? JSON.parse(raw) : {};
+          const steps: string[] = Array.isArray(st?.validatedSteps) ? st.validatedSteps : [];
+          const hasTraining = localStorage.getItem('hfn_training_basic_done') === '1';
+          const basicsMastered = steps.includes('create-hero') && steps.includes('accept-quest') && hasTraining;
+          if (currentRank === 'F' && !basicsMastered) {
+            return (
+              <div className="mb-6 p-3 rounded-lg bg-amber-900/20 border border-amber-600/40 text-amber-200 text-sm flex items-center justify-between">
+                <div className="flex items-center gap-2"><span>🔒 Quadro de Missões bloqueado no Rank F.</span><span className="font-semibold">Conclua o treinamento e aceite sua primeira missão.</span></div>
+                <a href="/training" className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-black text-xs">Treinar</a>
+              </div>
+            );
+          }
+        } catch {}
+        return null;
+      })()}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h2 className="text-3xl font-bold text-amber-400">Quadro de Missões {companionsOnly && <span className="ml-2 text-sm px-2 py-1 rounded bg-emerald-800/40 text-emerald-200 border border-emerald-600/40">Companheiros ({availableQuests.filter(q => q.isGuildQuest).length})</span>}</h2>
