@@ -46,6 +46,8 @@ const Tavern: React.FC = () => {
   const [generatedRumors, setGeneratedRumors] = useState<string[]>([]);
   const [rumorsLoading, setRumorsLoading] = useState<boolean>(false);
   const [rumorsError, setRumorsError] = useState<string | undefined>(undefined);
+  const [rumorIntervalSec, setRumorIntervalSec] = useState<number>(60);
+  const [rumorStats, setRumorStats] = useState<Record<string, number>>({});
   const [rumorFilter, setRumorFilter] = useState<'all'|'player'|'npc'>('all');
   const [lastRumorTs, setLastRumorTs] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -256,6 +258,9 @@ const Tavern: React.FC = () => {
       const selected = [...playerPool, ...npcPool].sort((a,b) => b.date.getTime() - a.date.getTime());
       const filtered = rumorFilter === 'all' ? selected : selected.filter(r => r.source === rumorFilter);
       const lines = filtered.map(r => `${r.content} (${r.date.toISOString().slice(0,10)}) [#${r.tag}]`);
+      const stats: Record<string, number> = {};
+      filtered.forEach(r => { stats[r.tag] = (stats[r.tag] || 0) + 1; });
+      setRumorStats(stats);
       setGeneratedRumors(lines);
       setLastRumorTs(new Date().toISOString());
     } catch (e: any) {
@@ -418,41 +423,7 @@ const Tavern: React.FC = () => {
               Uma fofoca diferente surge a cada dia. Participe para ganhar prestígio!
             </div>
 
-            <div className="mt-6 bg-gray-900/40 border border-white/10 rounded p-4">
-              <h3 className="text-lg font-semibold text-amber-300">🪵 Missões Locais da Taverna</h3>
-              <div className="text-xs text-gray-400">Ajude o ambiente e conquiste pequenas recompensas.</div>
-              {(() => {
-                const list = (useHeroStore.getState().availableQuests || []).filter(q => String(q.id).startsWith('tavern-'));
-                const hero = useHeroStore.getState().getSelectedHero();
-                if (!hero) {
-                  return <div className="mt-3 text-xs text-gray-400">Selecione um herói para aceitar missões.</div>;
-                }
-                if (list.length === 0) {
-                  return <div className="mt-3 text-xs text-gray-400">Nenhuma missão local disponível no momento.</div>;
-                }
-                return (
-                  <ul className="mt-3 space-y-2">
-                    {list.slice(0, 5).map(q => (
-                      <li key={q.id} className="flex items-center justify-between bg-gray-800/60 border border-white/10 rounded px-3 py-2">
-                        <div className="text-gray-200 text-sm">
-                          <div className="font-semibold">{q.title}</div>
-                          <div className="text-xs text-gray-400">{q.description}</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-amber-300 text-xs">+{q.rewards?.xp || 0} XP • +{q.rewards?.gold || 0} 🪙</span>
-                          <button
-                            onClick={() => {
-                              try { useHeroStore.getState().acceptQuest(hero.id, String(q.id)); notificationBus.emit({ type: 'quest', title: 'Missão aceita', message: q.title, icon: '📜', duration: 2500 }); } catch {}
-                            }}
-                            className={`px-3 py-1 rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white text-xs`}
-                          >Aceitar</button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                );
-              })()}
-            </div>
+            
 
             {/* Noite de Dados Especial */}
             <div className="mt-6 bg-gradient-to-br from-royal-900/30 via-amber-800/10 to-transparent border border-amber-500/30 rounded p-4">

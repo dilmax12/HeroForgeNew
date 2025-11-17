@@ -46,6 +46,7 @@ const Layout = () => {
   const [installAvailable, setInstallAvailable] = useState<boolean>(false);
   const [iosTipOpen, setIosTipOpen] = useState<boolean>(false);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [partyInvitesCount, setPartyInvitesCount] = useState<number>(0);
 
   useEffect(() => {
     let mounted = true;
@@ -112,6 +113,22 @@ const Layout = () => {
     loadOrganizer();
     timer = setInterval(loadOrganizer, 60000);
     return () => { if (timer) clearInterval(timer); };
+  }, [selectedHero?.id]);
+
+  useEffect(() => {
+    const calc = () => {
+      try {
+        const me = getSelectedHero();
+        const id = me?.id || '';
+        if (!id) { setPartyInvitesCount(0); return; }
+        const parties = (useHeroStore.getState() as any).parties as any[] || [];
+        const count = parties.filter(p => Array.isArray(p?.invites) && p.invites.includes(id)).length;
+        setPartyInvitesCount(count);
+      } catch { setPartyInvitesCount(0); }
+    };
+    calc();
+    const t = setInterval(calc, 30000);
+    return () => clearInterval(t);
   }, [selectedHero?.id]);
 
   // Carregar configuração de monetização (AdSense/Stripe) no boot
@@ -604,6 +621,7 @@ const Layout = () => {
                         <li><Link to="/guild-hub" className={navLinkClass('/guild-hub')}>🏰 Guilda dos Aventureiros</Link></li>
                         <li><Link to="/social-events" className={navLinkClass('/social-events')}>🎉 Eventos</Link></li>
                         <li><Link to="/friends" className={navLinkClass('/friends')}>🤝 Amigos</Link></li>
+                        <li><Link to="/party-invites" className={navLinkClass('/party-invites')}>📨 Convites {partyInvitesCount > 0 && (<span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white">{partyInvitesCount}</span>)}</Link></li>
                         <li><Link to="/notifications" className={navLinkClass('/notifications')}>🔔 Notificações {notifCount > 0 && (<span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white">{notifCount}</span>)}</Link></li>
                       </ul>
                     </div>
@@ -613,15 +631,13 @@ const Layout = () => {
                 <div className="relative">
                   <button
                     onClick={() => setOpenGroup(openGroup === 'conta' ? null : 'conta')}
-                    className={`${groupButtonClass(isAnyActive(['/cadastro','/profile','/metrics']))} text-sm md:text-base`}
+                    className={`${groupButtonClass(isAnyActive(['/metrics']))} text-sm md:text-base`}
                   >
                     👤 Conta
                   </button>
                   {openGroup === 'conta' && (
                     <div className="absolute z-40 mt-2 w-56 bg-slate-800 border border-slate-600 rounded shadow-lg p-2">
                       <ul className="space-y-1 text-sm">
-                        <li><Link to="/cadastro" className={navLinkClass('/cadastro')}>📝 Cadastro</Link></li>
-                        <li><Link to="/profile" className={navLinkClass('/profile')}>👤 Perfil</Link></li>
                         <li><Link to="/metrics" className={navLinkClass('/metrics')}>📊 Métricas</Link></li>
                         {import.meta.env.DEV && (<li><Link to="/admin" className={navLinkClass('/admin')}>🛠️ Admin</Link></li>)}
                       </ul>

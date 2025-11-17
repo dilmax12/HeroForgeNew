@@ -1,21 +1,3 @@
-export type UserProfile = { userId: string; displayName: string; avatarUrl?: string; bio?: string; interests: string[] };
-
-export async function getProfile(userId: string): Promise<UserProfile> {
-  const q = new URLSearchParams();
-  q.set('userId', userId);
-  const res = await fetch(`/api/users/profile?${q.toString()}`);
-  if (!res.ok) throw new Error(`Falha ao obter perfil: ${res.status}`);
-  const data = await res.json();
-  return data?.profile as UserProfile;
-}
-
-export async function saveProfile(profile: UserProfile): Promise<UserProfile> {
-  const res = await fetch('/api/users/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(profile) });
-  if (!res.ok) throw new Error(`Falha ao salvar perfil: ${res.status}`);
-  const data = await res.json();
-  return data?.profile as UserProfile;
-}
-
 export async function listFriends(userId: string): Promise<string[]> {
   const q = new URLSearchParams();
   q.set('userId', userId);
@@ -64,6 +46,36 @@ export async function listEventsHistory(userId: string): Promise<any[]> {
   return Array.isArray(data?.events) ? data.events : [];
 }
 
+export type UserProfile = {
+  userId: string;
+  displayName?: string;
+  avatarUrl?: string;
+  bio?: string;
+  settings?: any;
+};
+
+export async function getProfile(userId: string): Promise<UserProfile | null> {
+  const q = new URLSearchParams();
+  q.set('userId', userId);
+  try {
+    const res = await fetch(`/api/users/profile?${q.toString()}`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Falha ao obter perfil: ${res.status}`);
+    const data = await res.json();
+    const profile = (data?.profile || data) as any;
+    if (!profile || typeof profile !== 'object') return null;
+    return {
+      userId: String(profile.userId || userId),
+      displayName: profile.displayName,
+      avatarUrl: profile.avatarUrl,
+      bio: profile.bio,
+      settings: profile.settings,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export type UserProgress = {
   missionsCompleted: number;
   achievementsUnlocked: number;
@@ -94,21 +106,6 @@ export async function getUserProgress(userId: string): Promise<UserProgress> {
     };
   } catch {
     return { missionsCompleted: 0, achievementsUnlocked: 0, playtimeMinutes: 0 };
-  }
-}
-
-export async function upsertUserProfile(payload: { id: string; username?: string; email?: string | null }): Promise<boolean> {
-  try {
-    const res = await fetch('/api/users/profile/upsert', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) return false;
-    const data = await res.json().catch(() => ({}));
-    return !!(data && (data.ok === true || data.profile));
-  } catch {
-    return false;
   }
 }
 

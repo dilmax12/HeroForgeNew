@@ -615,6 +615,9 @@ export interface Hero {
     interactions: { heroId: string; ts: string; summary: string; impact?: number }[];
     preferences?: { quests?: string[]; items?: string[]; locations?: string[] };
     scoreByAction?: Record<string, number>;
+    friendStatusByHeroId?: Record<string, 'conhecido' | 'amigo' | 'melhor_amigo'>;
+    lastContactByHeroId?: Record<string, string>;
+    lastInteractionByType?: Record<string, string>;
   };
   npcRoutine?: { start: string; end: string; activity: string; location?: string }[];
   
@@ -697,6 +700,9 @@ export interface Hero {
     specialSkills?: string[];
     permanentBonusAttributes?: Partial<HeroAttributes>;
   };
+  friends?: string[];
+  bestFriends?: string[];
+  duelInvites?: { npcId: string; type: 'treino' | 'honra' | 'recompensas'; expiresAt: string; levelDiff: number }[];
 }
 
 export interface Party {

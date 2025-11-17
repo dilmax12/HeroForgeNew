@@ -92,6 +92,72 @@ const ENEMY_TEMPLATES: Record<string, Partial<CombatEntity>> = {
     carisma: 2,
     armor: 4,
     weapon: { name: 'Clava Gigante', atk: 8, critChance: 0.12 }
+  },
+  'Guardião de Pedra': {
+    hp: 120,
+    forca: 14,
+    destreza: 2,
+    constituicao: 16,
+    inteligencia: 3,
+    sabedoria: 5,
+    carisma: 1,
+    armor: 8,
+    weapon: { name: 'Punhos Monolíticos', atk: 10, critChance: 0.08 }
+  },
+  'Rei Goblin': {
+    hp: 95,
+    forca: 10,
+    destreza: 12,
+    constituicao: 10,
+    inteligencia: 6,
+    sabedoria: 4,
+    carisma: 6,
+    armor: 5,
+    weapon: { name: 'Lâmina Real Goblin', atk: 9, critChance: 0.18 }
+  },
+  'Feiticeiro das Sombras': {
+    hp: 90,
+    forca: 6,
+    destreza: 7,
+    constituicao: 9,
+    inteligencia: 14,
+    sabedoria: 10,
+    carisma: 5,
+    armor: 3,
+    weapon: { name: 'Cajado Obscuro', atk: 11, critChance: 0.15 }
+  },
+  'Titã de Gelo': {
+    hp: 130,
+    forca: 13,
+    destreza: 4,
+    constituicao: 18,
+    inteligencia: 4,
+    sabedoria: 6,
+    carisma: 2,
+    armor: 7,
+    weapon: { name: 'Martelo Glacial', atk: 12, critChance: 0.12 }
+  },
+  'Draco Etéreo': {
+    hp: 140,
+    forca: 15,
+    destreza: 8,
+    constituicao: 14,
+    inteligencia: 8,
+    sabedoria: 6,
+    carisma: 8,
+    armor: 6,
+    weapon: { name: 'Garras Etéreas', atk: 13, critChance: 0.2 }
+  },
+  'Arauto Ígneo': {
+    hp: 125,
+    forca: 14,
+    destreza: 6,
+    constituicao: 12,
+    inteligencia: 10,
+    sabedoria: 5,
+    carisma: 4,
+    armor: 5,
+    weapon: { name: 'Lança Flamejante', atk: 12, critChance: 0.16 }
   }
 };
 
@@ -125,6 +191,43 @@ const LOOT_TABLES: Record<string, { items: Item[], dropRates: number[] }> = {
       { id: 'pergaminho-xp', name: 'Pergaminho de Experiência', description: '+50 XP', type: 'consumable', rarity: 'raro', price: 80, effects: { duration: 0 } }
     ],
     dropRates: [0.5, 0.2]
+  },
+  'Guardião de Pedra': {
+    items: [
+      { id: 'armadura-pedra-rachada', name: 'Armadura de Pedra Rachada', description: '+6 Constituição', type: 'armor', rarity: 'epico', price: 640, bonus: { constituicao: 6 } }
+    ],
+    dropRates: [0.3]
+  },
+  'Rei Goblin': {
+    items: [
+      { id: 'adaga-ferro', name: 'Adaga de Ferro', description: '+2 Força', type: 'weapon', rarity: 'comum', price: 50, bonus: { forca: 2 } },
+      { id: 'anel-precisao', name: 'Anel da Precisão', description: '+2 Destreza, +1 Inteligência', type: 'accessory', rarity: 'epico', price: 280, bonus: { destreza: 2, inteligencia: 1 } }
+    ],
+    dropRates: [0.35, 0.15]
+  },
+  'Feiticeiro das Sombras': {
+    items: [
+      { id: 'cajado-arcano', name: 'Cajado Arcano', description: '+4 Inteligência', type: 'weapon', rarity: 'epico', price: 420, bonus: { inteligencia: 4 } }
+    ],
+    dropRates: [0.25]
+  },
+  'Titã de Gelo': {
+    items: [
+      { id: 'cajado-cristal', name: 'Cajado de Cristal', description: '+3 Inteligência, +1 Sabedoria', type: 'weapon', rarity: 'raro', price: 260, bonus: { inteligencia: 3, sabedoria: 1 } }
+    ],
+    dropRates: [0.3]
+  },
+  'Draco Etéreo': {
+    items: [
+      { id: 'asas-lendarias', name: 'Asas Lendárias', description: '+4 Destreza, +2 Inteligência, +1 Sabedoria', type: 'armor', rarity: 'lendario', price: 900, bonus: { destreza: 4, inteligencia: 2, sabedoria: 1 }, slot: 'cape' }
+    ],
+    dropRates: [0.08]
+  },
+  'Arauto Ígneo': {
+    items: [
+      { id: 'espada-flamejante', name: 'Espada Flamejante', description: 'Chance temática de causar dano de fogo.', type: 'weapon', rarity: 'raro', price: 280, bonus: { forca: 5 } }
+    ],
+    dropRates: [0.25]
   }
 };
 
@@ -440,7 +543,13 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
   for (const questEnemy of enemies) {
     for (let i = 0; i < questEnemy.count; i++) {
       const enemy = createEnemyFromTemplate(questEnemy.type, questEnemy.level || 1);
-      const enemyElement: Element = (getWeeklyMutatorEnemyElement() as Element) || generateRandomElement();
+      let enemyElement: Element = (getWeeklyMutatorEnemyElement() as Element) || generateRandomElement();
+      if (enemy.name === 'Guardião de Pedra') enemyElement = 'earth';
+      if (enemy.name === 'Rei Goblin') enemyElement = 'air';
+      if (enemy.name === 'Feiticeiro das Sombras') enemyElement = 'dark';
+      if (enemy.name === 'Titã de Gelo') enemyElement = 'ice';
+      if (enemy.name === 'Draco Etéreo') enemyElement = 'thunder';
+      if (enemy.name === 'Arauto Ígneo') enemyElement = 'fire';
       combatLog.push(`\n--- Enfrentando ${enemy.name} ---`);
       combatLog.push(`Elemento do inimigo: ${enemyElement}`);
       let enemyBurn = 0;
@@ -453,7 +562,26 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
       while (heroEntity.hp > 0 && enemy.hp > 0 && turn <= maxTurns) {
         // Determinar quem ataca primeiro (baseado em destreza, Raio +1)
         const heroFirst = (heroEntity.destreza + (heroElement === 'thunder' ? 1 : 0)) >= (enemy.destreza + (enemyElement === 'thunder' ? 1 : 0));
-        const ramp = 1 + Math.min(0.10 + turn * 0.06, 2.0); // ramp de dano progressivo
+        const ramp = 1 + Math.min(0.10 + turn * 0.06, 2.0);
+        if (enemy.name === 'Guardião de Pedra') enemy.armor = Math.floor(enemy.armor * 1.2);
+        if (enemy.name === 'Rei Goblin') enemy.destreza = Math.floor(enemy.destreza * 1.15);
+        if (enemy.name === 'Feiticeiro das Sombras' && turn % 3 === 0 && enemy.hp > 0) {
+          const siphon = Math.floor(3 + Math.random() * 6);
+          heroEntity.hp = Math.max(0, heroEntity.hp - siphon);
+          enemy.hp = Math.min(enemy.maxHp, enemy.hp + siphon);
+          combatLog.push(`🩸 ${enemy.name} drena ${siphon} HP do herói`);
+        }
+        if (enemy.name === 'Titã de Gelo' && turn % 4 === 0) {
+          const chill = Math.floor(2 + Math.random() * 4);
+          const oldDex = heroEntity.destreza;
+          heroEntity.destreza = Math.max(1, heroEntity.destreza - 1);
+          combatLog.push(`❄️ ${enemy.name} reduz a destreza do herói (${oldDex}→${heroEntity.destreza})`);
+        }
+        if (enemy.name === 'Draco Etéreo' && turn % 3 === 0) {
+          const surge = Math.floor(3 + Math.random() * 5);
+          enemy.weapon = { ...(enemy.weapon || { name: 'Garras', atk: 10, critChance: 0.2 }), atk: (enemy.weapon?.atk || 10) + 1 };
+          combatLog.push(`⚡ ${enemy.name} acumula energia etérea`);
+        }
         if (enemyBurn > 0 && enemy.hp > 0) {
           enemy.hp = Math.max(0, enemy.hp - enemyBurn);
           combatLog.push(`🔥 Queimadura causa ${enemyBurn} dano contínuo no inimigo`);
@@ -486,6 +614,9 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
             combatLog.push(`Turno ${turn}: ${heroAttack.message}`);
             if (heroAttack.damage > 0 && (atkElem === 'fire')) {
               enemyBurn = Math.floor(heroAttack.damage * 0.10);
+            }
+            if (enemy.name === 'Arauto Ígneo' && heroAttack.damage > 0) {
+              enemyBurn = Math.max(enemyBurn, Math.floor(heroAttack.damage * 0.15));
             }
             
             if (atkElem === 'dark' && heroAttack.damage > 0) {
@@ -606,6 +737,9 @@ export function resolveCombat(hero: Hero, enemies: QuestEnemy[], opts: { floor?:
               combatLog.push(`${heroAttack.message}`);
               if (heroAttack.damage > 0 && (atkElem === 'fire')) {
                 enemyBurn = Math.floor(heroAttack.damage * 0.10);
+              }
+              if (enemy.name === 'Arauto Ígneo' && heroAttack.damage > 0) {
+                enemyBurn = Math.max(enemyBurn, Math.floor(heroAttack.damage * 0.15));
               }
               if ((hero.alignment || '').includes('mal') && heroAttack.damage > 0) {
                 const leech = Math.floor(heroAttack.damage * 0.20);

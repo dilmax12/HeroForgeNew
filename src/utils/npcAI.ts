@@ -95,16 +95,70 @@ export function runTick(player: Hero | undefined, npcs: Hero[], emit: typeof not
       const mood = delta >= 2 ? 'amigável' : delta <= -2 ? 'hostil' : 'neutro';
       npc.npcMemory?.interactions.push({ heroId: player.id, ts: new Date().toISOString(), summary: `social_${mood}`, impact: delta });
       events.push({ type: 'achievement', title: 'Interação Social', message: `${npc.name} interagiu com você (${mood})`, icon: '💬', duration: 2500 });
+      // Atualizar contato
+      const mem = npc.npcMemory || { interactions: [], preferences: {}, scoreByAction: {} };
+      mem.lastContactByHeroId = { ...(mem.lastContactByHeroId || {}), [player.id]: new Date().toISOString() };
+      // Cooldown por tipo
+      const cdSec = settings.npcInteractionCooldownSeconds ?? 90;
+      const nowIso = new Date().toISOString();
+      const canEmitKey = (key: string) => {
+        const last = (mem.lastInteractionByType || {})[key];
+        if (!last) return true;
+        return (Date.now() - new Date(last).getTime()) / 1000 >= cdSec;
+      };
+      mem.lastInteractionByType = mem.lastInteractionByType || {};
+      if (canEmitKey('social')) { mem.lastInteractionByType['social'] = nowIso; } else { events.pop(); }
+      // Verificar amizade
+      const relVal = (npc.socialRelations || {})[player.id] || 0;
+      const positives = (mem.interactions || []).filter(i => i.heroId === player.id && (i.summary.includes('amigável') || i.summary.includes('missao'))).length;
+      const lastTsStr = (mem.lastContactByHeroId || {})[player.id];
+      const lastMs = lastTsStr ? new Date(lastTsStr).getTime() : 0;
+      const sinceMin = lastMs ? Math.floor((Date.now() - lastMs) / 60000) : 999;
+      const k = settings.npcRelationKnownThreshold ?? 10;
+      const f = settings.npcRelationFriendThreshold ?? 40;
+      const b = settings.npcRelationBestFriendThreshold ?? 75;
+      let status: 'conhecido' | 'amigo' | 'melhor_amigo' | undefined;
+      if (relVal >= b && positives >= 3 && sinceMin <= 180) status = 'melhor_amigo';
+      else if (relVal >= f && positives >= 2 && sinceMin <= 360) status = 'amigo';
+      else if (relVal >= k) status = 'conhecido';
+      if (status) {
+        mem.friendStatusByHeroId = { ...(mem.friendStatusByHeroId || {}), [player.id]: status };
+        npc.npcMemory = mem;
+        const pFriends = Array.isArray(player.friends) ? player.friends : [];
+        const pBest = Array.isArray(player.bestFriends) ? player.bestFriends : [];
+        const updates: Partial<Hero> = {};
+        if (status === 'amigo' && !pFriends.includes(npc.id)) (updates as any).friends = [...pFriends, npc.id];
+        if (status === 'melhor_amigo' && !pBest.includes(npc.id)) (updates as any).bestFriends = [...pBest, npc.id];
+        if (Object.keys(updates).length) {
+          events.push({ type: 'achievement', title: 'Nova Relação', message: `${npc.name} agora é seu ${status.replace('_',' ')}`, icon: '🤝', duration: 2600 });
+        }
+      }
     }
     if (action === 'mercado') {
       const gainGold = Math.floor(3 + rng() * 20);
       npc.progression.gold += gainGold;
-      events.push({ type: 'item', title: 'Trocas de NPC', message: `${npc.name} negociou no mercado (+${gainGold} ouro)`, icon: '🪙', duration: 2200 });
+      const mem = npc.npcMemory || { interactions: [], preferences: {}, scoreByAction: {} };
+      const nowIso = new Date().toISOString();
+      const cdSec = settings.npcInteractionCooldownSeconds ?? 90;
+      const last = (mem.lastInteractionByType || {})['mercado'];
+      if (!last || (Date.now() - new Date(last).getTime()) / 1000 >= cdSec) {
+        events.push({ type: 'item', title: 'Trocas de NPC', message: `${npc.name} negociou no mercado (+${gainGold} ouro)`, icon: '🪙', duration: 2200 });
+        mem.lastInteractionByType = { ...(mem.lastInteractionByType || {}), mercado: nowIso };
+      }
+      npc.npcMemory = mem;
     }
     if (action === 'exploracao') {
       const found = rng() < 0.3;
       npc.stats.itemsFound += found ? 1 : 0;
-      events.push({ type: 'quest', title: 'Exploração de NPC', message: found ? `${npc.name} encontrou um item raro` : `${npc.name} explorou áreas próximas`, icon: found ? '✨' : '🧭', duration: 2200 });
+      const mem = npc.npcMemory || { interactions: [], preferences: {}, scoreByAction: {} };
+      const nowIso = new Date().toISOString();
+      const cdSec = settings.npcInteractionCooldownSeconds ?? 90;
+      const last = (mem.lastInteractionByType || {})['exploracao'];
+      if (!last || (Date.now() - new Date(last).getTime()) / 1000 >= cdSec) {
+        events.push({ type: 'quest', title: 'Exploração de NPC', message: found ? `${npc.name} encontrou um item raro` : `${npc.name} explorou áreas próximas`, icon: found ? '✨' : '🧭', duration: 2200 });
+        mem.lastInteractionByType = { ...(mem.lastInteractionByType || {}), exploracao: nowIso };
+      }
+      npc.npcMemory = mem;
     }
     const mem = npc.npcMemory || { interactions: [], preferences: {}, scoreByAction: {} };
     const s = mem.scoreByAction || {};
@@ -124,6 +178,29 @@ export function runTick(player: Hero | undefined, npcs: Hero[], emit: typeof not
     relB[a.id] = clamp((relB[a.id] || 0) + delta, -100, 100);
     b.socialRelations = relB;
     events.push({ type: 'quest', title: 'Interação entre NPCs', message: `${a.name} e ${b.name} interagiram (${delta >= 2 ? 'amizade' : delta <= -2 ? 'rivalidade' : 'neutro'})`, icon: delta >= 2 ? '🤝' : delta <= -2 ? '⚔️' : '👋', duration: 2500 });
+  }
+
+  // Desafios de duelo (com base na rivalidade e diferença de nível)
+  if (player) {
+    const mod = (settings.npcInteractionDifficulty === 'high' ? 0.5 : settings.npcInteractionDifficulty === 'low' ? 0.2 : 0.35);
+    const moderate = settings.npcDuelRivalryModerate ?? -30;
+    const high = settings.npcDuelRivalryHigh ?? -60;
+    const maxDiff = settings.npcDuelLevelDiffMax ?? 5;
+    const duelCandidates = npcs.filter(n => {
+      const r = (n.socialRelations || {})[player.id] || 0;
+      const levelDiff = Math.abs((n.progression?.level || n.level || 1) - (player.progression?.level || player.level || 1));
+      return (r <= moderate && levelDiff <= maxDiff);
+    });
+    if (duelCandidates.length && Math.random() < mod) {
+      const challenger = pick(duelCandidates);
+      const r = (challenger.socialRelations || {})[player.id] || 0;
+      const levelDiff = Math.abs((challenger.progression?.level || 1) - (player.progression?.level || 1));
+      const type: 'treino' | 'honra' | 'recompensas' = r <= high ? 'honra' : (r <= moderate ? 'treino' : 'recompensas');
+      const invite = { npcId: challenger.id, type, expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(), levelDiff };
+      const invites = Array.isArray(player.duelInvites) ? player.duelInvites : [];
+      (player as any).duelInvites = [...invites, invite];
+      events.push({ type: 'quest', title: 'Desafio de Duelo', message: `${challenger.name} desafiou você para um duelo (${type})`, icon: '⚔️', duration: 3000 });
+    }
   }
 
   // Emit compacted notifications

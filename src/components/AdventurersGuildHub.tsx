@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, Suspense } from 'react';
 import { useHeroStore } from '../store/heroStore';
 import { generateAllLeaderboards } from '../utils/leaderboardSystem';
 import { SHOP_ITEMS } from '../utils/shop';
@@ -15,8 +15,13 @@ import { useMonetizationStore } from '../store/monetizationStore';
 import { seasonalThemes } from '../styles/medievalTheme';
 import { useGameSettingsStore } from '../store/gameSettingsStore';
 import NPCPresenceLayer from './NPCPresenceLayer';
+import PartyHUD from './PartyHUD';
+import DuelModal from './DuelModal';
 
 const EggIdentificationNPC = React.lazy(() => import('./EggIdentificationNPC'));
+const PartyHUD = React.lazy(() => import('./PartyHUD'));
+const DuelInvitesPanel = React.lazy(() => import('./DuelInvitesPanel'));
+const RelationshipsPanel = React.lazy(() => import('./RelationshipsPanel'));
 
 const AdventurersGuildHub: React.FC = () => {
   const { guilds, ensureDefaultGuildExists, refreshQuests, availableQuests, heroes, getSelectedHero, sellItem, getHeroRankProgress, activateGuildEvent, clearGuildEvent, approvePartyAlliance, rejectPartyAlliance, ensureNPCAdventurersSeedExists, startNPCSimulation, stopNPCSimulation } = useHeroStore();
@@ -28,7 +33,7 @@ const AdventurersGuildHub: React.FC = () => {
   const [qtyByItem, setQtyByItem] = useState<Record<string, number>>({});
   const [selectedType, setSelectedType] = useState<'todos' | 'consumable' | 'weapon' | 'armor' | 'accessory' | 'material'>('todos');
   const [selectedRarity, setSelectedRarity] = useState<'todas' | 'comum' | 'raro' | 'epico' | 'lendario'>('todas');
-  const [activeSection, setActiveSection] = useState<'salao' | 'treinamento' | 'sala-herois' | 'conselho' | 'cofre' | 'zoologo'>('salao');
+  const [activeSection, setActiveSection] = useState<'salao' | 'treinamento' | 'sala-herois' | 'conselho' | 'cofre' | 'zoologo' | 'duelos' | 'relacoes'>('salao');
 
   useEffect(() => {
     ensureDefaultGuildExists();
@@ -300,7 +305,9 @@ const AdventurersGuildHub: React.FC = () => {
             { id: 'sala-herois', label: 'Salão dos Heróis', icon: '🏆' },
             { id: 'conselho', label: 'Conselho da Guilda', icon: '🎖️' },
             { id: 'cofre', label: 'Cofre da Guilda', icon: '💎' },
-            { id: 'zoologo', label: 'Mestre Zoólogo Arkemis', icon: '🔮' }
+            { id: 'zoologo', label: 'Mestre Zoólogo Arkemis', icon: '🔮' },
+            { id: 'duelos', label: 'Convites de Duelo', icon: '⚔️' },
+            { id: 'relacoes', label: 'Relações', icon: '🤝' }
           ].map(t => (
             <button
               key={t.id}
@@ -395,7 +402,7 @@ const AdventurersGuildHub: React.FC = () => {
                   </div>
                 </div>
               </div>
-            </div>
+          </div>
           )}
 
           {/* Dungeon Infinita */}
@@ -432,6 +439,13 @@ const AdventurersGuildHub: React.FC = () => {
                 <p>Nenhuma tentativa registrada ainda.</p>
               </div>
             )}
+          </div>
+          {/* Party */}
+          <div className={`bg-white p-6 rounded-lg border ${seasonalBorder} text-gray-800`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold text-gray-800">👥 Party</h2>
+            </div>
+            <PartyHUD />
           </div>
 
           {/* Salão da Fama */}
@@ -741,6 +755,35 @@ const AdventurersGuildHub: React.FC = () => {
               <a href="/" className="mt-4 inline-block px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300">Selecionar Herói</a>
             </div>
           )}
+
+          {/* Presença de NPC / Modo Imersivo */}
+          <NPCPresenceLayer />
+
+          {/* HUD de Party */}
+          {selectedHero && (
+            <div className={`bg-white p-6 rounded-lg border ${seasonalBorder} text-gray-800`}>
+              <Suspense fallback={<div className="text-xs text-gray-400">Carregando Party…</div>}>
+                <PartyHUD />
+              </Suspense>
+            </div>
+          )}
+          <DuelModal />
+        </div>
+      )}
+
+      {activeSection === 'duelos' && (
+        <div className={`bg-white p-6 rounded-lg border ${seasonalBorder}`}>
+          <Suspense fallback={<div className="text-xs text-gray-400">Carregando Convites…</div>}>
+            <DuelInvitesPanel />
+          </Suspense>
+        </div>
+      )}
+
+      {activeSection === 'relacoes' && (
+        <div className={`bg-white p-6 rounded-lg border ${seasonalBorder}`}>
+          <Suspense fallback={<div className="text-xs text-gray-400">Carregando Relações…</div>}>
+            <RelationshipsPanel />
+          </Suspense>
         </div>
       )}
 

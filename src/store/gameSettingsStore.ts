@@ -32,6 +32,14 @@ export interface GameSettingsState {
   npcRotationSeconds?: number;
   npcNotificationsMode?: 'off' | 'compact' | 'normal';
   npcNotifyMaxPerTick?: number;
+  npcInteractionDifficulty?: 'low' | 'normal' | 'high';
+  npcRelationKnownThreshold?: number;
+  npcRelationFriendThreshold?: number;
+  npcRelationBestFriendThreshold?: number;
+  npcDuelRivalryModerate?: number;
+  npcDuelRivalryHigh?: number;
+  npcDuelLevelDiffMax?: number;
+  npcInteractionCooldownSeconds?: number;
 
   updateSettings: (updates: Partial<GameSettingsState>) => void;
   resetDefaults: () => void;
@@ -66,6 +74,14 @@ const DEFAULTS = {
   npcRotationSeconds: 60,
   npcNotificationsMode: 'compact' as const,
   npcNotifyMaxPerTick: 3,
+  npcInteractionDifficulty: 'normal' as const,
+  npcRelationKnownThreshold: 10,
+  npcRelationFriendThreshold: 40,
+  npcRelationBestFriendThreshold: 75,
+  npcDuelRivalryModerate: -30,
+  npcDuelRivalryHigh: -60,
+  npcDuelLevelDiffMax: 5,
+  npcInteractionCooldownSeconds: 90,
 };
 
 export const useGameSettingsStore = create<GameSettingsState>()(
@@ -129,6 +145,14 @@ export const useGameSettingsStore = create<GameSettingsState>()(
         npcRotationSeconds: state.npcRotationSeconds,
         npcNotificationsMode: state.npcNotificationsMode,
         npcNotifyMaxPerTick: state.npcNotifyMaxPerTick,
+        npcInteractionDifficulty: state.npcInteractionDifficulty,
+        npcRelationKnownThreshold: state.npcRelationKnownThreshold,
+        npcRelationFriendThreshold: state.npcRelationFriendThreshold,
+        npcRelationBestFriendThreshold: state.npcRelationBestFriendThreshold,
+        npcDuelRivalryModerate: state.npcDuelRivalryModerate,
+        npcDuelRivalryHigh: state.npcDuelRivalryHigh,
+        npcDuelLevelDiffMax: state.npcDuelLevelDiffMax,
+        npcInteractionCooldownSeconds: state.npcInteractionCooldownSeconds,
       }),
     }
   )

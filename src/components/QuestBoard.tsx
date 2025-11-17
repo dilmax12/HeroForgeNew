@@ -105,6 +105,23 @@ const QuestBoard: React.FC = () => {
   } = useHeroStore();
   
   const selectedHero = getSelectedHero();
+  const availableUniq = useMemo(() => {
+    try {
+      const seen = new Set<string>();
+      return (availableQuests || []).filter(q => {
+        const id = String(q.id);
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+    } catch { return availableQuests; }
+  }, [availableQuests]);
+  const activeIdsUniq = useMemo(() => {
+    try { return Array.from(new Set(selectedHero.activeQuests || [])); } catch { return selectedHero.activeQuests; }
+  }, [selectedHero.activeQuests]);
+  const completedIdsUniq = useMemo(() => {
+    try { return Array.from(new Set(selectedHero.completedQuests || [])); } catch { return selectedHero.completedQuests; }
+  }, [selectedHero.completedQuests]);
   
   const [selectedTab, setSelectedTab] = useState<'available' | 'active' | 'completed'>('available');
   const [companionsOnly, setCompanionsOnly] = useState<boolean>(() => {
@@ -439,7 +456,7 @@ const QuestBoard: React.FC = () => {
   };
 
   const renderQuestCard = (quest: Quest, isActive = false, isCompleted = false) => (
-    <div key={quest.id} data-testid="quest-card" className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-amber-500 transition-all">
+    <div data-testid="quest-card" className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-amber-500 transition-all">
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center space-x-3">
           <span className="text-2xl">{getTypeIcon(quest.type)}</span>
@@ -654,15 +671,19 @@ const QuestBoard: React.FC = () => {
 
       {/* Quest Content */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {selectedTab === 'available' && availableQuests
+        {selectedTab === 'available' && availableUniq
           .filter(q => (companionsOnly ? q.isGuildQuest : true))
-          .map(quest => renderQuestCard(quest))}
+          .map(quest => (
+            <React.Fragment key={`available-${quest.id}`}>
+              {renderQuestCard(quest)}
+            </React.Fragment>
+          ))}
         {/* Conteúdo Narrativas removido */}
-        {selectedTab === 'active' && selectedHero.activeQuests
-          .map(id => availableQuests.find(q => q.id === id))
+        {selectedTab === 'active' && activeIdsUniq
+          .map(id => availableUniq.find(q => q.id === id))
           .filter((q): q is Quest => !!q)
-          .map(q => (
-            <div key={q.id}>
+          .map((q, idx) => (
+            <div key={`active-${q.id}-${idx}`}>
               {renderQuestCard(q, true)}
               {selectedHero && (
                 <ActiveMissionRunner key={`runner-${q.id}`} hero={selectedHero} quest={q} />
@@ -675,10 +696,14 @@ const QuestBoard: React.FC = () => {
               </div>
             </div>
           ))}
-        {selectedTab === 'completed' && selectedHero.completedQuests
-          .map(id => availableQuests.find(q => q.id === id))
+        {selectedTab === 'completed' && completedIdsUniq
+          .map(id => availableUniq.find(q => q.id === id))
           .filter((q): q is Quest => !!q)
-          .map(q => renderQuestCard(q, false, true))}
+          .map((q, idx) => (
+            <React.Fragment key={`completed-${q.id}-${idx}`}>
+              {renderQuestCard(q, false, true)}
+            </React.Fragment>
+          ))}
       </div>
 
       {selectedTab === 'available' && availableQuests.length === 0 && (

@@ -1642,6 +1642,33 @@ export const SHOP_ITEMS: Item[] = [
     icon: '👑'
   },
   {
+    id: 'reliquia-brilho-eterno',
+    name: 'Relíquia do Brilho Eterno',
+    description: 'Artefato antigo que conta histórias de heróis esquecidos.',
+    type: 'material',
+    rarity: 'epico',
+    price: 0,
+    icon: '🕯️'
+  },
+  {
+    id: 'reliquia-contos-sussurrados',
+    name: 'Relíquia dos Contos Sussurrados',
+    description: 'Ao tocá-la, ouvem-se vozes narrando aventuras.',
+    type: 'material',
+    rarity: 'raro',
+    price: 0,
+    icon: '📜'
+  },
+  {
+    id: 'coroa-quebrada',
+    name: 'Coroa Quebrada do Rei Goblin',
+    description: 'Fragmento que testemunha uma ascensão e queda.',
+    type: 'material',
+    rarity: 'raro',
+    price: 0,
+    icon: '👑'
+  },
+  {
     id: 'fundo-aurora',
     name: 'Fundo Aurora',
     description: 'Visual por reputação (temático)',

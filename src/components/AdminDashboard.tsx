@@ -35,6 +35,21 @@ export default function AdminDashboard() {
     deathPenaltyEnabled: s.deathPenaltyEnabled,
   }));
   const updateSettings = useGameSettingsStore(s => s.updateSettings);
+  const npcSettings = useGameSettingsStore(s => ({
+    npcInteractionDifficulty: s.npcInteractionDifficulty,
+    npcNotificationsMode: s.npcNotificationsMode,
+    npcNotifyMaxPerTick: s.npcNotifyMaxPerTick,
+    npcRelationKnownThreshold: s.npcRelationKnownThreshold,
+    npcRelationFriendThreshold: s.npcRelationFriendThreshold,
+    npcRelationBestFriendThreshold: s.npcRelationBestFriendThreshold,
+    npcDuelRivalryModerate: s.npcDuelRivalryModerate,
+    npcDuelRivalryHigh: s.npcDuelRivalryHigh,
+    npcDuelLevelDiffMax: s.npcDuelLevelDiffMax,
+    npcInteractionCooldownSeconds: s.npcInteractionCooldownSeconds,
+    npcSeedTarget: s.npcSeedTarget,
+    npcVisibleCap: s.npcVisibleCap,
+    npcRotationSeconds: s.npcRotationSeconds,
+  }));
 
   const stats = useMemo(() => ({
     heroes: heroes.length,
@@ -388,6 +403,9 @@ export default function AdminDashboard() {
     a.click();
     URL.revokeObjectURL(url);
   }
+
+  const [tmpNpc, setTmpNpc] = useState<any>({});
+  function applyNpcSettings() { updateSettings(tmpNpc); setTmpNpc({}); }
 
   // === Alertas (exemplo: Masmorra da Névoa) ===
   const [dungeonName, setDungeonName] = useState('Masmorra da Névoa');
@@ -1031,6 +1049,80 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
             <button className="mt-2 px-3 py-2 bg-white text-purple-700 border border-purple-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">Enviar teste</button>
             <div className="text-xs text-gray-500 mt-2">Exemplo de integração básica via webhook.</div>
           </div>
+        </div>
+      </div>
+
+      {/* Painel de Interações de NPC */}
+      <div className="bg-white p-6 rounded-lg border border-gray-200 mt-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">👥 Interações de NPC</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="text-sm text-gray-600">Dificuldade</label>
+            <select defaultValue={npcSettings.npcInteractionDifficulty} onChange={(e) => setTmpNpc({ ...tmpNpc, npcInteractionDifficulty: e.target.value })} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-2 py-1">
+              <option value="low">Baixa</option>
+              <option value="normal">Normal</option>
+              <option value="high">Alta</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Modo de Notificações</label>
+            <select defaultValue={npcSettings.npcNotificationsMode} onChange={(e) => setTmpNpc({ ...tmpNpc, npcNotificationsMode: e.target.value })} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-2 py-1">
+              <option value="off">Desligado</option>
+              <option value="compact">Compacto</option>
+              <option value="normal">Normal</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Máx. Notificações por tick</label>
+            <input type="number" defaultValue={npcSettings.npcNotifyMaxPerTick} onChange={(e) => setTmpNpc({ ...tmpNpc, npcNotifyMaxPerTick: Number(e.target.value) })} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-2 py-1" />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Cooldown de Interações (s)</label>
+            <input type="number" defaultValue={npcSettings.npcInteractionCooldownSeconds} onChange={(e) => setTmpNpc({ ...tmpNpc, npcInteractionCooldownSeconds: Number(e.target.value) })} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-2 py-1" />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Seed de NPCs</label>
+            <input type="number" defaultValue={npcSettings.npcSeedTarget} onChange={(e) => setTmpNpc({ ...tmpNpc, npcSeedTarget: Number(e.target.value) })} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-2 py-1" />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Visíveis no painel</label>
+            <input type="number" defaultValue={npcSettings.npcVisibleCap} onChange={(e) => setTmpNpc({ ...tmpNpc, npcVisibleCap: Number(e.target.value) })} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-2 py-1" />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Rotação (s)</label>
+            <input type="number" defaultValue={npcSettings.npcRotationSeconds} onChange={(e) => setTmpNpc({ ...tmpNpc, npcRotationSeconds: Number(e.target.value) })} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-2 py-1" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
+          <div>
+            <label className="text-sm text-gray-600">Conhecido ≥</label>
+            <input type="number" defaultValue={npcSettings.npcRelationKnownThreshold} onChange={(e) => setTmpNpc({ ...tmpNpc, npcRelationKnownThreshold: Number(e.target.value) })} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-2 py-1" />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Amigo ≥</label>
+            <input type="number" defaultValue={npcSettings.npcRelationFriendThreshold} onChange={(e) => setTmpNpc({ ...tmpNpc, npcRelationFriendThreshold: Number(e.target.value) })} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-2 py-1" />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Melhor Amigo ≥</label>
+            <input type="number" defaultValue={npcSettings.npcRelationBestFriendThreshold} onChange={(e) => setTmpNpc({ ...tmpNpc, npcRelationBestFriendThreshold: Number(e.target.value) })} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-2 py-1" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
+          <div>
+            <label className="text-sm text-gray-600">Rivalidade Moderada ≤</label>
+            <input type="number" defaultValue={npcSettings.npcDuelRivalryModerate} onChange={(e) => setTmpNpc({ ...tmpNpc, npcDuelRivalryModerate: Number(e.target.value) })} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-2 py-1" />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Rivalidade Alta ≤</label>
+            <input type="number" defaultValue={npcSettings.npcDuelRivalryHigh} onChange={(e) => setTmpNpc({ ...tmpNpc, npcDuelRivalryHigh: Number(e.target.value) })} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-2 py-1" />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Diferença máx. de nível</label>
+            <input type="number" defaultValue={npcSettings.npcDuelLevelDiffMax} onChange={(e) => setTmpNpc({ ...tmpNpc, npcDuelLevelDiffMax: Number(e.target.value) })} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-2 py-1" />
+          </div>
+        </div>
+        <div className="mt-3">
+          <button onClick={applyNpcSettings} className="px-3 py-2 bg-white text-indigo-700 border border-indigo-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">Aplicar ajustes</button>
         </div>
       </div>
 

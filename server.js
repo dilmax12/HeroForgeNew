@@ -581,40 +581,6 @@ app.post('/api/events/import', async (req, res) => {
 const userProfiles = new Map();
 const userFriends = new Map();
 
-app.get('/api/users/profile', (req, res) => {
-  try {
-    const userId = String(req.query.userId || '');
-    if (!userId) return res.status(400).json({ error: 'userId requerido' });
-    const p = userProfiles.get(userId) || { userId, displayName: '', avatarUrl: '', bio: '', interests: [] };
-    return res.json({ profile: p });
-  } catch (err) {
-    return res.status(500).json({ error: 'Erro ao obter perfil' });
-  }
-});
-
-app.post('/api/users/profile', async (req, res) => {
-  try {
-    const { userId, displayName, avatarUrl, bio, interests } = req.body || {};
-    if (!userId) return res.status(400).json({ error: 'userId requerido' });
-    const p = userProfiles.get(userId) || { userId, displayName: '', avatarUrl: '', bio: '', interests: [] };
-    if (displayName !== undefined) p.displayName = String(displayName).slice(0, 60);
-    if (avatarUrl !== undefined) p.avatarUrl = String(avatarUrl).slice(0, 500);
-    if (bio !== undefined) p.bio = String(bio).slice(0, 1000);
-    if (Array.isArray(interests)) p.interests = interests.slice(0, 20).map(t => String(t).slice(0, 32));
-    userProfiles.set(userId, p);
-    try {
-      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
-        const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-        await supabase.from('user_profiles').upsert({ user_id: userId, display_name: p.displayName, avatar_url: p.avatarUrl, bio: p.bio, interests: p.interests }, { onConflict: 'user_id' });
-      }
-    } catch {}
-    return res.json({ profile: p });
-  } catch (err) {
-    return res.status(500).json({ error: 'Erro ao salvar perfil' });
-  }
-});
 
 app.get('/api/users/friends', (req, res) => {
   try {

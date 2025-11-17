@@ -316,12 +316,22 @@ export function checkPerfectDayGoal(goals: DailyGoal[]): DailyGoal[] {
 
 export function getExpiredGoals(goals: DailyGoal[]): DailyGoal[] {
   const now = new Date();
-  return goals.filter(goal => goal.expiresAt <= now);
+  return goals.filter(goal => {
+    const exp = typeof (goal.expiresAt as any) === 'string'
+      ? new Date(goal.expiresAt as unknown as string)
+      : (goal.expiresAt as Date);
+    return exp <= now;
+  });
 }
 
 export function removeExpiredGoals(goals: DailyGoal[]): DailyGoal[] {
   const now = new Date();
-  return goals.filter(goal => goal.expiresAt > now);
+  return goals.filter(goal => {
+    const exp = typeof (goal.expiresAt as any) === 'string'
+      ? new Date(goal.expiresAt as unknown as string)
+      : (goal.expiresAt as Date);
+    return exp > now;
+  });
 }
 
 export function getDailyGoalRewards(goal: DailyGoal): { xp: number; gold: number; glory?: number; arcaneEssence?: number; items?: Item[] } {

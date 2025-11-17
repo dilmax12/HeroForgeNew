@@ -2,11 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useHeroStore } from '../store/heroStore';
 import { saveDungeonRun, startDungeonRun, updateDungeonRun, finishDungeonRun } from '../services/dungeonService';
 import { addGuildReputation } from '../services/guildService';
-import { dungeonConfig, computeRewardMultiplier, isBossFloor, isMiniBossFloor } from '../utils/dungeonConfig';
+import { dungeonConfig, computeRewardMultiplier, isBossFloor, isMiniBossFloor, getDifficultyParams, DungeonDifficulty } from '../utils/dungeonConfig';
 import { logActivity } from '../utils/activitySystem';
 import { generateChestLoot } from '../utils/chestLoot';
 import { SHOP_ITEMS } from '../utils/shop';
 import BattleModal from './BattleModal';
+import { getNPCDialogue } from '../services/npcDialogueService';
 import { RankLevel } from '../types/ranks';
 import { rankSystem } from '../utils/rankSystem';
 import { useHeroStore as useStoreRef } from '../store/heroStore';
@@ -48,7 +49,7 @@ export default function Dungeon20() {
   const [battleEnemies, setBattleEnemies] = useState<Array<{ type: string; count: number; level?: number }>>([]);
   const [showBattle, setShowBattle] = useState(false);
   const [exitedVoluntarily, setExitedVoluntarily] = useState(false);
-  const [pendingEvent, setPendingEvent] = useState<'none' | 'ancient_chest' | 'mystic_shrine' | 'dark_trap' | 'mysterious_merchant' | 'secret_gate' | 'echo_of_past' >('none');
+  const [pendingEvent, setPendingEvent] = useState<'none' | 'ancient_chest' | 'mystic_shrine' | 'dark_trap' | 'mysterious_merchant' | 'secret_gate' | 'echo_of_past' | 'environment_puzzle' | 'npc_encounter' | 'collectible_relic' | 'corrupted_fountain' | 'celestial_portal'>('none');
   const [awaitingEventChoice, setAwaitingEventChoice] = useState(false);
   const [awaitingCombatChoice, setAwaitingCombatChoice] = useState(false);
   const [blessingFloors, setBlessingFloors] = useState(0);
@@ -91,6 +92,23 @@ export default function Dungeon20() {
   };
   const heroRank: RankLevel | undefined = hero ? (rankSystem.calculateRank(hero) as RankLevel) : undefined;
   const maxFloorsAllowed = getMaxFloorsByRank(heroRank);
+
+  const [difficulty, setDifficulty] = useState<DungeonDifficulty>('normal');
+  const diffParams = useMemo(() => getDifficultyParams(difficulty), [difficulty]);
+  const getBiomeByFloor = (floor: number) => {
+    if (floor <= 10) return 'ruinas';
+    if (floor <= 20) return 'cripta-nevada';
+    if (floor <= 30) return 'floresta-fungica';
+    if (floor <= 40) return 'deserto-oculto';
+    return 'abismo-eterio';
+  };
+  const getBiomeClasses = (biome: string) => {
+    if (biome === 'ruinas') return 'from-stone-700 to-gray-900';
+    if (biome === 'cripta-nevada') return 'from-slate-600 to-blue-900';
+    if (biome === 'floresta-fungica') return 'from-emerald-700 to-teal-900';
+    if (biome === 'deserto-oculto') return 'from-amber-700 to-orange-900';
+    return 'from-indigo-700 to-purple-900';
+  };
 
   const startRun = () => {
     // Gate: exigir rank D ou superior para entrar
@@ -159,22 +177,22 @@ export default function Dungeon20() {
     updateHero(hero.id, { dungeon: { ...(hero.dungeon || {}), stamina: { ...((hero.dungeon||{}).stamina||{ current: 0, max: 0, lastRecovery: new Date().toISOString(), recoveryRate: 0 }), current: Math.max(0, cur - DUNGEON_STAMINA_COST) } } });
     setLoading(true);
     try {
-      // Probabilidade básica e recompensa
-      const baseSuccess = risk === 'safe' ? 0.8 : risk === 'normal' ? 0.6 : 0.4;
+      const baseSuccess = (risk === 'safe' ? 0.8 : risk === 'normal' ? 0.6 : 0.4) + diffParams.successBaseBias;
       const roll = Math.random();
       const success = roll < baseSuccess;
 
-      // Evento aleatório (nova tabela de eventos)
       let event: FloorResult['event'] = 'none';
       const re = Math.random();
-      // 30% combate, 10% santuário, 12% baú, 10% armadilha, 8% mercador, 5% portão, 10% eco, 15% nada
-      if (re < 0.30) event = 'combat';
-      else if (re < 0.40) { setPendingEvent('mystic_shrine'); setAwaitingEventChoice(true); event = 'rest'; }
-      else if (re < 0.52) { setPendingEvent('ancient_chest'); setAwaitingEventChoice(true); event = 'chest'; }
-      else if (re < 0.62) { setPendingEvent('dark_trap'); event = 'trap'; }
-      else if (re < 0.70) { setPendingEvent('mysterious_merchant'); setAwaitingEventChoice(true); event = 'none'; }
-      else if (re < 0.75) { setPendingEvent('secret_gate'); setAwaitingEventChoice(true); event = 'none'; }
-      else if (re < 0.85) { setPendingEvent('echo_of_past'); setAwaitingEventChoice(true); event = 'none'; }
+      if (re < 0.28) event = 'combat';
+      else if (re < 0.38) { setPendingEvent('mystic_shrine'); setAwaitingEventChoice(true); event = 'rest'; }
+      else if (re < 0.50) { setPendingEvent('ancient_chest'); setAwaitingEventChoice(true); event = 'chest'; }
+      else if (re < 0.58) { setPendingEvent('environment_puzzle'); setAwaitingEventChoice(true); event = 'none'; }
+      else if (re < 0.66) { setPendingEvent('npc_encounter'); setAwaitingEventChoice(true); event = 'none'; }
+      else if (re < 0.74) { setPendingEvent('mysterious_merchant'); setAwaitingEventChoice(true); event = 'none'; }
+      else if (re < 0.80) { setPendingEvent('secret_gate'); setAwaitingEventChoice(true); event = 'none'; }
+      else if (re < 0.88) { setPendingEvent('corrupted_fountain'); setAwaitingEventChoice(true); event = 'none'; }
+      else if (re < 0.94) { setPendingEvent('celestial_portal'); setAwaitingEventChoice(true); event = 'none'; }
+      else if (re < 0.98) { setPendingEvent('echo_of_past'); setAwaitingEventChoice(true); event = 'none'; }
       else event = 'none';
 
       // Floor atual e boss
@@ -209,10 +227,18 @@ export default function Dungeon20() {
 
       // Combate real quando o evento for 'combat'
       if (event === 'combat') {
-        const templates = boss ? ['Troll'] : miniboss ? ['Ogro','Guardião'] : ['Goblin', 'Esqueleto', 'Bandido', 'Lobo'];
+        const biome = getBiomeByFloor(currentFloor);
+        const bossPoolBySegment: Record<string, string[]> = {
+          'ruinas': ['Guardião de Pedra'],
+          'cripta-nevada': ['Titã de Gelo'],
+          'floresta-fungica': ['Rei Goblin'],
+          'deserto-oculto': ['Arauto Ígneo'],
+          'abismo-eterio': ['Draco Etéreo','Feiticeiro das Sombras']
+        };
+        const templates = boss ? (bossPoolBySegment[biome] || ['Troll']) : miniboss ? ['Ogro','Guardião'] : ['Goblin', 'Esqueleto', 'Bandido', 'Lobo'];
         const chosen = templates[Math.floor(Math.random() * templates.length)];
         const count = boss ? 1 : miniboss ? 1 : (Math.random() < 0.2 ? 2 : 1);
-        const level = Math.max(1, Math.floor((hero.progression.level || 1) + currentFloor * (boss ? 0.5 : miniboss ? 0.4 : 0.3)));
+        const level = Math.max(1, Math.floor(((hero.progression.level || 1) + currentFloor * (boss ? 0.5 : miniboss ? 0.4 : 0.3)) * diffParams.enemy));
         const questEnemies = [{ type: chosen, count, level }];
         setBattleEnemies(questEnemies);
         setAwaitingCombatChoice(true);
@@ -223,7 +249,7 @@ export default function Dungeon20() {
       // Recompensas com multiplicador de streak e bônus (incluem benção/armadilha)
       const baseXp = success ? (risk === 'safe' ? 5 : risk === 'normal' ? 8 : 12) : 3;
       const baseGold = success ? (risk === 'safe' ? 1 : risk === 'normal' ? 2 : 3) : 0;
-      const mult = computeRewardMultiplier(streak) * blessingMult * trapPenaltyMult;
+      const mult = computeRewardMultiplier(streak) * blessingMult * trapPenaltyMult * diffParams.rewards;
       const bossRewardMult = boss ? 1.5 : 1;
       const xp = Math.round(baseXp * mult * bossRewardMult);
       const gold = Math.round(baseGold * mult * bossRewardMult);
@@ -363,7 +389,7 @@ export default function Dungeon20() {
     if (hero.dungeon) updateHero(hero.id, { dungeon: { ...hero.dungeon, cooldownEndsAt: ends } });
     // Pequeno bônus de reputação por concluir
     if (victory) await addGuildReputation(hero, 25);
-    setBlockedToday(true);
+    // bloqueio diário removido
   };
 
   const resetRun = () => {
@@ -378,7 +404,7 @@ export default function Dungeon20() {
     if (!hero) return;
     const currentFloor = floorIndex + 1;
     const boss = isBossFloor(currentFloor);
-    const mult = computeRewardMultiplier(streak) * blessingMult * trapPenaltyMult;
+    const mult = computeRewardMultiplier(streak) * blessingMult * trapPenaltyMult * diffParams.rewards;
     const bossRewardMult = boss ? 1.5 : 1;
 
     switch (pendingEvent) {
@@ -594,16 +620,145 @@ export default function Dungeon20() {
         gainXP(hero.id, Math.round(2 * mult));
         break;
       }
+      case 'environment_puzzle': {
+        if (action === 'attempt') {
+          const solved = Math.random() < 0.6;
+          if (solved) {
+            const xp = Math.round(10 * mult);
+            gainXP(hero.id, xp);
+            const result: FloorResult = { floor: currentFloor, success: true, event: 'none', xpGained: xp, goldGained: 0, narrative: 'Quebra-cabeça ambiental resolvido. Portas se abrem adiante.' };
+            const newLog = [...log, result];
+            setLog(newLog);
+            if (activeRunId) {
+              updateDungeonRun(activeRunId, { max_floor_reached: newLog.length, total_xp: newLog.reduce((acc, r) => acc + r.xpGained, 0), total_gold: newLog.reduce((acc, r) => acc + r.goldGained, 0), logs: newLog });
+            }
+          } else {
+            const result: FloorResult = { floor: currentFloor, success: false, event: 'none', xpGained: 0, goldGained: 0, narrative: 'Você falha no mecanismo e libera uma fumaça irritante.' };
+            const newLog = [...log, result];
+            setLog(newLog);
+            if (activeRunId) {
+              updateDungeonRun(activeRunId, { max_floor_reached: newLog.length, total_xp: newLog.reduce((acc, r) => acc + r.xpGained, 0), total_gold: newLog.reduce((acc, r) => acc + r.goldGained, 0), logs: newLog });
+            }
+          }
+        } else {
+          const result: FloorResult = { floor: currentFloor, success: true, event: 'none', xpGained: 0, goldGained: 0, narrative: 'Você ignora o enigma e segue em frente.' };
+          const newLog = [...log, result];
+          setLog(newLog);
+          if (activeRunId) {
+            updateDungeonRun(activeRunId, { max_floor_reached: newLog.length, total_xp: newLog.reduce((acc, r) => acc + r.xpGained, 0), total_gold: newLog.reduce((acc, r) => acc + r.goldGained, 0), logs: newLog });
+          }
+        }
+        break;
+      }
+      case 'npc_encounter': {
+        if (action === 'talk') {
+          const npc = hero;
+          const speech = getNPCDialogue(npc, hero, `bioma ${getBiomeByFloor(currentFloor)}`);
+          const result: FloorResult = { floor: currentFloor, success: true, event: 'rest', xpGained: 3, goldGained: 0, narrative: speech };
+          const newLog = [...log, result];
+          setLog(newLog);
+          gainXP(hero.id, Math.round(3 * mult));
+          if (activeRunId) {
+            updateDungeonRun(activeRunId, { max_floor_reached: newLog.length, total_xp: newLog.reduce((acc, r) => acc + r.xpGained, 0), total_gold: newLog.reduce((acc, r) => acc + r.goldGained, 0), logs: newLog });
+          }
+        } else {
+          const result: FloorResult = { floor: currentFloor, success: true, event: 'none', xpGained: 0, goldGained: 0, narrative: 'Você passa silenciosamente pelo viajante.' };
+          const newLog = [...log, result];
+          setLog(newLog);
+          if (activeRunId) {
+            updateDungeonRun(activeRunId, { max_floor_reached: newLog.length, total_xp: newLog.reduce((acc, r) => acc + r.xpGained, 0), total_gold: newLog.reduce((acc, r) => acc + r.goldGained, 0), logs: newLog });
+          }
+        }
+        break;
+      }
+      case 'collectible_relic': {
+        if (action === 'collect') {
+          const items = ['reliquia-brilho-eterno','reliquia-contos-sussurrados','coroa-quebrada'];
+          const chosen = items[Math.floor(Math.random() * items.length)];
+          addItemToInventory(hero.id, chosen, 1);
+          const result: FloorResult = { floor: currentFloor, success: true, event: 'none', xpGained: 0, goldGained: 0, narrative: 'Você encontra uma relíquia com histórias gravadas.' };
+          result.itemIdsAwarded = [chosen];
+          const newLog = [...log, result];
+          setLog(newLog);
+          if (activeRunId) {
+            updateDungeonRun(activeRunId, { max_floor_reached: newLog.length, total_xp: newLog.reduce((acc, r) => acc + r.xpGained, 0), total_gold: newLog.reduce((acc, r) => acc + r.goldGained, 0), logs: newLog });
+          }
+        } else {
+          const result: FloorResult = { floor: currentFloor, success: true, event: 'none', xpGained: 0, goldGained: 0, narrative: 'Você deixa a relíquia onde está.' };
+          const newLog = [...log, result];
+          setLog(newLog);
+          if (activeRunId) {
+            updateDungeonRun(activeRunId, { max_floor_reached: newLog.length, total_xp: newLog.reduce((acc, r) => acc + r.xpGained, 0), total_gold: newLog.reduce((acc, r) => acc + r.goldGained, 0), logs: newLog });
+          }
+        }
+        break;
+      }
+      case 'corrupted_fountain': {
+        if (action === 'purify') {
+          const successPurify = Math.random() < 0.5;
+          if (successPurify) {
+            setBlessingFloors(2);
+            setBlessingMult(1.2);
+            const result: FloorResult = { floor: currentFloor, success: true, event: 'rest', xpGained: 5, goldGained: 0, narrative: 'Você purifica a fonte e recebe uma benção.' };
+            const newLog = [...log, result];
+            setLog(newLog);
+            gainXP(hero.id, Math.round(5 * mult));
+            if (activeRunId) {
+              updateDungeonRun(activeRunId, { max_floor_reached: newLog.length, total_xp: newLog.reduce((acc, r) => acc + r.xpGained, 0), total_gold: newLog.reduce((acc, r) => acc + r.goldGained, 0), logs: newLog });
+            }
+          } else {
+            setTrapFloors(2);
+            setTrapPenaltyMult(0.85);
+            const result: FloorResult = { floor: currentFloor, success: false, event: 'trap', xpGained: 0, goldGained: 0, narrative: 'A corrupção te atinge; você é enfraquecido.' };
+            const newLog = [...log, result];
+            setLog(newLog);
+            if (activeRunId) {
+              updateDungeonRun(activeRunId, { max_floor_reached: newLog.length, total_xp: newLog.reduce((acc, r) => acc + r.xpGained, 0), total_gold: newLog.reduce((acc, r) => acc + r.goldGained, 0), logs: newLog });
+            }
+          }
+        } else {
+          const result: FloorResult = { floor: currentFloor, success: true, event: 'none', xpGained: 0, goldGained: 0, narrative: 'Você evita a fonte corrompida.' };
+          const newLog = [...log, result];
+          setLog(newLog);
+          if (activeRunId) {
+            updateDungeonRun(activeRunId, { max_floor_reached: newLog.length, total_xp: newLog.reduce((acc, r) => acc + r.xpGained, 0), total_gold: newLog.reduce((acc, r) => acc + r.goldGained, 0), logs: newLog });
+          }
+        }
+        break;
+      }
+      case 'celestial_portal': {
+        const forward = Math.random() < 0.8;
+        const delta = forward ? 2 + Math.floor(Math.random() * 4) : -(1 + Math.floor(Math.random() * 2));
+        setFloorIndex(i => Math.max(0, i + delta));
+        const result: FloorResult = { floor: currentFloor, success: true, event: 'none', xpGained: 0, goldGained: 0, narrative: forward ? 'Um portal celeste te empurra adiante.' : 'O portal te joga de volta, mas você aprende com o salto.' };
+        const newLog = [...log, result];
+        setLog(newLog);
+        if (activeRunId) {
+          updateDungeonRun(activeRunId, { max_floor_reached: newLog.length, total_xp: newLog.reduce((acc, r) => acc + r.xpGained, 0), total_gold: newLog.reduce((acc, r) => acc + r.goldGained, 0), logs: newLog });
+        }
+        break;
+      }
     }
     setPendingEvent('none');
     setAwaitingEventChoice(false);
     setAwaitingDecision(true);
   };
 
+  const biomeNow = getBiomeByFloor(floorIndex + 1);
+  const [lightPos, setLightPos] = useState<{ x: number; y: number }>({ x: 50, y: 50 });
   return (
-    <div className="max-w-3xl mx-auto p-6">
+    <div
+      className={`relative overflow-hidden max-w-3xl mx-auto p-6 bg-gradient-to-b ${getBiomeClasses(biomeNow)} rounded-lg shadow-xl`}
+      onMouseMove={(e) => {
+        const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 100;
+        const y = ((e.clientY - rect.top) / rect.height) * 100;
+        setLightPos({ x, y });
+      }}
+    >
       <h2 className="text-2xl font-bold text-white">Dungeon Infinita</h2>
       <p className="text-gray-300">Andar atual: {floorIndex + 1} {isBossFloor(floorIndex + 1) ? '— Boss' : ''}</p>
+      <p className="text-indigo-200">Bioma: {getBiomeByFloor(floorIndex + 1)}</p>
       <p className="text-indigo-300">Limite por rank: até {maxFloorsAllowed} andares ({heroRank || '—'})</p>
       <p className="text-indigo-300">Streak: {streak} • Multiplicador: x{computeRewardMultiplier(streak).toFixed(2)}</p>
 
@@ -611,6 +766,17 @@ export default function Dungeon20() {
 
       {!running && !finished && (
         <div className="mt-4">
+          <div className="mb-3 flex gap-2 items-center">
+            <span className="text-sm text-gray-300">Dificuldade:</span>
+            <select value={difficulty} onChange={(e) => setDifficulty(e.target.value as DungeonDifficulty)} className="px-2 py-1 rounded bg-gray-700 text-gray-100">
+              <option value="facil">Fácil</option>
+              <option value="normal">Normal</option>
+              <option value="dificil">Difícil</option>
+              <option value="epico">Épico</option>
+              <option value="hardcore">Hardcore</option>
+              <option value="caotico">Caótico</option>
+            </select>
+          </div>
           <button
             onClick={startRun}
             disabled={!hero || !heroRank || heroRank === 'F' || heroRank === 'E'}
@@ -623,6 +789,39 @@ export default function Dungeon20() {
           )}
         </div>
       )}
+
+      <div className="vfx-layer">
+        <div className="vfx-fog" />
+        {biomeNow === 'cripta-nevada' && (
+          <div className="vfx-snow">
+            {Array.from({ length: 50 }).map((_, i) => (
+              <span key={`flake-${i}`} className="flake" style={{ ['--x' as any]: `${Math.random() * 100}%`, ['--dur' as any]: `${7 + Math.random() * 5}s`, ['--delay' as any]: `${Math.random() * 4}s` }} />
+            ))}
+          </div>
+        )}
+        {biomeNow === 'deserto-oculto' && (
+          <div className="vfx-embers">
+            {Array.from({ length: 40 }).map((_, i) => (
+              <span key={`ember-${i}`} className="ember" style={{ ['--x' as any]: `${Math.random() * 100}%`, ['--dur' as any]: `${5 + Math.random() * 4}s`, ['--delay' as any]: `${Math.random() * 3}s` }} />
+            ))}
+          </div>
+        )}
+        {biomeNow === 'floresta-fungica' && (
+          <div className="vfx-spores">
+            {Array.from({ length: 36 }).map((_, i) => (
+              <span key={`spore-${i}`} className="spore" style={{ ['--x' as any]: `${Math.random() * 100}%`, ['--dur' as any]: `${6 + Math.random() * 6}s`, ['--delay' as any]: `${Math.random() * 2.5}s` }} />
+            ))}
+          </div>
+        )}
+        {biomeNow === 'abismo-eterio' && (
+          <div className="vfx-stars">
+            {Array.from({ length: 60 }).map((_, i) => (
+              <span key={`star-${i}`} className="star" style={{ ['--x' as any]: `${Math.random() * 100}%`, ['--y' as any]: `${Math.random() * 100}%`, ['--dur' as any]: `${2 + Math.random() * 3}s`, ['--delay' as any]: `${Math.random() * 2}s` }} />
+            ))}
+          </div>
+        )}
+        <div className="lantern-overlay" style={{ ['--lx' as any]: `${lightPos.x}%`, ['--ly' as any]: `${lightPos.y}%` }} />
+      </div>
 
       {running && (
         <div className="mt-4 p-4 border rounded bg-gray-800 border-gray-700">
@@ -730,8 +929,8 @@ export default function Dungeon20() {
           <div className="mt-4">
             <h3 className="text-white font-semibold">Registro</h3>
             <ul className="mt-2 text-sm text-gray-300 list-disc pl-5">
-              {log.map((r) => (
-                <li key={r.floor}>Andar {r.floor}: {r.narrative}</li>
+              {log.map((r, i) => (
+                <li key={`floor-${r.floor}-${i}`}>Andar {r.floor}: {r.narrative}</li>
               ))}
             </ul>
           </div>
@@ -739,11 +938,11 @@ export default function Dungeon20() {
             <div className="mt-4">
               <h3 className="text-white font-semibold">Loot por Andar</h3>
               <ul className="mt-2 text-sm text-gray-200 list-disc pl-5">
-                {log.filter(r => (r.itemIdsAwarded && r.itemIdsAwarded.length > 0) || (r.itemsAwarded && r.itemsAwarded.length > 0)).map((r) => (
-                  <li key={`loot-${r.floor}`} className="flex flex-col gap-1">
+                {log.filter(r => (r.itemIdsAwarded && r.itemIdsAwarded.length > 0) || (r.itemsAwarded && r.itemsAwarded.length > 0)).map((r, i) => (
+                  <li key={`loot-${r.floor}-${i}`} className="flex flex-col gap-1">
                     <span>Andar {r.floor}:</span>
                     <div className="flex flex-wrap gap-2">
-                      {(r.itemIdsAwarded && r.itemIdsAwarded.length > 0 ? r.itemIdsAwarded : []).map((itemId) => {
+                      {(r.itemIdsAwarded && r.itemIdsAwarded.length > 0 ? r.itemIdsAwarded : []).map((itemId, j) => {
                         const item = SHOP_ITEMS.find(i => i.id === itemId);
                         const rarityClass = item?.rarity === 'lendario' ? 'bg-yellow-600' : item?.rarity === 'epico' ? 'bg-purple-600' : item?.rarity === 'raro' ? 'bg-blue-600' : 'bg-gray-600';
                         const equipable = item && (item.type === 'weapon' || item.type === 'armor' || item.type === 'accessory');
@@ -766,7 +965,7 @@ export default function Dungeon20() {
                           : item?.name || itemId;
                         return (
                           <button
-                            key={`${r.floor}-${itemId}`}
+                            key={`${r.floor}-${itemId}-${j}`}
                             title={tooltip}
                             onClick={() => {
                               if (!hero) return;
@@ -838,8 +1037,8 @@ export default function Dungeon20() {
             const boss = isBossFloor(currentFloor);
             const mult = computeRewardMultiplier(streak);
           const bossRewardMult = boss ? 1.5 : 1;
-            const xp = Math.round((res.xpGained || 0) * mult * bossRewardMult);
-            const gold = Math.round((res.goldGained || 0) * mult * bossRewardMult);
+            const xp = Math.round((res.xpGained || 0) * mult * bossRewardMult * diffParams.rewards);
+            const gold = Math.round((res.goldGained || 0) * mult * bossRewardMult * diffParams.rewards);
             const glory = Math.round(gold * 0.5);
             const essence = boss ? 1 : 0;
 

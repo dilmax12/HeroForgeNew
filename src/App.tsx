@@ -42,17 +42,16 @@ import JourneyFlow from './components/JourneyFlow'
 // (removido import duplicado de MissionsHub)
 const AdminDashboardLazy = React.lazy(() => import('./components/AdminDashboard'))
 import IntroCinematic from './components/IntroCinematic'
-import PlayerRegistration from './components/PlayerRegistration'
 import Tavern from './components/Tavern'
 import HeroForge from './components/HeroForge'
 import PremiumCenter from './components/PremiumCenterSimple'
 import SocialEventsPage from './components/SocialEventsPage'
 import EventDetailPage from './components/EventDetailPage'
 import OrganizerDashboard from './components/OrganizerDashboard'
-import UserProfilePage from './components/UserProfilePage'
 import FriendsPage from './components/FriendsPage'
 import SocialNotificationsPage from './components/SocialNotificationsPage'
 import UserEventsHistoryPage from './components/UserEventsHistoryPage'
+import PartyInvitesPanel from './components/PartyInvitesPanel'
 import MetricsDashboard from './components/MetricsDashboard'
 import StableHub from './components/StableHub'
 
@@ -459,16 +458,14 @@ function App() {
           <Route path="daily-goals" element={<DailyGoalsWrapper />} />
           <Route path="events" element={<EventsPanel />} />
           <Route path="social-events" element={<SocialEventsPage />} />
+          <Route path="party-invites" element={<PartyInvitesPanel />} />
           <Route path="event/:id" element={<EventDetailPage />} />
           <Route path="organizer" element={<OrganizerDashboard />} />
-          <Route path="profile" element={<UserProfilePage />} />
           <Route path="friends" element={<FriendsPage />} />
           <Route path="notifications" element={<SocialNotificationsPage />} />
           <Route path="events-history" element={<UserEventsHistoryPage />} />
           <Route path="metrics" element={<MetricsDashboard />} />
           <Route path="activities" element={<ActivityFeed />} />
-          {/* Cadastro básico de jogador (herói, itens e missão opcional) */}
-          <Route path="cadastro" element={<PlayerRegistration />} />
           {/* Rota de tutorial removida temporariamente */}
           <Route path="titles" element={<TitlesManager />} />
           <Route path="leaderboards" element={<Leaderboards />} />
