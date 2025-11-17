@@ -1896,10 +1896,13 @@ app.get('/api/backup', async (_req, res) => {
     return res.status(500).json({ error: err?.message || 'Erro ao executar backup' });
   }
 });
-app.listen(PORT, () => {
-  console.log(`Servidor IA rodando na porta ${PORT}`);
-  scheduleAutoBackup();
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Servidor IA rodando na porta ${PORT}`);
+    scheduleAutoBackup();
+  });
+}
+export default app;
 app.post('/api/logs', rateLimit(60000, 100), async (req, res) => {
   try {
     const id = `log-${Date.now()}-${Math.random().toString(36).slice(2,9)}`;
