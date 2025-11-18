@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect } from 'react';
-// import { motion, AnimatePresence } from 'framer-motion'; // Temporariamente comentado
 import { useHeroStore } from '../store/heroStore';
 import { resumeAudioContextIfNeeded, playLevelUp } from '../utils/audioEffects';
 import { Hero } from '../types/hero';
@@ -126,7 +125,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
 
   if (!currentHero || !rankProgress) {
     return (
-      <div className={`bg-slate-800 rounded-lg p-6 ${className}`}>
+      <div className={`bg-gray-900 border border-gray-700 rounded-lg p-6 ${className}`}>
         <div className="text-center text-slate-400">
           <Trophy className="w-12 h-12 mx-auto mb-4 opacity-50" />
           <p>Nenhum herói selecionado para análise de evolução</p>
@@ -199,7 +198,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
 
       {/* Recent Achievements */}
             {rankProgress.rankData?.rankHistory && rankProgress.rankData.rankHistory.length > 0 && (
-        <div className="bg-slate-700 rounded-lg p-6">
+        <div className="bg-gray-900 border border-gray-700 rounded-lg p-6">
           <h4 className="text-lg font-semibold text-slate-100 mb-4 flex items-center">
             <Award className="w-5 h-5 mr-2 text-amber-400" />
             Conquistas Recentes
@@ -237,7 +236,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
       />
       
       {/* Detailed Requirements */}
-      <div className="bg-slate-700 rounded-lg p-6">
+        <div className="bg-gray-900 border border-gray-700 rounded-lg p-6">
         <h4 className="text-lg font-semibold text-slate-100 mb-4 flex items-center">
           <Target className="w-5 h-5 mr-2 text-blue-400" />
           Análise Detalhada de Progresso
@@ -306,7 +305,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
 
         {/* Time Estimate */}
         {rankProgress.estimate && (
-          <div className="mt-6 p-4 bg-slate-600 rounded-lg">
+          <div className="mt-6 p-4 bg-gray-800 rounded-lg">
             <div className="flex items-center mb-2">
               <Clock className="w-4 h-4 mr-2 text-amber-400" />
               <span className="text-slate-200 font-medium">Estimativa para Próximo Rank</span>
@@ -350,7 +349,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
       {/* History Timeline */}
       <div className="space-y-4">
         {filteredHistory.length === 0 ? (
-          <div className="text-center text-slate-400 py-8">
+          <div className="text-center text-gray-400 py-8">
             <Trophy className="w-12 h-12 mx-auto mb-4 opacity-50" />
             <p>Nenhum histórico encontrado para o filtro selecionado</p>
           </div>
@@ -407,7 +406,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
             className={`flex items-center p-4 rounded-lg ${
               entry.heroId === currentHero.id 
                 ? 'bg-gradient-to-r from-amber-900/30 to-yellow-900/30 border border-amber-700/50' 
-                : 'bg-slate-700'
+                : 'bg-gray-900 border border-gray-700'
             }`}
           >
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-600 text-slate-200 font-bold mr-4">
@@ -459,7 +458,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({
       {comparisonData ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Current Hero */}
-          <div className="bg-slate-700 rounded-lg p-6">
+          <div className="bg-gray-900 border border-gray-700 rounded-lg p-6">
             <div className="text-center mb-4">
               <h5 className="text-lg font-semibold text-slate-100">{comparisonData.current.name}</h5>
               <p className="text-slate-400">{comparisonData.current.class}</p>

@@ -22,28 +22,41 @@ export async function removeFriend(userId: string, targetId: string): Promise<bo
 }
 
 export async function listNotifications(userId: string): Promise<any[]> {
-  const q = new URLSearchParams();
-  q.set('viewerId', userId);
-  const res = await fetch(`/api/notifications/list?${q.toString()}`);
-  if (!res.ok) throw new Error(`Falha ao listar notificações: ${res.status}`);
-  const data = await res.json();
-  return Array.isArray(data?.notifications) ? data.notifications : [];
+  try {
+    const envAny = (typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined) || {};
+    const apiBase = envAny.VITE_API_BASE_URL || envAny.VITE_API_BASE || '';
+    if (!apiBase) return [];
+    const q = new URLSearchParams();
+    q.set('viewerId', userId);
+    const base = apiBase || (typeof window !== 'undefined' ? window.location.origin : '');
+    const url = new URL('/api/notifications/list', base);
+    url.search = q.toString();
+    const res = await fetch(url.toString());
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.notifications) ? data.notifications : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function listEventsHistory(userId: string): Promise<any[]> {
-  const q = new URLSearchParams();
-  q.set('viewerId', userId);
-  const res = await fetch(`/api/events/history?${q.toString()}`);
-  if (!res.ok) {
-    if (res.status === 404) return [];
-    try {
-      const err = await res.json();
-      console.error('Eventos histórico erro', err);
-    } catch {}
+  try {
+    const envAny = (typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined) || {};
+    const apiBase = envAny.VITE_API_BASE_URL || envAny.VITE_API_BASE || '';
+    if (!apiBase) return [];
+    const q = new URLSearchParams();
+    q.set('viewerId', userId);
+    const base = apiBase || (typeof window !== 'undefined' ? window.location.origin : '');
+    const url = new URL('/api/events/history', base);
+    url.search = q.toString();
+    const res = await fetch(url.toString());
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.events) ? data.events : [];
+  } catch {
     return [];
   }
-  const data = await res.json();
-  return Array.isArray(data?.events) ? data.events : [];
 }
 
 export type UserProfile = {

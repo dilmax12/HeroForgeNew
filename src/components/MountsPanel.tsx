@@ -20,9 +20,6 @@ export const MountsPanel: React.FC = () => {
   const { getSelectedHero, addMountToSelected, setActiveMount, evolveMountForSelected, refineCompanion, buyItem, setFavoriteMount, generateMountForSelected } = useHeroStore()
   const hero = getSelectedHero()
   const [sortKey, setSortKey] = useState<'velocidade'|'raridade'|'estagio'|'nome'|'maestria'>('estagio')
-  const [showEvolvableOnly, setShowEvolvableOnly] = useState(false)
-  const [showRefinableOnly, setShowRefinableOnly] = useState(false)
-  const [showRecommended, setShowRecommended] = useState(false)
   const [compareAId, setCompareAId] = useState<string | undefined>(undefined)
   const [compareBId, setCompareBId] = useState<string | undefined>(undefined)
   const [selectedType, setSelectedType] = useState<Mount['type'] | 'todos'>('todos')
@@ -53,15 +50,6 @@ export const MountsPanel: React.FC = () => {
 
   const sortedMounts = useMemo(() => {
     const copy = [...mounts]
-    if (showRecommended) {
-      const stageOrder: Record<string, number> = { comum: 0, encantada: 1, lendaria: 2 }
-      const rarityOrder: Record<string, number> = { comum: 0, incomum: 1, raro: 2, epico: 3, lendario: 4, mistico: 5 }
-      const score = (m: Mount) => {
-        const attrSum = Object.values(m.attributes || {}).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0)
-        return (m.speedBonus || 0) * 3 + attrSum + (stageOrder[m.stage] || 0) * 2 + (rarityOrder[m.rarity] || 0)
-      }
-      return copy.sort((a,b) => score(b) - score(a))
-    }
     if (sortKey === 'maestria') copy.sort((a,b) => (Math.max(0,b.mastery||0)) - (Math.max(0,a.mastery||0)))
     else if (sortKey === 'velocidade') copy.sort((a,b) => (b.speedBonus||0) - (a.speedBonus||0))
     else if (sortKey === 'raridade') {
@@ -130,12 +118,7 @@ export const MountsPanel: React.FC = () => {
           
           <button onClick={() => { try { const payload = JSON.stringify((hero.mounts||[]).map(m => ({ name:m.name, type:m.type, rarity:m.rarity, stage:m.stage, speedBonus:m.speedBonus, attributes:m.attributes, refineLevel:m.refineLevel, mastery:m.mastery })), null, 2); navigator.clipboard.writeText(payload); notificationBus.emit({ type:'item', title:'Exportado', message:'Estábulo copiado para a área de transferência', duration:3000 }); } catch { notificationBus.emit({ type:'item', title:'Falha ao exportar', message:'Verifique permissões do navegador', duration:3000 }); } }} className="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm">Exportar</button>
           <button onClick={() => { const json = window.prompt('Cole o JSON de montarias'); if (!json) return; const ok = (useHeroStore.getState() as any).importMountsForSelected(json); if (!ok) notificationBus.emit({ type:'item', title:'Importação falhou', message:'Formato inválido ou sem capacidade', duration:3000 }); }} className="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm">Importar</button>
-          {(() => { const favs = new Set(hero.favoriteMountIds||[]); const candidates = (hero.mounts||[]).filter(m => m.rarity==='comum' && m.id!==hero.activeMountId && !favs.has(m.id) && !m.locked).length; const disabled = candidates===0; return (
-            <button disabled={disabled} title={disabled?'Nenhuma comum elegível':''} onClick={() => (useHeroStore.getState() as any).releaseCommonMounts()} className={`px-3 py-2 rounded ${disabled?'bg-gray-700':'bg-red-700 hover:bg-red-800'} text-white text-sm`}>Liberar comuns ({candidates})</button>
-          ) })()}
-          <label className="ml-2 flex items-center gap-1 text-xs text-gray-300">
-            <input type="checkbox" onChange={e => { try { localStorage.setItem('auto_accept_companion_mission', e.target.checked ? '1' : '0'); if (hero?.id) trackMetric.featureUsed(hero.id, `pref:auto_accept_companion_mission:${e.target.checked?'on':'off'}`); } catch {} }} defaultChecked={(() => { try { return localStorage.getItem('auto_accept_companion_mission') === '1'; } catch { return false; } })()} /> Aceitar missão sugerida
-          </label>
+          
         </div>
       </div>
 
@@ -164,18 +147,7 @@ export const MountsPanel: React.FC = () => {
             {Object.keys(typeIcon).map(t => (<option key={t} value={t}>{t}</option>))}
           </select>
         </label>
-        <label className="ml-2 flex items-center gap-1 text-xs text-gray-300">
-          <input type="checkbox" checked={showRecommended} onChange={e => setShowRecommended(e.target.checked)} /> Mostrar recomendadas
-        </label>
-        <label className="ml-2 flex items-center gap-1 text-xs text-gray-300">
-          <input type="checkbox" checked={showEvolvableOnly} onChange={e => setShowEvolvableOnly(e.target.checked)} /> Evoluível
-        </label>
-        <label className="ml-2 flex items-center gap-1 text-xs text-gray-300">
-          <input type="checkbox" checked={showRefinableOnly} onChange={e => setShowRefinableOnly(e.target.checked)} /> Refinável
-        </label>
-        <label className="ml-2 flex items-center gap-1 text-xs text-gray-300">
-          <input type="checkbox" defaultChecked={(() => { try { return localStorage.getItem('auto_activate_recommended_mount') === '1'; } catch { return false; } })()} onChange={e => { try { localStorage.setItem('auto_activate_recommended_mount', e.target.checked ? '1' : '0'); notificationBus.emit({ type:'item', title:'Preferência salva', message:e.target.checked?'Auto ativar Recomendada: ON':'OFF', duration:2500 }); } catch {} }} /> Auto ativar Recomendada
-        </label>
+        
         <label className="ml-2 flex items-center gap-1 text-xs text-gray-300">
           <span>Raridade</span>
           <select value={selectedRarity} onChange={e => setSelectedRarity(e.target.value as any)} className="bg-slate-800 border border-slate-600 text-gray-200 text-xs px-2 py-1 rounded">

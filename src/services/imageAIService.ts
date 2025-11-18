@@ -57,9 +57,15 @@ export class ImageAIService {
     return prompt;
   }
 
-  async generateHeroAvatar(hero: Hero, style: 'portrait' | 'full-body' | 'action' = 'portrait'): Promise<string> {
+  getDefaultHeroImagePrompt(hero: Hero, style: 'portrait' | 'full-body' | 'action' = 'portrait'): string {
+    return this.buildHeroImagePrompt(hero, style);
+  }
+
+  async generateHeroAvatar(hero: Hero, style: 'portrait' | 'full-body' | 'action' = 'portrait', customPrompt?: string): Promise<string> {
     try {
-      const prompt = this.buildHeroImagePrompt(hero, style);
+      const prompt = (customPrompt && customPrompt.trim().length > 0)
+        ? customPrompt
+        : this.buildHeroImagePrompt(hero, style);
       
       const response = await aiService.generateImage({
         prompt,

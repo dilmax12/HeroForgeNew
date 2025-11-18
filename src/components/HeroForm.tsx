@@ -87,6 +87,9 @@ const HeroForm = () => {
   const searchParams = new URLSearchParams(location.search);
   const referralCode = searchParams.get('ref') || undefined;
   const inviterBy = searchParams.get('by') || undefined;
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const buttonPrimary = `px-3 py-2 rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1`;
+  const buttonSecondary = 'px-2 py-1 rounded bg-gray-600 text-white text-xs hover:bg-gray-500 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1';
 
   const remainingPoints = calculateRemainingPoints(formData.attributes);
   const classSkills = getClassSkills(formData.class);
@@ -197,9 +200,7 @@ const HeroForm = () => {
       forca: formData.element === 'fire' ? 1 : 0,
       destreza: formData.element === 'thunder' || formData.element === 'ice' ? 1 : 0,
       constituicao: formData.element === 'earth' ? 1 : 0,
-      inteligencia: formData.element === 'dark' || formData.element === 'ice' ? 1 : 0,
-      sabedoria: formData.element === 'light' ? 1 : 0,
-      carisma: 0
+      inteligencia: (formData.element === 'dark' || formData.element === 'ice' || formData.element === 'light') ? 1 : 0
     } as any;
     let remaining = calculateRemainingPoints(formData.attributes);
     let attrs = { ...formData.attributes } as any;
@@ -519,65 +520,7 @@ const HeroForm = () => {
           <option value="" disabled>Carregar preset...</option>
           {getPresetOptions().map(o => (<option key={o.id} value={o.id}>{o.name}</option>))}
         </select>
-        <button
-          type="button"
-          onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify({ name: formData.name, race: formData.race, class: formData.class, attributes: formData.attributes, element: formData.element, plannedTalents: formData.plannedTalents || [] })); } catch {} }}
-          className="px-3 py-1 rounded bg-indigo-600 text-white text-xs hover:bg-indigo-700"
-        >
-          Exportar build
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const raw = window.prompt('Cole o JSON do build') || ''
-            try {
-              const b = JSON.parse(raw)
-              if (b && typeof b === 'object') {
-                setFormData(prev => ({ ...prev, name: b.name || prev.name, race: b.race || prev.race, class: b.class || prev.class, attributes: b.attributes || prev.attributes, element: b.element || prev.element, plannedTalents: Array.isArray(b.plannedTalents) ? b.plannedTalents : (prev.plannedTalents || []) }))
-              }
-            } catch {}
-          }}
-          className="px-3 py-1 rounded bg-blue-600 text-white text-xs hover:bg-blue-700"
-        >
-          Importar build
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const d = loadDraft(); if (d) setFormData(prev => ({ ...prev, ...d as any }))
-          }}
-          className="px-3 py-1 rounded bg-gray-600 text-white text-xs hover:bg-gray-700"
-        >
-          Carregar rascunho
-        </button>
-        <button
-          type="button"
-          onClick={() => { clearDraft(); }}
-          className="px-3 py-1 rounded bg-gray-600 text-white text-xs hover:bg-gray-700"
-        >
-          Limpar rascunho
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const res = validateBuild(formData as any)
-            if (res.ok) setLimitWarning('Build válido ✅')
-            else setLimitWarning(res.issues.join(' • '))
-          }}
-          className="px-3 py-1 rounded bg-amber-600 text-white text-xs hover:bg-amber-700"
-        >
-          Validar build
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setFormData(prev => ({ ...prev, name: '', race: 'humano', class: 'guerreiro', attributes: createInitialAttributes(), element: 'physical', plannedTalents: [] }))
-            setLimitWarning('Build resetado')
-          }}
-          className="px-3 py-1 rounded bg-gray-600 text-white text-xs hover:bg-gray-700"
-        >
-          Resetar build
-        </button>
+        
       </div>
       
       <ErrorBoundary>
@@ -699,12 +642,9 @@ const HeroForm = () => {
                 </button>
               ))}
             </div>
-          <div className="mt-2 flex gap-2">
-            <button type="button" onClick={applyClassBaseAttributes} className={`px-3 py-1 rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110`}>Aplicar atributos base da classe</button>
-            <button type="button" onClick={handleGenerateBattleQuote} className={`px-3 py-1 rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}>
-              {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
-              <span>Gerar Frase de Batalha</span>
-            </button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={() => { const p = getClassPreset(formData.class, formData.race); setFormData(prev => ({ ...prev, attributes: p.attributes, element: p.element, plannedTalents: p.plannedTalents })); }} className={buttonPrimary}>Aplicar preset de classe</button>
+            <button type="button" onClick={() => { const recEls = getRecommendedElements(formData.class, formData.race); if (recEls.length) handleElementChange(recEls[0] as Element); handleAutoDistributeRecommended(); setFormData(prev => ({ ...prev, plannedTalents: getRecommendedTalentPlan(prev.class) })); setLimitWarning('Recomendações aplicadas'); }} className={buttonPrimary}>Aplicar recomendações</button>
           </div>
           <div className="mt-3 p-3 rounded bg-gray-700">
             <div className="text-white font-semibold">Sinergias</div>
@@ -713,10 +653,8 @@ const HeroForm = () => {
                 <input type="checkbox" checked={disableAutoSuggestion} onChange={(e) => { setDisableAutoSuggestion(e.target.checked); setPrefs({ autoSuggestDisabled: e.target.checked }); }} />
                 Não sugerir automaticamente
               </label>
-              <button type="button" onClick={handleUndoLastDecision} className="px-2 py-1 rounded bg-gray-600 text-white text-xs">Desfazer última decisão</button>
-              <button type="button" onClick={handleRedoLastDecision} className="px-2 py-1 rounded bg-gray-600 text-white text-xs">Refazer</button>
-              <button type="button" onClick={() => { const p = getClassPreset(formData.class, formData.race); setFormData(prev => ({ ...prev, attributes: p.attributes, element: p.element, plannedTalents: p.plannedTalents })); }} className="px-2 py-1 rounded bg-emerald-600 text-white text-xs">Aplicar preset de classe</button>
-              <button type="button" onClick={() => { const recEls = getRecommendedElements(formData.class, formData.race); if (recEls.length) handleElementChange(recEls[0] as Element); handleAutoDistributeRecommended(); setFormData(prev => ({ ...prev, plannedTalents: getRecommendedTalentPlan(prev.class) })); setLimitWarning('Recomendações aplicadas'); }} className="px-2 py-1 rounded bg-amber-600 text-white text-xs">Aplicar recomendações</button>
+              <button type="button" onClick={handleUndoLastDecision} className={buttonSecondary} aria-label="Desfazer última decisão">Desfazer última decisão</button>
+              <button type="button" onClick={handleRedoLastDecision} className={buttonSecondary}>Refazer</button>
             </div>
             <div className="text-xs text-gray-300 mt-1">Elementos recomendados: {getRecommendedElements(formData.class, formData.race).join(', ')}</div>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -777,10 +715,10 @@ const HeroForm = () => {
                   <div className="flex items-center gap-2">
                     <span>Elemento sugerido automaticamente: {formData.element}</span>
                     {prevElement && (
-                      <button type="button" onClick={() => handleElementChange(prevElement)} className="px-2 py-0.5 rounded bg-gray-600 text-white">Reverter</button>
+                      <button type="button" onClick={() => handleElementChange(prevElement)} className={buttonSecondary}>Reverter</button>
                     )}
                     {showSuggestionInfo && (
-                      <button type="button" onClick={() => setShowSuggestionInfo(false)} className="px-2 py-0.5 rounded bg-gray-600 text-white">Entendi</button>
+                      <button type="button" onClick={() => setShowSuggestionInfo(false)} className={buttonSecondary}>Entendi</button>
                     )}
                   </div>
                   {showSuggestionInfo && (
@@ -788,6 +726,19 @@ const HeroForm = () => {
                   )}
                 </div>
               )}
+              <div className="mt-3">
+                <button type="button" className={buttonSecondary} aria-expanded={showAdvanced} onClick={() => setShowAdvanced(v => !v)}>
+                  {showAdvanced ? 'Ocultar opções avançadas' : 'Mostrar opções avançadas'}
+                </button>
+                {showAdvanced && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button type="button" onClick={handleGenerateBattleQuote} className={`${buttonPrimary} flex items-center gap-2`}>
+                      {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+                      <span>Gerar Frase de Batalha</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             {(() => {
               const advObj: any = getElementAdvantageInfo(formData.element);
               const strong = Array.isArray(advObj?.strong) ? advObj.strong.join(', ') : String(advObj?.strong || '');
@@ -882,23 +833,7 @@ const HeroForm = () => {
             <div className="flex items-center justify-between mb-2">
               <div className="text-white font-semibold">Árvore de Talentos</div>
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify(formData.plannedTalents || [])); } catch {} }}
-                  className="px-3 py-1 rounded bg-indigo-600 text-white text-xs hover:bg-indigo-700"
-                >
-                  Exportar plano
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const raw = window.prompt('Cole o JSON do plano de talentos') || ''
-                    try { const arr = JSON.parse(raw); if (Array.isArray(arr)) setFormData(prev => ({ ...prev, plannedTalents: arr })) } catch {}
-                  }}
-                  className="px-3 py-1 rounded bg-blue-600 text-white text-xs hover:bg-blue-700"
-                >
-                  Importar plano
-                </button>
+                
                 <button
                   type="button"
                   onClick={() => setFormData(prev => ({ ...prev, plannedTalents: getRecommendedTalentPlan(prev.class) }))}
@@ -943,11 +878,13 @@ const HeroForm = () => {
           </div>
           
           {limitWarning && (
-            <p className="text-sm text-red-400 mb-4">{limitWarning}</p>
+            <p className="text-sm text-red-400 mb-4" role="status" aria-live="polite">{limitWarning}</p>
           )}
           
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {Object.entries(formData.attributes).map(([attr, value]) => (
+            {Object.entries(formData.attributes).filter(([attr]) => (
+              ['forca','destreza','constituicao','inteligencia'].includes(attr)
+            )).map(([attr, value]) => (
               <div key={attr} className="flex flex-col items-center">
                 <label className="block text-sm font-medium text-gray-300 capitalize mb-1">
                   {attr}

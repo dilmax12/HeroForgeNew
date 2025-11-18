@@ -4,14 +4,17 @@ import { getWeeklyDungeonHighlights } from '../services/dungeonService';
 import { activityManager, logActivity } from '../utils/activitySystem';
 import { useMonetizationStore } from '../store/monetizationStore';
 import { seasonalThemes, getSeasonalButtonGradient } from '../styles/medievalTheme';
+import { tokens } from '../styles/designTokens';
 import { notificationBus } from './NotificationSystem';
 import NPCPresenceLayer from './NPCPresenceLayer';
+import TavernInteractions from './TavernInteractions';
 import DialogueFrame from './DialogueFrame';
+import ActivitiesPanel from './ActivitiesPanel';
 import { getNPCDialogue } from '../services/npcDialogueService';
 import { runTick } from '../utils/npcAI';
 import { getTavernSettings, recordDiceEvent, incrementRerollUsage, generateRumorsAI } from '../services/tavernService';
 
-type Tab = 'npcs' | 'mural' | 'eventos';
+type Tab = 'npcs' | 'eventos' | 'descanso';
 
 const sampleRumors = (heroName?: string) => {
   const today = new Date().toISOString().slice(0, 10);
@@ -59,6 +62,8 @@ const Tavern: React.FC = () => {
   const [criticalGlow, setCriticalGlow] = useState<boolean>(false);
   const [diceMessage, setDiceMessage] = useState<string | null>(null);
   const [rerollCap, setRerollCap] = useState<number>(5);
+  const [rollCap, setRollCap] = useState<number>(10);
+  const [npcDiceResults, setNpcDiceResults] = useState<Array<{ id: string; name: string; roll: number; critical: boolean }>>([]);
   const getRerollTokens = () => {
     const hero = useHeroStore.getState().getSelectedHero();
     return hero ? Number(((hero.stats as any)?.tavernRerollTokens) || 0) : 0;
@@ -73,11 +78,53 @@ const Tavern: React.FC = () => {
     const count = sameDay ? Number(s.tavernRerollCount || 0) : 0;
     return { count, cap: rerollCap };
   };
+  const getRollDaily = () => {
+    const hero = useHeroStore.getState().getSelectedHero();
+    if (!hero) return { count: 0, cap: rollCap };
+    const s: any = hero.stats || {};
+    const d = s.tavernRollDate ? new Date(s.tavernRollDate) : null;
+    const today = new Date();
+    const sameDay = d && d.toDateString() === today.toDateString();
+    const count = sameDay ? Number(s.tavernRollCount || 0) : 0;
+    return { count, cap: rollCap };
+  };
   const offlineRumors = useMemo(() => sampleRumors(selectedHero?.name), [selectedHero?.name]);
   const todayEvent = useMemo(() => pickDailyEvent(), []);
   const heroes = useHeroStore.getState().heroes;
   const npcs = useMemo(() => heroes.filter(h => h.origin === 'npc'), [heroes.length]);
   const [activeDialogue, setActiveDialogue] = useState<string | null>(null);
+
+  const simulateNPCDiceNight = async () => {
+    const state = useHeroStore.getState();
+    const allHeroes = state.heroes || [];
+    const npcList = allHeroes.filter(h => h.origin === 'npc');
+    const todayStr = new Date().toDateString();
+    const cap = Math.min(8, npcList.length);
+    const selected = npcList.slice().sort(() => Math.random() - 0.5).slice(0, cap);
+    const results: Array<{ id: string; name: string; roll: number; critical: boolean }> = [];
+    for (const n of selected) {
+      const s: any = n.stats || {};
+      const prevDate = s.tavernDiceLastDate ? new Date(s.tavernDiceLastDate).toDateString() : '';
+      if (prevDate === todayStr) continue;
+      const roll = Math.floor(Math.random() * 20) + 1;
+      const critical = roll === 20;
+      results.push({ id: n.id, name: n.name, roll, critical });
+      try { logActivity.tavernDice({ heroId: n.id, heroName: n.name, heroClass: n.class, heroLevel: n.progression.level, roll, critical } as any); } catch {}
+      try { await recordDiceEvent({ heroId: n.id, heroName: n.name, roll, critical }); } catch {}
+      const stats = { ...s, tavernDiceLastDate: new Date().toISOString(), tavernDiceLastRoll: roll, tavernDiceRolls: (s.tavernDiceRolls || 0) + 1, tavernCrits: (s.tavernCrits || 0) + (critical ? 1 : 0), tavernBestRoll: Math.max(roll, s.tavernBestRoll || 0) };
+      const updates: any = { stats };
+      if (critical) {
+        try { state.gainXP(n.id, 100); } catch {}
+        const title = { id: 'mestre-dos-dados', name: 'Mestre dos Dados', description: 'Obteve um crítico (20) na Noite de Dados', rarity: 'especial', category: 'special', badge: '🎲', unlockedAt: new Date() } as any;
+        const hasTitle = (n.titles || []).some((t: any) => t.id === 'mestre-dos-dados');
+        if (!hasTitle) {
+          updates.titles = [ ...(n.titles || []), title ];
+        }
+      }
+      try { state.updateHero(n.id, updates); } catch {}
+    }
+    if (results.length) setNpcDiceResults(results);
+  };
 
   const injectTavernQuests = () => {
     const state = useHeroStore.getState();
@@ -139,12 +186,19 @@ const Tavern: React.FC = () => {
   }, [selectedHero?.id]);
 
   useEffect(() => {
+    try { useHeroStore.getState().triggerAutoInteraction('tavern'); } catch {}
+  }, [selectedHero?.id]);
+
+  useEffect(() => {
     (async () => {
       try {
         const sres = await getTavernSettings();
         const capStr = sres.settings?.['reroll_daily_cap'];
         const v = Number(capStr);
         if (!isNaN(v) && v > 0) setRerollCap(v);
+        const rollCapStr = sres.settings?.['roll_daily_cap'];
+        const vr = Number(rollCapStr);
+        if (!isNaN(vr) && vr > 0) setRollCap(vr);
       } catch {}
     })();
   }, []);
@@ -153,8 +207,8 @@ const Tavern: React.FC = () => {
 
   useEffect(() => {
     let timer: any = null;
-    if (tab === 'mural') {
-      timer = setInterval(() => { try { handleGenerateRumors(); } catch {} }, Math.max(10, rumorIntervalSec) * 1000);
+    if (tab === 'eventos') {
+      simulateNPCDiceNight();
     }
     return () => { if (timer) { try { clearInterval(timer); } catch {} } };
   }, [tab, rumorFilter, rumorIntervalSec]);
@@ -310,108 +364,32 @@ const Tavern: React.FC = () => {
         <div className="mt-4 flex gap-2">
           <button
             onClick={() => setTab('npcs')}
-            className={`px-3 py-2 rounded ${tab === 'npcs' ? 'bg-amber-600 text-black' : 'bg-gray-800 text-gray-200 hover:bg-gray-700'}`}
+            className={`px-3 py-2 rounded ${tab === 'npcs' ? tokens.tabActive : tokens.tabInactive}`}
           >
             🧑‍🎤 NPCs
           </button>
           <button
-            onClick={() => setTab('mural')}
-            className={`px-3 py-2 rounded ${tab === 'mural' ? 'bg-amber-600 text-black' : 'bg-gray-800 text-gray-200 hover:bg-gray-700'}`}
-          >
-            📜 Mural de Rumores
-          </button>
-          <button
             onClick={() => setTab('eventos')}
-            className={`px-3 py-2 rounded ${tab === 'eventos' ? 'bg-amber-600 text-black' : 'bg-gray-800 text-gray-200 hover:bg-gray-700'}`}
+            className={`px-3 py-2 rounded ${tab === 'eventos' ? tokens.tabActive : tokens.tabInactive}`}
           >
             🎉 Eventos da Taverna
+          </button>
+          <button
+            onClick={() => setTab('descanso')}
+            className={`px-3 py-2 rounded ${tab === 'descanso' ? tokens.tabActive : tokens.tabInactive}`}
+          >
+            🛏️ Descanso
           </button>
         </div>
 
         {tab === 'npcs' && (
           <div className="mt-6 space-y-4">
-            <DialogueFrame>
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-amber-300">Interações com NPCs</h2>
-                <button onClick={startDialogueWithNPC} className={`px-3 py-2 rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white`}>
-                  Conversar
-                </button>
-              </div>
-              {activeDialogue && (
-                <div className="mt-3 text-gray-200 text-sm">{activeDialogue}</div>
-              )}
-            </DialogueFrame>
+            <TavernInteractions />
             <NPCPresenceLayer />
-            {(() => {
-              const recent = activityManager.getRecentActivities(15).filter(a => a.type === 'tavern-rest' || a.type === 'tavern-dice');
-              return (
-                <div className="bg-gray-900/40 border border-white/10 rounded p-4">
-                  <h3 className="text-lg font-semibold text-amber-300">📜 Eventos Recentes da Taverna</h3>
-                  {recent.length === 0 ? (
-                    <div className="text-xs text-gray-400 mt-2">Nenhum evento recente registrado.</div>
-                  ) : (
-                    <ul className="mt-3 space-y-2">
-                      {recent.map(ev => (
-                        <li key={ev.id} className="bg-gray-800/60 border border-white/10 rounded p-3 text-gray-200 flex items-center justify-between">
-                          <span className="text-sm">
-                            <span className="mr-2">{ev.icon}</span>
-                            {ev.message}
-                          </span>
-                          <span className="text-xs text-gray-400">{ev.timestamp.toLocaleString()}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              );
-            })()}
           </div>
         )}
 
-        {tab === 'mural' && (
-          <div className="mt-6">
-            <h2 className="text-xl font-semibold text-amber-300 mb-2">Rumores da Taverna</h2>
-            <div className="mb-3 flex gap-2 items-center">
-              <button
-                onClick={handleGenerateRumors}
-                disabled={rumorsLoading}
-                className={`px-3 py-2 rounded bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}
-              >
-                {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
-                <span>{rumorsLoading ? 'Gerando…' : 'Gerar Rumores (Auto)'}</span>
-              </button>
-              <div className="flex items-center gap-2 text-xs">
-                <label className="flex items-center gap-1"><input type="radio" name="rumor-filter" checked={rumorFilter==='all'} onChange={() => setRumorFilter('all')} />Todos</label>
-                <label className="flex items-center gap-1"><input type="radio" name="rumor-filter" checked={rumorFilter==='player'} onChange={() => setRumorFilter('player')} />Jogador</label>
-                <label className="flex items-center gap-1"><input type="radio" name="rumor-filter" checked={rumorFilter==='npc'} onChange={() => setRumorFilter('npc')} />NPCs</label>
-                <select value={rumorIntervalSec} onChange={e => setRumorIntervalSec(Number(e.target.value) || 60)} className="ml-2 px-2 py-1 bg-gray-800 text-white border border-white/10 rounded">
-                  <option value={30}>30s</option>
-                  <option value={60}>60s</option>
-                  <option value={120}>120s</option>
-                </select>
-                {lastRumorTs && (<span className="ml-2 text-gray-400">Gerado: {new Date(lastRumorTs).toLocaleString()}</span>)}
-              </div>
-              {rumorsError && <span className="text-xs text-red-300">{rumorsError}</span>}
-            </div>
-            <ul className="space-y-2">
-              {(mural.length > 0 ? mural : generatedRumors).map((r, idx) => (
-                <li key={idx} className="bg-gray-800/60 border border-white/10 rounded p-3 text-gray-200">
-                  {r}
-                </li>
-              ))}
-            </ul>
-            {Object.keys(rumorStats).length > 0 && (
-              <div className="mt-2 text-xs text-gray-400">
-                {Object.entries(rumorStats).sort((a,b)=>b[1]-a[1]).map(([k,v]) => (
-                  <span key={k} className="inline-flex items-center px-2 py-1 bg-gray-800 border border-white/10 rounded mr-2">{k}: {v}</span>
-                ))}
-              </div>
-            )}
-            {mural.length === 0 && generatedRumors.length === 0 && (
-              <div className="text-xs text-gray-400 mt-2">Sem rumores gerados: jogue e interaja para criar fatos; então gere novamente.</div>
-            )}
-          </div>
-        )}
+        {null}
 
         {tab === 'eventos' && (
           <div className="mt-6">
@@ -433,6 +411,8 @@ const Tavern: React.FC = () => {
                 <button
                   onClick={async () => {
                     if (diceRolling) return;
+                    const rd = getRollDaily();
+                    if (rd.count >= rd.cap) { setDiceMessage('Limite diário de rolagens atingido'); return; }
                     setDiceRolling(true);
                     setCriticalGlow(false);
                     setDiceMessage(null);
@@ -457,6 +437,8 @@ const Tavern: React.FC = () => {
                         const heroNow = useHeroStore.getState().getSelectedHero();
                         if (heroNow) {
                           const s = { ...(heroNow.stats || {}) } as any;
+                          s.tavernRollDate = new Date().toISOString();
+                          s.tavernRollCount = (s.tavernRollCount || 0) + 1;
                           s.tavernDiceRolls = (s.tavernDiceRolls || 0) + 1;
                           s.tavernCrits = (s.tavernCrits || 0) + (isCrit ? 1 : 0);
                           s.tavernBestRoll = Math.max(roll, s.tavernBestRoll || 0);
@@ -502,6 +484,7 @@ const Tavern: React.FC = () => {
                 <div className="ml-auto text-xs text-gray-300 flex items-center gap-2">
                   <span>Fichas: <span className="text-amber-300 font-semibold">{getRerollTokens()}</span></span>
                   {(() => { const hero = useHeroStore.getState().getSelectedHero(); const s = hero ? (getRerollDaily()) : { count: 0, cap: rerollCap }; return <span>Hoje: <span className="text-amber-300 font-semibold">{s.count}/{s.cap}</span></span>; })()}
+                  {(() => { const hero = useHeroStore.getState().getSelectedHero(); const r = hero ? (getRollDaily()) : { count: 0, cap: rollCap }; return <span>Rolagens: <span className="text-amber-300 font-semibold">{r.count}/{r.cap}</span></span>; })()}
                   <button
                     onClick={async () => {
                       const hero = useHeroStore.getState().getSelectedHero();
@@ -542,72 +525,192 @@ const Tavern: React.FC = () => {
                   >Rerrolar</button>
                 </div>
               </div>
+              {npcDiceResults.length > 0 && (
+                <div className="mt-4 text-sm text-gray-200">
+                  <div className="font-semibold text-amber-300 mb-1">Participantes NPCs (hoje)</div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {npcDiceResults.map(r => (
+                      <div key={r.id} className="px-2 py-1 rounded border border-white/10 bg-black/20 flex items-center justify-between">
+                        <span>{r.name}</span>
+                        <span className={r.critical ? 'text-amber-300 font-bold' : 'text-gray-200'}>{r.roll}{r.critical ? ' • CRÍTICO' : ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Módulos de ranking e apostas desativados para modo single-player */}
 
-          {/* Descanso pago na Taverna */}
-            <div className="mt-6 bg-gray-900/40 border border-white/10 rounded p-4">
-              <h3 className="text-lg font-semibold text-amber-300">🛏️ Descanso na Taverna</h3>
-              <p className="text-sm text-gray-300 mt-1">Recupere sua Fadiga com uma boa noite de sono.</p>
-              <div className="mt-3 text-sm text-gray-200">
-                {selectedHero ? (
-                  <span>
-                    Saldo: Ouro {selectedHero.progression.gold} • Fadiga {selectedHero.progression.fatigue}
-                  </span>
-                ) : (
-                  <span>Selecione um herói para descansar.</span>
-                )}
-              </div>
+            <div className="mt-6 bg-gradient-to-br from-indigo-900/30 via-amber-800/10 to-transparent border border-indigo-500/30 rounded p-4">
+              <h3 className="text-lg font-semibold text-amber-300 flex items-center gap-2">🃏 Jogo das Cartas</h3>
+              <p className="text-sm text-gray-300 mt-1">Puxe 3 cartas (1–10). Soma das 2 maiores define o placar contra um NPC.</p>
+              {selectedHero && (() => {
+                const s = (selectedHero.stats || {}) as any;
+                const wins = Number(s.miniCardsWins || 0);
+                const losses = Number(s.miniCardsLosses || 0);
+                const best = Number(s.miniCardsBestScore || 0);
+                return (
+                  <div className="mt-2 text-xs text-gray-300">Placar pessoal: {wins} vitórias • {losses} derrotas • melhor {best}</div>
+                );
+              })()}
               <div className="mt-3 flex items-center gap-3 flex-wrap">
-                {(() => {
-                  const options = [
-                    { label: 'Soneca', type: 'soneca', cost: 15, recovery: 15 },
-                    { label: 'Noite padrão', type: 'noite', cost: 30, recovery: 30 },
-                    { label: 'Suíte de luxo', type: 'luxo', cost: 60, recovery: 60 }
-                  ];
-                  const fatigue = selectedHero?.progression.fatigue ?? 0;
-                  const gold = selectedHero?.progression.gold ?? 0;
-                  const baseHelper = !selectedHero
-                    ? 'Selecione um herói'
-                    : fatigue <= 0
-                      ? 'Fadiga já está em 0'
-                      : undefined;
+                <button
+                  onClick={() => {
+                    const hero = useHeroStore.getState().getSelectedHero();
+                    if (!hero) return;
+                    const draw = () => [1,2,3].map(() => Math.floor(Math.random() * 10) + 1).sort((a,b) => b - a).slice(0,2).reduce((acc,v) => acc + v, 0);
+                    const playerScore = draw();
+                    const heroesAll = useHeroStore.getState().heroes || [];
+                    const npcPool = heroesAll.filter(h => h.origin === 'npc');
+                    const npc = npcPool.length ? npcPool[Math.floor(Math.random() * npcPool.length)] : undefined;
+                    const npcScore = draw();
+                    const win = playerScore > npcScore;
+                    const s = { ...(hero.stats || {}) } as any;
+                    s.miniCardsWins = Number(s.miniCardsWins || 0) + (win ? 1 : 0);
+                    s.miniCardsLosses = Number(s.miniCardsLosses || 0) + (win ? 0 : 1);
+                    s.miniCardsBestScore = Math.max(Number(s.miniCardsBestScore || 0), playerScore);
+                    s.miniCardsLastDate = new Date().toISOString();
+                    useHeroStore.getState().updateHero(hero.id, { stats: s });
+                    try { useHeroStore.getState().updateAchievementProgress(); } catch {}
+                    if (win) {
+                      try { useHeroStore.getState().gainXP(hero.id, 35); } catch {}
+                      try { notificationBus.emit({ type: 'achievement', title: 'Vitória nas Cartas', message: `Placar ${playerScore} • +35 XP`, icon: '🃏', duration: 3000 }); } catch {}
+                    } else {
+                      try { notificationBus.emit({ type: 'info', title: 'Derrota nas Cartas', message: `NPC marcou ${npcScore}`, icon: '🃏', duration: 2500 }); } catch {}
+                    }
+                    setNpcDiceResults(prev => {
+                      const id = npc?.id || `npc-${Date.now()}`;
+                      const name = npc?.name || 'NPC';
+                      const roll = npcScore;
+                      const critical = false;
+                      return [...prev.filter(x => x.id !== id), { id, name, roll, critical }];
+                    });
+                  }}
+                  className={`px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white`}
+                >Jogar</button>
+                {selectedHero && (() => {
+                  const heroesAll = useHeroStore.getState().heroes || [];
+                  const npcList = heroesAll.filter(h => h.origin === 'npc').slice(0, 6);
+                  const entries = npcList.map(n => {
+                    const score = Math.floor(Math.random() * 10) + Math.floor(Math.random() * 10) + 2;
+                    return { id: n.id, name: n.name, roll: score, critical: false };
+                  }).sort((a,b) => b.roll - a.roll);
                   return (
-                    <>
-                      {options.map(opt => {
-                        const canRest = !!selectedHero && gold >= opt.cost && fatigue > 0;
-                        return (
-                          <button
-                            key={opt.type}
-                            onClick={() => {
-                              if (!selectedHero) return;
-                              const ok = restAtTavern(selectedHero.id, opt.cost, opt.recovery, opt.type);
-                              setRestMessage(
-                                ok
-                                  ? `Você descansou (${opt.label}) e recuperou até ${opt.recovery} de Fadiga.`
-                                  : 'Não foi possível descansar (verifique ouro e fadiga).'
-                              );
-                            }}
-                            disabled={!canRest}
-                            className={`px-3 py-2 rounded text-sm ${canRest ? 'bg-amber-600 hover:bg-amber-700 text-black' : 'bg-gray-700 text-gray-300'}`}
-                            title={`Recupera ${opt.recovery} Fadiga por ${opt.cost} ouro`}
-                          >
-                            {opt.label} ({opt.cost} ouro)
-                          </button>
-                        );
-                      })}
-                      <span className="text-xs text-gray-300 min-w-[180px]">
-                        {baseHelper ?? (gold < options[1].cost ? 'Ouro insuficiente' : 'Escolha o conforto do descanso')}
-                      </span>
-                    </>
+                    <div className="text-xs text-gray-300">Top NPCs hoje: {entries.slice(0,3).map(e => `${e.name} ${e.roll}`).join(' • ')}</div>
                   );
                 })()}
               </div>
-              {restMessage && (
-                <div className="mt-3 text-xs text-green-300">{restMessage}</div>
+            </div>
+
+            <div className="mt-6 bg-gradient-to-br from-green-900/30 via-amber-800/10 to-transparent border border-green-500/30 rounded p-4">
+              <h3 className="text-lg font-semibold text-amber-300 flex items-center gap-2">✊📄✂️ Pedra • Papel • Tesoura</h3>
+              <p className="text-sm text-gray-300 mt-1">Melhor de 5 contra um NPC. Vence quem fizer 3 pontos.</p>
+              {selectedHero && (() => {
+                const s = (selectedHero.stats || {}) as any;
+                const wins = Number(s.miniRpsWins || 0);
+                const losses = Number(s.miniRpsLosses || 0);
+                const streak = Number(s.miniRpsStreak || 0);
+                const best = Number(s.miniRpsBestStreak || 0);
+                return (
+                  <div className="mt-2 text-xs text-gray-300">Placar pessoal: {wins} vitórias • {losses} derrotas • sequência {streak} (melhor {best})</div>
+                );
+              })()}
+              <div className="mt-3 flex items-center gap-2">
+                {['pedra','papel','tesoura'].map(choice => (
+                  <button
+                    key={choice}
+                    onClick={() => {
+                      const hero = useHeroStore.getState().getSelectedHero();
+                      if (!hero) return;
+                      const map: Record<string, string> = { pedra: 'tesoura', papel: 'pedra', tesoura: 'papel' };
+                      const npcChoice = ['pedra','papel','tesoura'][Math.floor(Math.random()*3)];
+                      const win = map[choice] === npcChoice;
+                      const s = { ...(hero.stats || {}) } as any;
+                      const prevStreak = Number(s.miniRpsStreak || 0);
+                      s.miniRpsWins = Number(s.miniRpsWins || 0) + (win ? 1 : 0);
+                      s.miniRpsLosses = Number(s.miniRpsLosses || 0) + (win ? 0 : 1);
+                      s.miniRpsStreak = win ? prevStreak + 1 : 0;
+                      s.miniRpsBestStreak = Math.max(Number(s.miniRpsBestStreak || 0), s.miniRpsStreak);
+                      s.miniRpsLastDate = new Date().toISOString();
+                      useHeroStore.getState().updateHero(hero.id, { stats: s });
+                      try { useHeroStore.getState().updateAchievementProgress(); } catch {}
+                      if (win) {
+                        try { useHeroStore.getState().gainXP(hero.id, 25); } catch {}
+                        try { notificationBus.emit({ type: 'achievement', title: 'Vitória no RPS', message: `NPC jogou ${npcChoice} • +25 XP`, icon: '🎯', duration: 2500 }); } catch {}
+                      } else {
+                        try { notificationBus.emit({ type: 'info', title: 'Derrota no RPS', message: `NPC jogou ${npcChoice}`, icon: '🎯', duration: 2500 }); } catch {}
+                      }
+                    }}
+                    className={`px-3 py-2 rounded bg-green-700 hover:bg-green-800 text-white`}
+                  >{choice}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === 'descanso' && (
+          <div className="mt-6 bg-gray-900/40 border border-white/10 rounded p-4">
+            <h3 className="text-lg font-semibold text-amber-300">🛏️ Descanso na Taverna</h3>
+            <p className="text-sm text-gray-300 mt-1">Recupere sua Fadiga com uma boa noite de sono.</p>
+            <div className="mt-3 text-sm text-gray-200">
+              {selectedHero ? (
+                <span>
+                  Saldo: Ouro {selectedHero.progression.gold} • Fadiga {selectedHero.progression.fatigue}
+                </span>
+              ) : (
+                <span>Selecione um herói para descansar.</span>
               )}
             </div>
+            <div className="mt-3 flex items-center gap-3 flex-wrap">
+              {(() => {
+                const options = [
+                  { label: 'Soneca', type: 'soneca', cost: 15, recovery: 15 },
+                  { label: 'Noite padrão', type: 'noite', cost: 30, recovery: 30 },
+                  { label: 'Suíte de luxo', type: 'luxo', cost: 60, recovery: 60 }
+                ];
+                const fatigue = selectedHero?.progression.fatigue ?? 0;
+                const gold = selectedHero?.progression.gold ?? 0;
+                const baseHelper = !selectedHero
+                  ? 'Selecione um herói'
+                  : fatigue <= 0
+                    ? 'Fadiga já está em 0'
+                    : undefined;
+                return (
+                  <>
+                    {options.map(opt => {
+                      const canRest = !!selectedHero && gold >= opt.cost && fatigue > 0;
+                      return (
+                        <button
+                          key={opt.type}
+                          onClick={() => {
+                            if (!selectedHero) return;
+                            const ok = restAtTavern(selectedHero.id, opt.cost, opt.recovery, opt.type);
+                            setRestMessage(
+                              ok
+                                ? `Você descansou (${opt.label}) e recuperou até ${opt.recovery} de Fadiga.`
+                                : 'Não foi possível descansar (verifique ouro e fadiga).'
+                            );
+                          }}
+                          disabled={!canRest}
+                          className={`px-3 py-2 rounded text-sm ${canRest ? 'bg-gradient-to-r from-amber-600 to-yellow-600 text-white hover:brightness-110' : 'bg-gray-700 text-gray-300'}`}
+                          title={`Recupera ${opt.recovery} Fadiga por ${opt.cost} ouro`}
+                        >
+                          {opt.label} ({opt.cost} ouro)
+                        </button>
+                      );
+                    })}
+                    <span className="text-xs text-gray-300 min-w-[180px]">
+                      {baseHelper ?? (gold < options[1].cost ? 'Ouro insuficiente' : 'Escolha o conforto do descanso')}
+                    </span>
+                  </>
+                );
+              })()}
+            </div>
+            {restMessage && (
+              <div className="mt-3 text-xs text-green-300">{restMessage}</div>
+            )}
           </div>
         )}
 

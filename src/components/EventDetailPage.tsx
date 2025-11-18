@@ -37,6 +37,9 @@ const EventDetailPage: React.FC = () => {
   const chatAutoRef = useRef<any>(null);
   const [newMsgCount, setNewMsgCount] = useState(0);
   const [lastSeenTs, setLastSeenTs] = useState<number | null>(null);
+  const initialAbortRef = useRef<AbortController | null>(null);
+  const mediaAbortRef = useRef<AbortController | null>(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
 
   const load = async () => {
     if (!id) return;
@@ -46,19 +49,22 @@ const EventDetailPage: React.FC = () => {
       const s = e.attendees?.[viewerId];
       setAttStatus((s as any) || '');
       setChatLoading(true);
-      const msgs = await fetchEventChat(e.id);
+      if (initialAbortRef.current) { try { initialAbortRef.current.abort(); } catch {} }
+      initialAbortRef.current = new AbortController();
+      const msgs = await fetchEventChat(e.id, initialAbortRef.current.signal);
       setChat(msgs);
       setLastSeenTs(msgs.length ? Math.max(...msgs.map(m => m.ts)) : null);
       setNewMsgCount(0);
       setChatLoading(false);
       setMediaLoading(true);
-      const m = await listEventMedia(e.id);
+      const m = await listEventMedia(e.id, initialAbortRef.current.signal);
       setMedia(m);
       setMediaLoading(false);
     }
   };
 
   useEffect(() => { load(); }, [id, viewerId]);
+  useEffect(() => { return () => { try { initialAbortRef.current?.abort(); } catch {} try { mediaAbortRef.current?.abort(); } catch {} try { chatAbortRef.current?.abort(); } catch {} }; }, []);
   useEffect(() => { (async () => { if (!viewerId) { setFriends([]); return; } try { const f = await listFriends(viewerId); setFriends(f); } catch {} })(); }, [viewerId]);
 
   const attendeesCount = useMemo(() => Object.values(ev?.attendees || {}).filter(v => v==='yes').length, [ev?.attendees]);
@@ -154,7 +160,9 @@ const EventDetailPage: React.FC = () => {
     if (!ev || !autoRefreshMedia) return;
     const tick = async () => {
       try {
-        const m = await listEventMedia(ev.id);
+        if (mediaAbortRef.current) { try { mediaAbortRef.current.abort(); } catch {} }
+        mediaAbortRef.current = new AbortController();
+        const m = await listEventMedia(ev.id, mediaAbortRef.current.signal);
         setMedia(m);
       } catch {}
     };
@@ -166,6 +174,7 @@ const EventDetailPage: React.FC = () => {
         mediaAutoRef.current = null;
         try { trackMetric.featureUsed(me?.id || 'system', 'event_media_auto_refresh_disabled'); } catch {}
       }
+      try { mediaAbortRef.current?.abort(); } catch {}
     };
   }, [autoRefreshMedia, ev?.id, refreshIntervalSec]);
 
@@ -173,7 +182,9 @@ const EventDetailPage: React.FC = () => {
     if (!ev || !autoRefreshChat) return;
     const tick = async () => {
       try {
-        const msgs = await fetchEventChat(ev.id);
+        if (chatAbortRef.current) { try { chatAbortRef.current.abort(); } catch {} }
+        chatAbortRef.current = new AbortController();
+        const msgs = await fetchEventChat(ev.id, chatAbortRef.current.signal);
         setChat(msgs);
         const latest = msgs.length ? Math.max(...msgs.map(m => m.ts)) : null;
         if (latest !== null && lastSeenTs !== null) {
@@ -190,6 +201,7 @@ const EventDetailPage: React.FC = () => {
         chatAutoRef.current = null;
         try { trackMetric.featureUsed(me?.id || 'system', 'event_chat_auto_refresh_disabled'); } catch {}
       }
+      try { chatAbortRef.current?.abort(); } catch {}
     };
   }, [autoRefreshChat, ev?.id, chatIntervalSec]);
 

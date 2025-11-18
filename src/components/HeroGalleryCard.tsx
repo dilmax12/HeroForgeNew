@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { Hero, HeroClass, Element } from '../types/hero';
 import { getRankIcon } from '../styles/medievalTheme';
 import { useHeroStore } from '../store/heroStore';
-import { Eye, Star, Shield, Sword, Wand2, Target, Heart, UserX, Crown, Edit, Camera } from 'lucide-react';
+import { useGameSettingsStore } from '../store/gameSettingsStore';
+import { Eye, Star, Sword, Wand2, Target, Heart, UserX, Crown, Edit, Camera } from 'lucide-react';
 import { getElementInfoSafe } from '../utils/elementSystem';
 import { getCachedImage, setCachedImage } from '../utils/imageCache';
 
@@ -65,6 +66,8 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
   const { selectHero, getSelectedHero } = useHeroStore();
   const selectedHero = getSelectedHero();
   const isNPC = hero.origin === 'npc';
+  const perf = useGameSettingsStore(s => ({ rm: s.reducedMotionEnabled, sd: s.saveDataEnabled, net: s.networkEffectiveType }));
+  const allowAnimations = !perf.rm && !perf.sd && (perf.net === '4g' || perf.net === 'unknown');
 
   // Define variáveis usadas no JSX
   const isSelected = selectedHero?.id === hero.id;
@@ -129,6 +132,32 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
     } catch {}
   };
 
+  const imageSrcSet = useMemo(() => {
+    try {
+      const raw = hero.image || '';
+      const isPoll = raw.includes('image.pollinations.ai/prompt/') || raw.includes('/api/pollinations-image?prompt=');
+      if (!isPoll) return undefined as any;
+      const prompt = (() => {
+        try {
+          if (raw.includes('image.pollinations.ai/prompt/')) {
+            const p = raw.split('image.pollinations.ai/prompt/')[1];
+            return decodeURIComponent(p.split('?')[0] || '');
+          }
+          if (raw.includes('/api/pollinations-image?prompt=')) {
+            const q = new URL(raw, window.location.origin);
+            return decodeURIComponent(q.searchParams.get('prompt') || '');
+          }
+        } catch {}
+        return '';
+      })();
+      if (!prompt) return undefined as any;
+      const w256 = `/api/pollinations-image?prompt=${encodeURIComponent(prompt)}&width=256&height=256`;
+      const w384 = `/api/pollinations-image?prompt=${encodeURIComponent(prompt)}&width=384&height=384`;
+      const w512 = `/api/pollinations-image?prompt=${encodeURIComponent(prompt)}&width=512&height=512`;
+      return `${w256} 256w, ${w384} 384w, ${w512} 512w`;
+    } catch { return undefined as any; }
+  }, [hero.image]);
+
   const generateAIPrompt = () => {
     const classPrompts = {
       guerreiro: 'heroic warrior with detailed armor',
@@ -159,7 +188,7 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
         ${sizeClasses[size]}
         relative group cursor-pointer
         transform transition-all duration-300 ease-out
-        ${isHovered ? 'scale-105 -translate-y-2' : ''}
+        ${isHovered && allowAnimations ? 'scale-105 -translate-y-2' : ''}
         ${isSelected ? 'ring-2 ring-yellow-400 ring-opacity-60' : ''}
         ${(() => { const mount = (hero.mounts||[]).find(m=>m.id===hero.activeMountId); return mount?.stage==='lendaria' ? 'shadow-[0_0_15px_#F59E0B] ring-2 ring-amber-400' : mount?.stage==='encantada' ? 'shadow-[0_0_10px_#8B5CF6] ring-2 ring-purple-400/60' : '' })()}
       `}
@@ -204,7 +233,7 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
         <div className="absolute inset-0 bg-gradient-to-br from-amber-50/10 via-yellow-100/5 to-amber-200/10 rounded-md" />
         
         {/* Partículas Mágicas */}
-        {isHovered && (
+        {isHovered && allowAnimations && (
           <div className="absolute inset-0 overflow-hidden rounded-md">
             <div className="absolute top-1/4 left-1/4 w-1 h-1 bg-yellow-400 rounded-full animate-pulse opacity-60" />
             <div className="absolute top-1/3 right-1/3 w-1 h-1 bg-yellow-400 rounded-full animate-pulse opacity-40 animation-delay-300" />
@@ -220,6 +249,7 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
           {hero.image && !imageError ? (
             <img
               src={imageSrc}
+              srcSet={imageSrcSet}
               alt={`${hero.name} — ${hero.class} • ${hero.race}`}
               className="w-full h-full object-cover"
               loading="lazy"
@@ -244,14 +274,14 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
           <div className={`
             absolute inset-0 
             bg-gradient-to-t from-transparent via-transparent to-yellow-400/10
-            ${isHovered ? 'opacity-100' : 'opacity-0'}
+            ${isHovered && allowAnimations ? 'opacity-100' : 'opacity-0'}
             transition-opacity duration-300
           `} />
 
           {/* Rank Badge no Canto Superior Direito */}
           <div className="absolute top-2 right-2">
             <div className="bg-black/50 backdrop-blur-sm rounded-full px-2 py-1 text-xs text-yellow-400 font-bold">
-              {getRankIcon(hero.progression?.rank || 'F')} {hero.progression?.rank || 'F'}
+              {getRankIcon((hero as any)?.rankData?.currentRank || 'F')} {(hero as any)?.rankData?.currentRank || 'F'}
             </div>
           </div>
 

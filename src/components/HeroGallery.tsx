@@ -4,8 +4,8 @@ import { Hero, HeroClass, Element } from '../types/hero';
 import { HeroGalleryCard } from './HeroGalleryCard';
 import { useHeroStore } from '../store/heroStore';
 import { Search, Filter, Grid, List, Plus, ArrowUpDown, Trash2 } from 'lucide-react';
-import { EXAMPLE_HERO_DATA, generateExampleHero } from '../utils/heroExample';
-import GalleryLightbox from './GalleryLightbox';
+const GalleryLightbox = React.lazy(() => import('./GalleryLightbox'));
+import { getUsed as getSlotsUsed, getCapacity as getSlotsCapacity, getNextSlotPrice } from '../services/heroSlots';
 
 interface HeroGalleryProps {
   onCreateHero?: () => void;
@@ -26,8 +26,11 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
   cardSize = 'medium',
   viewMode: initialViewMode = 'grid'
 }) => {
-  const { heroes } = useHeroStore();
-  const { createHero, deleteHero, getSelectedHero } = useHeroStore();
+  const heroes = useHeroStore(s => s.heroes);
+  const createHero = useHeroStore(s => s.createHero);
+  const deleteHero = useHeroStore(s => s.deleteHero);
+  const getSelectedHero = useHeroStore(s => s.getSelectedHero);
+  const purchaseHeroSlotForSelected = useHeroStore(s => s.purchaseHeroSlotForSelected);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedClass, setSelectedClass] = useState<HeroClass | 'all'>('all');
@@ -37,21 +40,20 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<'name' | 'level' | 'rank' | 'createdAt' | 'xp' | 'gold'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [visibleCount, setVisibleCount] = useState(20);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  
   const prefetchRef = useRef<number>(0);
   const listContainerRef = useRef<HTMLDivElement | null>(null);
-  const [itemHeight, setItemHeight] = useState<number>(320);
-  const virtStateRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
-  const virtTickingRef = useRef<boolean>(false);
-  const [virtStart, setVirtStart] = useState<number>(0);
-  const [virtEnd, setVirtEnd] = useState<number>(0);
+  
   const [searchParams, setSearchParams] = useSearchParams();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const nonNpcHeroes = useMemo(() => heroes.filter((h: any) => h.origin !== 'npc'), [heroes]);
+  const slotsUsed = useMemo(() => getSlotsUsed(nonNpcHeroes), [nonNpcHeroes]);
+  const slotsCap = useMemo(() => getSlotsCapacity(nonNpcHeroes), [nonNpcHeroes]);
+  const canCreate = slotsUsed < slotsCap;
+  const nextPrice = useMemo(() => getNextSlotPrice(), [heroes]);
+  const uniqueRaces = useMemo(() => Array.from(new Set(heroes.map(h => h.race))).sort(), [heroes]);
 
   // Filtrar heróis baseado nos critérios
   const filteredHeroes = useMemo(() => {
@@ -74,94 +76,36 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
     const list = [...filteredHeroes];
     list.sort((a, b) => {
       let cmp = 0;
-      if (sortBy === 'name') cmp = a.name.localeCompare(b.name);
-      if (sortBy === 'level') cmp = (a.progression?.level || 0) - (b.progression?.level || 0);
-      if (sortBy === 'rank') cmp = (a.progression?.rank || 'F').localeCompare(b.progression?.rank || 'F');
-      if (sortBy === 'createdAt') cmp = new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
-      if (sortBy === 'xp') cmp = (a.progression?.xp || 0) - (b.progression?.xp || 0);
-      if (sortBy === 'gold') cmp = (a.progression?.gold || 0) - (b.progression?.gold || 0);
+      switch (sortBy) {
+        case 'name':
+          cmp = a.name.localeCompare(b.name);
+          break;
+        case 'level':
+          cmp = (a.progression?.level || 0) - (b.progression?.level || 0);
+          break;
+        case 'rank':
+          cmp = (a.progression?.rank || 'F').localeCompare(b.progression?.rank || 'F');
+          break;
+        case 'createdAt':
+          cmp = new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+          break;
+        case 'xp':
+          cmp = (a.progression?.xp || 0) - (b.progression?.xp || 0);
+          break;
+        case 'gold':
+          cmp = (a.progression?.gold || 0) - (b.progression?.gold || 0);
+          break;
+        default:
+          cmp = 0;
+      }
       return sortOrder === 'asc' ? cmp : -cmp;
     });
     return list;
   }, [filteredHeroes, sortBy, sortOrder]);
 
-  const visibleHeroes = useMemo(() => {
-    return sortedHeroes.slice(0, visibleCount);
-  }, [sortedHeroes, visibleCount]);
+  
 
-  const useVirtualization = viewMode === 'list' && visibleHeroes.length > 500;
-
-  useEffect(() => {
-    if (!useVirtualization) return;
-    const measure = () => {
-      try {
-        const el = document.querySelector('[data-hero-card="1"]') as HTMLElement | null;
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          const h = Math.max(200, Math.floor(rect.height));
-          if (h !== itemHeight) setItemHeight(h);
-        }
-      } catch {}
-    };
-    const computeRange = () => {
-      const y = window.scrollY || window.pageYOffset || 0;
-      const vh = window.innerHeight || 800;
-      const buffer = 10;
-      const start = Math.max(0, Math.floor(y / Math.max(1, itemHeight)) - buffer);
-      const end = Math.min(visibleHeroes.length, Math.ceil((y + vh) / Math.max(1, itemHeight)) + buffer);
-      if (virtStateRef.current.start !== start) setVirtStart(start);
-      if (virtStateRef.current.end !== end) setVirtEnd(end);
-      virtStateRef.current = { start, end };
-    };
-    const onScroll = () => {
-      if (virtTickingRef.current) return;
-      virtTickingRef.current = true;
-      requestAnimationFrame(() => {
-        computeRange();
-        virtTickingRef.current = false;
-      });
-    };
-    const onResize = () => { measure(); computeRange(); };
-    measure();
-    computeRange();
-    window.addEventListener('scroll', onScroll, { passive: true } as any);
-    window.addEventListener('resize', onResize);
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onResize);
-    };
-  }, [useVirtualization, visibleHeroes.length, itemHeight]);
-
-  const loadMore = useCallback(async () => {
-    if (isLoadingMore) return;
-    setIsLoadingMore(true);
-    setLoadError(null);
-    try {
-      await new Promise(res => setTimeout(res, 300));
-      setVisibleCount(v => Math.min(v + 20, sortedHeroes.length));
-    } catch (e) {
-      setLoadError('Falha ao carregar mais itens');
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }, [isLoadingMore, sortedHeroes.length]);
-
-  useEffect(() => {
-    setVisibleCount(20);
-  }, [debouncedSearch, selectedClass, selectedElement, selectedRace, sortBy, sortOrder]);
-
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver(entries => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) loadMore();
-      });
-    }, { rootMargin: '200px' });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [loadMore]);
-
+  
   useEffect(() => {
     const id = setTimeout(() => setDebouncedSearch(searchTerm), 200);
     return () => clearTimeout(id);
@@ -219,7 +163,7 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
 
   useEffect(() => {
     const start = prefetchRef.current;
-    const end = Math.min(sortedHeroes.length, visibleCount + 24);
+    const end = Math.min(sortedHeroes.length, start + 24);
     for (let i = start; i < end; i++) {
       const h = sortedHeroes[i];
       if (!h?.image) continue;
@@ -235,31 +179,20 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
       } catch {}
     }
     prefetchRef.current = end;
-  }, [visibleCount, sortedHeroes]);
+  }, [sortedHeroes]);
 
-  const handleHeroClick = (hero: Hero) => {
-    const idx = visibleHeroes.findIndex(h => h.id === hero.id);
+  const handleHeroClick = useCallback((hero: Hero) => {
+    const idx = sortedHeroes.findIndex(h => h.id === hero.id);
     setLightboxIndex(idx >= 0 ? idx : null);
     onHeroSelect?.(hero);
-  };
+  }, [sortedHeroes, onHeroSelect]);
 
-  const handleAddExample = () => {
-    try {
-      const data = generateExampleHero();
-      createHero(data);
-    } catch {}
-  };
+  
 
-  const handleAddStatic = () => {
-    try {
-      createHero(EXAMPLE_HERO_DATA);
-    } catch {}
-  };
-
-  const handleRemoveSelected = () => {
+  const handleRemoveSelected = useCallback(() => {
     const sel = getSelectedHero?.();
     if (sel) deleteHero(sel.id);
-  };
+  }, [getSelectedHero, deleteHero]);
 
   const gridClasses = {
     small: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
@@ -288,8 +221,8 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
     else if (e.key.toLowerCase() === 'v') { setViewMode(m => m === 'grid' ? 'list' : 'grid'); }
     else if (e.key === 'Home') { e.preventDefault(); moveFocus(-9999); }
     else if (e.key === 'End') { e.preventDefault(); moveFocus(9999); }
-    else if (e.key === 'PageDown') { (listContainerRef.current || window).scrollBy?.({ top: (listContainerRef.current?.clientHeight || window.innerHeight), behavior: 'smooth' } as any); }
-    else if (e.key === 'PageUp') { (listContainerRef.current || window).scrollBy?.({ top: -(listContainerRef.current?.clientHeight || window.innerHeight), behavior: 'smooth' } as any); }
+    else if (e.key === 'PageDown') { window.scrollBy?.({ top: window.innerHeight, behavior: 'smooth' } as any); }
+    else if (e.key === 'PageUp') { window.scrollBy?.({ top: -window.innerHeight, behavior: 'smooth' } as any); }
   };
 
   return (
@@ -384,24 +317,25 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
               </button>
             </div>
 
-            {/* Botão Criar Herói */}
+            {/* Botão Criar Herói e Slots */}
             {showCreateButton && (
               <button
                 onClick={onCreateHero}
-                className="bg-yellow-600 hover:bg-yellow-500 text-white px-3 sm:px-4 py-2 rounded-md font-bold transition-colors flex items-center gap-2 text-sm sm:text-base w-full sm:w-auto"
+                disabled={!canCreate}
+                className={`${canCreate?'bg-yellow-600 hover:bg-yellow-500 text-white':'bg-gray-700 text-gray-300 cursor-not-allowed'} px-3 sm:px-4 py-2 rounded-md font-bold transition-colors flex items-center gap-2 text-sm sm:text-base w-full sm:w-auto`}
               >
                 <Plus className="w-4 h-4" />
-                <span>Criar Herói</span>
+                <span>{canCreate?'Criar Herói':`Slots ${slotsUsed}/${slotsCap}`}</span>
               </button>
             )}
+            <div className="flex items-center gap-2">
+            <span className="px-2 py-1 rounded bg-black/30 border border-yellow-500/30 text-yellow-300 text-xs">Slots {slotsUsed}/{slotsCap}</span>
+            <button onClick={() => purchaseHeroSlotForSelected()} className="px-3 py-2 rounded bg-amber-600 hover:bg-amber-700 text-white text-sm">Comprar slot ({nextPrice})</button>
+          </div>
 
-            {/* Ações rápidas */}
-            <button
-              onClick={handleAddStatic}
-              className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-md font-bold transition-colors text-sm"
-            >
-              Adicionar Fixo
-            </button>
+            
+
+            
             <button
               onClick={handleRemoveSelected}
               className="bg-red-600 hover:bg-red-500 text-white px-3 py-2 rounded-md font-bold transition-colors text-sm flex items-center gap-2"
@@ -484,7 +418,7 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
                   className="w-full bg-black/30 border border-yellow-500/30 rounded-md text-white p-2 focus:outline-none focus:border-yellow-400"
                 >
                   <option value="all">Todas as Raças</option>
-                  {Array.from(new Set(heroes.map(h => h.race))).sort().map(r => (
+                  {uniqueRaces.map(r => (
                     <option key={r} value={r}>{r}</option>
                   ))}
                 </select>
@@ -502,19 +436,13 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
       </div>
 
       {/* Grid de Heróis */}
-      {visibleHeroes.length > 0 ? (
-        <div className={`
-          ${viewMode === 'grid' 
-            ? `grid ${gridClasses[cardSize]} gap-6` 
-            : 'flex flex-col space-y-4'
-          }
-        `}
+      {sortedHeroes.length > 0 ? (
+        <div ref={listContainerRef} className={`${viewMode === 'grid' ? `grid ${gridClasses[cardSize]} gap-4 sm:gap-6` : 'flex flex-col space-y-4'}`}
           role="list"
           aria-label="Galeria de Heróis"
           onKeyDown={onGridKeyDown}
-          ref={listContainerRef}
         >
-          {!useVirtualization && visibleHeroes.map((hero, idx) => (
+          {sortedHeroes.map((hero, idx) => (
             <HeroGalleryCard
               key={hero.id}
               hero={hero}
@@ -527,29 +455,6 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
               index={idx}
             />
           ))}
-          {useVirtualization && (
-            <>
-              <div style={{ height: `${virtStart * itemHeight}px` }} />
-              {visibleHeroes.slice(virtStart, Math.max(virtStart, virtEnd)).map((hero, i) => (
-                <HeroGalleryCard
-                  key={hero.id}
-                  hero={hero}
-                  onClick={() => handleHeroClick(hero)}
-                  size={viewMode === 'list' ? 'small' : cardSize}
-                  showDetails={true}
-                  onEdit={onHeroEdit}
-                  onImageChange={onHeroImageChange}
-                  onDelete={() => setConfirmDeleteId(hero.id)}
-                  index={virtStart + i}
-                />
-              ))}
-              <div style={{ height: `${Math.max(0, (visibleHeroes.length - Math.max(virtStart, virtEnd)) * itemHeight)}px` }} />
-            </>
-          )}
-          {isLoadingMore && (
-            <div className="h-24 bg-white/5 rounded animate-pulse" />
-          )}
-          <div ref={sentinelRef} aria-hidden className="h-10" />
         </div>
       ) : (
         <div className="text-center py-12">
@@ -574,26 +479,20 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
         </div>
       )}
 
-      {isLoadingMore && (
-        <div role="status" aria-live="polite" className="text-center text-yellow-300 py-4">Carregando...</div>
-      )}
-      {loadError && (
-        <div role="alert" className="text-center text-red-400 py-4">{loadError}</div>
-      )}
-      {typeof window !== 'undefined' && !(window as any).IntersectionObserver && (
-        <div className="text-center">
-          <button onClick={() => loadMore()} className="px-3 py-2 rounded bg-gray-700 text-white">Carregar mais</button>
-        </div>
-      )}
+      
+      
 
       {lightboxIndex !== null && (
-        <GalleryLightbox
-          items={visibleHeroes}
-          index={lightboxIndex}
-          onClose={() => setLightboxIndex(null)}
-          onNavigate={(newIdx) => setLightboxIndex(Math.max(0, Math.min(newIdx, visibleHeroes.length - 1)))}
-        />
+        <React.Suspense fallback={null}>
+          <GalleryLightbox
+            items={sortedHeroes}
+            index={lightboxIndex}
+            onClose={() => setLightboxIndex(null)}
+            onNavigate={(newIdx) => setLightboxIndex(Math.max(0, Math.min(newIdx, sortedHeroes.length - 1)))}
+          />
+        </React.Suspense>
       )}
+      
       {confirmDeleteId && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center" role="dialog" aria-modal="true">
           <div className="w-full max-w-md rounded-xl border border-yellow-500/30 bg-black/80 p-5 text-white">

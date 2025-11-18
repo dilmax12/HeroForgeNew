@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { rankSystem } from './rankSystem'
 import { type Hero } from '../types/hero'
+import { RANK_REWARDS } from '../types/ranks'
 
 const makeHero = (): Hero => {
   const now = new Date().toISOString()
@@ -67,5 +68,36 @@ describe('RankSystem promotion history', () => {
     updated = rankSystem.updateRankData(hero, hero.rankData)
     expect(updated.currentRank).toBe('D')
     expect(updated.rankHistory[updated.rankHistory.length - 1].rank).toBe('D')
+  })
+
+  it('aplica recompensas desbloqueadas ao subir de F para E', () => {
+    const hero = makeHero()
+    hero.rankData = rankSystem.initializeRankData(hero)
+    const initialUnlocked = hero.rankData.unlockedRewards.map(r => r.name)
+    expect(initialUnlocked).toEqual(RANK_REWARDS['F'].map(r => r.name))
+
+    hero.progression.xp = 200
+    hero.stats.questsCompleted = 2
+    const updated = rankSystem.updateRankData(hero, hero.rankData)
+    const updatedUnlocked = new Set(updated.unlockedRewards.map(r => r.name))
+    for (const r of RANK_REWARDS['E']) {
+      expect(updatedUnlocked.has(r.name)).toBe(true)
+    }
+  })
+
+  it('mantém histórico e adiciona recompensas ao subir de E para D', () => {
+    const hero = makeHero()
+    hero.rankData = rankSystem.initializeRankData(hero)
+    hero.progression.xp = 200
+    hero.stats.questsCompleted = 2
+    let updated = rankSystem.updateRankData(hero, hero.rankData)
+    hero.rankData = updated
+    hero.progression.xp = 600
+    hero.stats.questsCompleted = 5
+    updated = rankSystem.updateRankData(hero, hero.rankData)
+    const unlockedNames = new Set(updated.unlockedRewards.map(r => r.name))
+    for (const r of RANK_REWARDS['D']) {
+      expect(unlockedNames.has(r.name)).toBe(true)
+    }
   })
 })

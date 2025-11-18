@@ -159,11 +159,21 @@ class AIService {
         };
       }
 
+      // Fallback para endpoint alternativo em 404/405
+      if ((response.status === 404 || response.status === 405) && base.includes('groq-openai')) {
+        endpoint = '/api/groq-chat';
+        attempt++;
+        await this.sleep(200);
+        continue;
+      }
+
       const raw = await response.text();
       let error: any = {};
       try { error = JSON.parse(raw); } catch { error = { error: { message: raw } }; }
       lastErrorMsg = error.error?.message || raw || 'Unknown error occurred';
-      console.error('[AI][OpenAIText] Error', {
+      const envAny = (typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined) || {};
+      const silent = (envAny.VITE_AI_SILENT === 'true') || !!envAny.DEV;
+      (!silent ? console.error : console.debug)('[AI][OpenAIText] Error', {
         status: response.status,
         statusText: response.statusText,
         endpoint,
@@ -470,7 +480,9 @@ class AIService {
       return response;
     } catch (error) {
       this.usageStats.errorRate++;
-      console.error('[AI][Text] Failed', {
+      const envAny = (typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined) || {};
+      const silent = (envAny.VITE_AI_SILENT === 'true') || !!envAny.DEV;
+      (!silent ? console.error : console.debug)('[AI][Text] Failed', {
         code: (error as any)?.code,
         message: (error as any)?.message,
         provider: (error as any)?.provider || this.config.provider,
@@ -485,7 +497,9 @@ class AIService {
     try {
       return await this.generateText(request);
     } catch (error: any) {
-      console.warn('[AI][TextSafe] Fallback engaged', {
+      const envAny = (typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined) || {};
+      const silent = (envAny.VITE_AI_SILENT === 'true') || !!envAny.DEV;
+      (!silent ? console.warn : console.debug)('[AI][TextSafe] Fallback engaged', {
         code: error?.code,
         message: error?.message?.slice?.(0, 200) || String(error?.message || error),
         provider: error?.provider || this.config.provider

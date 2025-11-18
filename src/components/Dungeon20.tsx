@@ -1096,6 +1096,8 @@ export default function Dungeon20() {
               setFinished(true);
               setRunning(false);
               setAwaitingDecision(false);
+              const stats = { ...(hero.stats || {}) } as any;
+              updateHero(hero.id, { stats: { ...stats, inDungeon: false } });
             }
 
             setShowBattle(false);

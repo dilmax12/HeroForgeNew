@@ -24,7 +24,8 @@ export const RankCard: React.FC<RankCardProps> = ({
 }) => {
   const { activeSeasonalTheme } = useMonetizationStore();
   const [isGlowing, setIsGlowing] = useState(false);
-  const rankInfo = RANK_CONFIG[rank];
+  const safeRank = (rank || (progress?.currentRank as any) || 'F') as RankLevel;
+  const rankInfo = RANK_CONFIG[safeRank] || { name: String(safeRank), color: '#9CA3AF' } as any;
 
   useEffect(() => {
     if (animated && progress?.canPromote) {
@@ -55,7 +56,7 @@ export const RankCard: React.FC<RankCardProps> = ({
         size === 'medium' ? 'w-16 h-16 text-base' : 
         'w-20 h-20 text-lg'}
       ${animated ? 'hover:scale-110 cursor-pointer' : ''}
-      bg-gradient-to-br ${getRankGradient(rank)} ${seasonalBorder} text-white ${medievalTheme.effects.shadows.glow}
+      bg-gradient-to-br ${getRankGradient(safeRank)} ${seasonalBorder} text-white ${medievalTheme.effects.shadows.glow}
     `;
     
     return baseStyles;
@@ -82,15 +83,15 @@ export const RankCard: React.FC<RankCardProps> = ({
         onClick={onClick}
       >
         {/* Rank Letter */}
-        <span className="font-bold z-10">{rank}</span>
+        <span className="font-bold z-10">{safeRank}</span>
         
         {/* Rank Icon */}
         <span className="absolute top-1 right-1 text-xs opacity-80">
-          {getRankIcon(rank)}
+          {getRankIcon(safeRank)}
         </span>
         
         {/* Legendary Sparkle Effect for S Rank */}
-        {rank === 'S' && animated && (
+        {safeRank === 'S' && animated && (
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
         )}
         
@@ -102,15 +103,15 @@ export const RankCard: React.FC<RankCardProps> = ({
 
       {/* Rank Name */}
       <div className="text-center">
-        <div className="font-semibold text-sm" style={{ color: rankInfo.color }}>
-          {rankInfo.name}
+        <div className="font-semibold text-sm" style={{ color: rankInfo?.color || '#9CA3AF' }}>
+          {rankInfo?.name || String(rank)}
         </div>
         
         {/* Progress Bar */}
         {showProgress && progress && progress.nextRank && (
           <div className="mt-2 w-24">
             <div className="flex justify-between text-xs text-gray-400 mb-1">
-              <span>{rank}</span>
+              <span>{safeRank}</span>
               <span>{progress.nextRank}</span>
             </div>
             <div className="w-full bg-gray-700 rounded-full h-2">
@@ -118,7 +119,7 @@ export const RankCard: React.FC<RankCardProps> = ({
                 className="h-2 rounded-full transition-all duration-500"
                 style={{
                   width: `${progress.progressPercentage}%`,
-                  backgroundColor: rankInfo.color
+                  backgroundColor: rankInfo?.color || '#9CA3AF'
                 }}
               ></div>
             </div>
@@ -188,7 +189,7 @@ export const RankComparison: React.FC<RankComparisonProps> = ({
         <RankCard rank={heroRank} size="small" animated={false} />
         <div>
           <div className="font-semibold text-white">{heroName}</div>
-          <div className="text-sm text-amber-600">{RANK_CONFIG[heroRank].name}</div>
+          <div className="text-sm text-amber-600">{(RANK_CONFIG[heroRank]?.name) || String(heroRank)}</div>
         </div>
       </div>
 
@@ -197,7 +198,7 @@ export const RankComparison: React.FC<RankComparisonProps> = ({
       <div className="flex items-center space-x-3">
         <div className="text-right">
           <div className="font-semibold text-white">{compareName}</div>
-          <div className="text-sm text-amber-600">{RANK_CONFIG[compareRank].name}</div>
+          <div className="text-sm text-amber-600">{(RANK_CONFIG[compareRank]?.name) || String(compareRank)}</div>
         </div>
         <RankCard rank={compareRank} size="small" animated={false} />
       </div>

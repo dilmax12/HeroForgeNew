@@ -18,7 +18,10 @@ export default defineConfig({
           vendor: ['react', 'react-dom', 'zustand', 'use-sync-external-store'],
           router: ['react-router-dom'],
           motion: ['framer-motion'],
-          supabase: ['@supabase/supabase-js']
+          supabase: ['@supabase/supabase-js'],
+          icons: ['lucide-react'],
+          stripe: ['stripe'],
+          ai: ['@huggingface/inference']
         },
         assetFileNames: 'assets/[name]-[hash][extname]',
         chunkFileNames: 'assets/[name]-[hash].js',

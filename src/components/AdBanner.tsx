@@ -3,6 +3,7 @@ import { useMonetizationStore } from '../store/monetizationStore';
 import { loadAdSense, pushAds } from '../services/adsenseLoader';
 import { useHeroStore } from '../store/heroStore';
 import { trackMetric } from '../utils/metricsSystem';
+import { tokens } from '../styles/designTokens';
 
 interface Props {
   slot?: string;
@@ -34,14 +35,16 @@ const AdBanner: React.FC<Props> = ({ slot, style }) => {
   }
 
   return (
-    <ins
-      className="adsbygoogle block"
-      style={style || { display: 'block', height: 60 }}
-      data-ad-client={adSenseClientId}
-      data-ad-slot={slotId}
-      data-ad-format="horizontal"
-      data-full-width-responsive="true"
-    />
+    <div className={`${tokens.cardBase} border border-gray-700`} style={style || { minHeight: 60 }}>
+      <ins
+        className="adsbygoogle block"
+        style={{ display: 'block', width: '100%', height: 60, background: 'transparent' }}
+        data-ad-client={adSenseClientId}
+        data-ad-slot={slotId}
+        data-ad-format="horizontal"
+        data-full-width-responsive="true"
+      />
+    </div>
   );
 };
 

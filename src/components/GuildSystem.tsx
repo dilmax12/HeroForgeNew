@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Hero, Guild, Quest } from '../types/hero';
 import { useHeroStore } from '../store/heroStore';
+import ActivitiesPanel from './ActivitiesPanel';
 
 interface GuildSystemProps {
   hero: Hero;
@@ -34,6 +35,10 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
 
   const currentGuild = hero.progression.guildId ? 
     guilds.find(g => g.id === hero.progression.guildId) : null;
+
+  useEffect(() => {
+    try { useHeroStore.getState().triggerAutoInteraction('guild'); } catch {}
+  }, [hero.id]);
 
   const handleCreateGuild = () => {
     if (newGuildName.trim() && newGuildDescription.trim()) {
@@ -173,6 +178,8 @@ const GuildSystem: React.FC<GuildSystemProps> = ({ hero }) => {
           </div>
         </div>
       </div>
+
+      <ActivitiesPanel />
 
       {/* Navegação */}
       <div className="border-b border-gray-200">

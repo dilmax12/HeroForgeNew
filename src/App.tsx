@@ -4,22 +4,17 @@ import Layout from './components/Layout'
 import HeroList from './components/HeroList'
 import HeroForm from './components/HeroForm'
 const HeroDetailLazy = React.lazy(() => import('./components/HeroDetail'))
-// import TestComponent from './components/TestComponent'
 import HeroProgression from './components/HeroProgression'
 import GuildSystem from './components/GuildSystem'
-import AdventurersGuildHub from './components/AdventurersGuildHub'
+import GuildHub from './features/guild/Hub'
 import QuestBoard from './components/QuestBoard'
 import TitlesManager from './components/TitlesManager'
 import Leaderboards from './components/Leaderboards'
 import DailyGoals from './components/DailyGoals'
-// Onboarding desativado temporariamente
-// import OnboardingManager from './components/OnboardingManager'
-// import OnboardingDetector from './components/OnboardingDetector'
 import EventsPanel from './components/EventsPanel'
 import ActivityFeed from './components/ActivityFeed'
 import { EvolutionPanel } from './components/EvolutionPanel'
 import { RankCelebrationManager } from './components/RankCelebration'
-const AIAvatarGeneratorLazy = React.lazy(() => import('./components/AIAvatarGenerator'))
 const DynamicMissionsPanelLazy = React.lazy(() => import('./components/DynamicMissionsPanel'))
 const AIRecommendationsPanelLazy = React.lazy(() => import('./components/AIRecommendationsPanel'))
 import Shop from './components/Shop'
@@ -54,6 +49,9 @@ import UserEventsHistoryPage from './components/UserEventsHistoryPage'
 import PartyInvitesPanel from './components/PartyInvitesPanel'
 import MetricsDashboard from './components/MetricsDashboard'
 import StableHub from './components/StableHub'
+import { rankSystem } from './utils/rankSystem'
+import { FeatureGate } from './components/FeatureGate'
+import { useProgressionStore } from './store/progressionStore'
 
 // Componente wrapper para HeroProgression que precisa do herói selecionado
 function HeroProgressionWrapper() {
@@ -140,40 +138,6 @@ function EvolutionPanelWrapper() {
   return <EvolutionPanel heroId={selectedHero.id} className="max-w-6xl mx-auto" />;
 }
 
-// Componente wrapper para AIAvatarGenerator que precisa do herói selecionado
-function AIAvatarGeneratorWrapper() {
-  const { getSelectedHero, updateHero } = useHeroStore();
-  const selectedHero = getSelectedHero();
-  
-  if (!selectedHero) {
-    return (
-      <div className="max-w-4xl mx-auto p-6 text-center">
-        <div className="text-6xl mb-4">🎭</div>
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
-        <p className="text-gray-600 mb-6">Selecione um herói para gerar avatares com IA.</p>
-        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
-          Voltar à Lista de Heróis
-        </Link>
-      </div>
-    );
-  }
-  
-  const handleAvatarGenerated = (url: string) => {
-    const ok = typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://') || /^data:image\/(png|jpeg);base64,/.test(url));
-    const safe = ok ? url : 'https://placehold.co/512x512?text=Avatar';
-    updateHero(selectedHero.id, { image: safe });
-  };
-
-  return (
-    <Suspense fallback={<div className="p-6">Carregando...</div>}>
-      <AIAvatarGeneratorLazy 
-        hero={selectedHero} 
-        className="max-w-4xl mx-auto" 
-        onAvatarGenerated={handleAvatarGenerated}
-      />
-    </Suspense>
-  );
-}
 
 // Componente wrapper para DynamicMissionsPanel que precisa do herói selecionado
 function DynamicMissionsPanelWrapper() {
@@ -300,6 +264,136 @@ function QuickMissionWrapper() {
   return <QuickMission />;
 }
 
+function HuntingGateWrapper() {
+  const { getSelectedHero } = useHeroStore()
+  const hero = getSelectedHero()
+  if (!hero) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 text-center">
+        <div className="text-6xl mb-4">🗡️</div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
+        <p className="text-gray-600 mb-6">Selecione um herói para acessar missões de caça.</p>
+        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">Voltar à Lista de Heróis</Link>
+      </div>
+    )
+  }
+  return <FeatureGate feature="hunting_basic"><HuntingMissions /></FeatureGate>
+}
+
+function QuestBoardGateWrapper() {
+  const { getSelectedHero } = useHeroStore()
+  const hero = getSelectedHero()
+  if (!hero) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 text-center">
+        <div className="text-6xl mb-4">📜</div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
+        <p className="text-gray-600 mb-6">Selecione um herói para acessar missões.</p>
+        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">Voltar à Lista de Heróis</Link>
+      </div>
+    )
+  }
+  return <FeatureGate feature="hunting_basic"><QuestBoard /></FeatureGate>
+}
+
+function ShopGateWrapper() {
+  const { getSelectedHero } = useHeroStore()
+  const hero = getSelectedHero()
+  if (!hero) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 text-center">
+        <div className="text-6xl mb-4">🛒</div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
+        <p className="text-gray-600 mb-6">Selecione um herói para acessar a loja.</p>
+        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">Voltar à Lista de Heróis</Link>
+      </div>
+    )
+  }
+  return <FeatureGate feature="shop_basic"><Shop /></FeatureGate>
+}
+
+function ForgeGateWrapper() {
+  const { getSelectedHero } = useHeroStore()
+  const hero = getSelectedHero()
+  if (!hero) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 text-center">
+        <div className="text-6xl mb-4">⚒️</div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
+        <p className="text-gray-600 mb-6">Selecione um herói para acessar a forja.</p>
+        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">Voltar à Lista de Heróis</Link>
+      </div>
+    )
+  }
+  return <FeatureGate feature="crafting_simple"><HeroForge /></FeatureGate>
+}
+
+function DungeonGateWrapper() {
+  const { getSelectedHero } = useHeroStore()
+  const hero = getSelectedHero()
+  if (!hero) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 text-center">
+        <div className="text-6xl mb-4">🏰</div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
+        <p className="text-gray-600 mb-6">Selecione um herói para acessar a dungeon.</p>
+        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">Voltar à Lista de Heróis</Link>
+      </div>
+    )
+  }
+  const curRank = hero.rankData?.currentRank || rankSystem.calculateRank(hero)
+  const allowedRanks = ['C','B','A','S','SS','SSS']
+  if (!allowedRanks.includes(curRank)) {
+    return (
+      <div className="max-w-3xl mx-auto p-6 text-center">
+        <div className="text-6xl mb-4">🔒</div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Dungeon bloqueada</h2>
+        <p className="text-gray-600">Requer rank C. Rank atual: {curRank}.</p>
+        <div className="flex gap-3 justify-center mt-4">
+          <Link to="/training" className="bg-green-600 text-white px-6 py-2 rounded">Ir treinar</Link>
+          <Link to="/quests" className="bg-amber-600 text-black px-6 py-2 rounded">Fazer missões</Link>
+          <Link to="/evolution" className="bg-indigo-600 text-white px-6 py-2 rounded">Ver evolução</Link>
+        </div>
+      </div>
+    )
+  }
+  return <Dungeon20 />
+}
+
+function InventoryGateWrapper() {
+  const { getSelectedHero } = useHeroStore()
+  const hero = getSelectedHero()
+  if (!hero) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 text-center">
+        <div className="text-6xl mb-4">🎒</div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
+        <p className="text-gray-600 mb-6">Selecione um herói para acessar o inventário.</p>
+        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">Voltar à Lista de Heróis</Link>
+      </div>
+    )
+  }
+  const basicOnly = useProgressionStore(s => s.basicTrainingOnly)
+  if (basicOnly) return <FeatureGate feature="hunting_basic"><Inventory /></FeatureGate>
+  return <Inventory />
+}
+
+function StableGateWrapper() {
+  const { getSelectedHero } = useHeroStore()
+  const hero = getSelectedHero()
+  if (!hero) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 text-center">
+        <div className="text-6xl mb-4">🐴</div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Nenhum herói selecionado</h2>
+        <p className="text-gray-600 mb-6">Selecione um herói para acessar o Estábulo.</p>
+        <Link to="/" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">Voltar à Lista de Heróis</Link>
+      </div>
+    )
+  }
+  return <FeatureGate feature="stable_basic"><StableHub /></FeatureGate>
+}
+
 function App() {
   const heroes = useHeroStore(s => s.heroes);
   const markCelebrationViewed = useHeroStore(s => s.markCelebrationViewed);
@@ -338,7 +432,8 @@ function App() {
         'https://pagead2.googlesyndication.com',
         'https://tpc.googlesyndication.com',
         'https://googleads.g.doubleclick.net',
-        'https://ep1.adtrafficquality.google'
+        'https://ep1.adtrafficquality.google',
+        'https://ep2.adtrafficquality.google'
       ];
       const fontOrigins = [
         'https://fonts.gstatic.com',
@@ -347,9 +442,9 @@ function App() {
       ];
       cspMeta.content = [
         "default-src 'self'",
-        `frame-src 'self' https://vercel.live https://*.vercel.live ${adsOrigins.join(' ')}`,
+        `frame-src 'self' https://vercel.live https://*.vercel.live https://accounts.google.com ${adsOrigins.join(' ')}`,
         `connect-src ${connectSrc} ${adsOrigins.join(' ')}`,
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
         `font-src 'self' ${fontOrigins.join(' ')} data:`,
         `script-src 'self' ${adsOrigins.join(' ')} https://vercel.live https://*.vercel.live`,
         "img-src 'self' data: blob: https:"
@@ -448,13 +543,13 @@ function App() {
           {/* GuildSystem disponível em rota separada caso necessário */}
         <Route path="guild" element={<GuildSystemWrapper />} />
           {/* Hub da Guilda dos Aventureiros */}
-          <Route path="guild-hub" element={<AdventurersGuildHub />} />
+          <Route path="guild-hub" element={<GuildHub />} />
           <Route path="missions" element={<Suspense fallback={<div className="p-6">Carregando...</div>}><MissionsHubLazy /></Suspense>} />
-          <Route path="dungeon-20" element={<Dungeon20 />} />
-          <Route path="dungeon-infinita" element={<Dungeon20 />} />
-          <Route path="hunting" element={<HuntingMissions />} />
+          <Route path="dungeon-20" element={<DungeonGateWrapper />} />
+          <Route path="dungeon-infinita" element={<DungeonGateWrapper />} />
+          <Route path="hunting" element={<HuntingGateWrapper />} />
           {/* Quadro de Missões (disponíveis, ativas e concluídas) */}
-          <Route path="quests" element={<QuestBoard />} />
+          <Route path="quests" element={<QuestBoardGateWrapper />} />
           <Route path="daily-goals" element={<DailyGoalsWrapper />} />
           <Route path="events" element={<EventsPanel />} />
           <Route path="social-events" element={<SocialEventsPage />} />
@@ -469,7 +564,7 @@ function App() {
           {/* Rota de tutorial removida temporariamente */}
           <Route path="titles" element={<TitlesManager />} />
           <Route path="leaderboards" element={<Leaderboards />} />
-          <Route path="ai-avatar" element={<AIAvatarGeneratorWrapper />} />
+          
           <Route path="ai-missions" element={<DynamicMissionsPanelWrapper />} />
           <Route path="ai-recommendations" element={<AIRecommendationsPanelWrapper />} />
           {/* Taverna (single-player) */}
@@ -478,19 +573,18 @@ function App() {
           <Route path="hero-journal" element={<HeroJournalWrapper />} />
           <Route path="quick-mission" element={<QuickMissionWrapper />} />
           <Route path="admin" element={<Suspense fallback={<div className="p-6">Carregando...</div>}><AdminDashboardLazy /></Suspense>} />
-          <Route path="shop" element={<Shop />} />
+          <Route path="shop" element={<ShopGateWrapper />} />
           <Route path="premium-center" element={<PremiumCenter />} />
           <Route path="premium" element={<PremiumCenter />} />
-          <Route path="premium" element={<PremiumCenter />} />
           {/* Estábulo com sub-rotas para Mascotes e Montarias */}
-          <Route path="stable" element={<StableHub />}>
+          <Route path="stable" element={<StableGateWrapper />}>
             <Route index element={<Navigate to="/stable/pets" replace />} />
             <Route path="pets" element={<ErrorBoundary fallback={<div className="p-6 rounded bg-red-900/40 border border-red-700 text-red-200">Falha ao carregar Mascotes</div>}><PetsPanel /></ErrorBoundary>} />
             <Route path="mounts" element={<MountsPanel />} />
           </Route>
           {/* Arena de Duelos removida para modo single-player */}
-          <Route path="inventory" element={<Inventory />} />
-          <Route path="hero-forge" element={<HeroForge />} />
+          <Route path="inventory" element={<InventoryGateWrapper />} />
+          <Route path="hero-forge" element={<ForgeGateWrapper />} />
           <Route path="training" element={<Training />} />
           {/* Redirecionar rotas antigas para novo hub */}
           <Route path="pets" element={<Navigate to="/stable/pets" replace />} />

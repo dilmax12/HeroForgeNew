@@ -3,6 +3,7 @@
  */
 
 import { Item, Hero, HeroAttributes } from '../types/hero';
+import { getShopDiscountPercent } from './relationBenefits';
 import { RankLevel } from '../types/ranks';
 
 // === CATÁLOGO DE ITENS DA LOJA ===
@@ -2332,9 +2333,10 @@ export function getDiscountedPrice(item: Item, hero: Hero): number {
   const rankLevel: RankLevel = hero.rankData?.currentRank ?? 'F';
   const rankDiscount = RANK_PRICE_DISCOUNT[rankLevel] ?? 0;
   const rarityFactor = RARITY_DISCOUNT_FACTOR[item.rarity as 'comum' | 'incomum' | 'raro' | 'epico' | 'lendario'] ?? 1.0;
+  const relationDiscount = getShopDiscountPercent(hero);
 
   // Soma descontos de reputação e rank, moderados pela raridade; limita desconto total para evitar preços zero
-  const effectiveDiscount = Math.max(0, Math.min(0.5, (reputationDiscount + rankDiscount) * rarityFactor));
+  const effectiveDiscount = Math.max(0, Math.min(0.5, (reputationDiscount + rankDiscount + relationDiscount) * rarityFactor));
   const basePrice = computeItemBasePrice(item);
   return Math.floor(basePrice * (1 - effectiveDiscount));
 }
@@ -2344,11 +2346,12 @@ export function getDiscountBreakdown(item: Item, hero: Hero) {
   const rankLevel: RankLevel = hero.rankData?.currentRank ?? 'F';
   const rankDiscount = RANK_PRICE_DISCOUNT[rankLevel] ?? 0;
   const rarityFactor = RARITY_DISCOUNT_FACTOR[item.rarity as 'comum' | 'incomum' | 'raro' | 'epico' | 'lendario'] ?? 1.0;
-  const effectiveDiscount = Math.max(0, Math.min(0.5, (reputationDiscount + rankDiscount) * rarityFactor));
+  const relationDiscount = getShopDiscountPercent(hero);
+  const effectiveDiscount = Math.max(0, Math.min(0.5, (reputationDiscount + rankDiscount + relationDiscount) * rarityFactor));
   const basePrice = computeItemBasePrice(item);
   const effectivePrice = Math.floor(basePrice * (1 - effectiveDiscount));
   const saved = Math.max(0, basePrice - effectivePrice);
-  return { reputationDiscount, rankDiscount, rarityFactor, effectiveDiscount, basePrice, effectivePrice, saved };
+  return { reputationDiscount, rankDiscount, relationDiscount, rarityFactor, effectiveDiscount, basePrice, effectivePrice, saved };
 }
 
 // Preço base dinâmico: nível × multiplicador de raridade × 100.

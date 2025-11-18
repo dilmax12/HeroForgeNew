@@ -78,18 +78,20 @@ const MetricsDashboard: React.FC = () => {
   const [dailyRemote, setDailyRemote] = useState<Array<{ day: string; installs: number; purchases: number; sessions: number; dau: number }>>([]);
   const [summaryRemote, setSummaryRemote] = useState<{ installs: number; purchases: number; revenue: number } | null>(null);
   useEffect(() => {
+    const abort = new AbortController();
     (async () => {
       try {
-        const res = await fetch('/api/metrics/daily');
+        const res = await fetch('/api/metrics/daily', { signal: abort.signal });
         const json = await res.json();
         if (res.ok && Array.isArray(json?.days)) setDailyRemote(json.days);
       } catch {}
       try {
-        const res = await fetch('/api/metrics/summary');
+        const res = await fetch('/api/metrics/summary', { signal: abort.signal });
         const json = await res.json();
         if (res.ok && json) setSummaryRemote(json);
       } catch {}
     })();
+    return () => { try { abort.abort(); } catch {} };
   }, []);
 
   return (

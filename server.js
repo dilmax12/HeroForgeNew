@@ -175,7 +175,7 @@ setInterval(() => {
         tavernRerollUsage.clear();
       }
     }
-  } catch {}
+  } catch { void 0 }
 }, 60000);
 
 const activeEvents = new Map();
@@ -253,7 +253,7 @@ app.post('/api/events/create', async (req, res) => {
         const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
         await supabase.from('events').upsert({ id: ev.id, name: ev.name, description: ev.description, date_time: ev.dateTime, location_text: ev.locationText, lat: ev.lat, lng: ev.lng, capacity: ev.capacity, tags: ev.tags, privacy: ev.privacy, owner_id: ev.ownerId, created_at: ev.createdAt, deleted: ev.deleted }, { onConflict: 'id' });
       }
-    } catch {}
+    } catch { void 0 }
     return res.json({ event: eventPublicView(ev, ownerId) });
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao criar evento' });
@@ -341,9 +341,9 @@ app.post('/api/events/:id/update', async (req, res) => {
         const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
         await supabase.from('events').upsert({ id: ev.id, name: ev.name, description: ev.description, date_time: ev.dateTime, location_text: ev.locationText, lat: ev.lat, lng: ev.lng, capacity: ev.capacity, tags: ev.tags, privacy: ev.privacy, owner_id: ev.ownerId, created_at: ev.createdAt, deleted: ev.deleted }, { onConflict: 'id' });
       }
-    } catch {}
+    } catch { void 0 }
     return res.json({ event: eventPublicView(ev, actorId) });
-  } catch (err) {
+  } catch {
     return res.status(500).json({ error: 'Erro ao atualizar evento' });
   }
 });
@@ -363,9 +363,9 @@ app.post('/api/events/:id/delete', async (req, res) => {
         const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
         await supabase.from('events').upsert({ id: ev.id, deleted: true }, { onConflict: 'id' });
       }
-    } catch {}
+    } catch { void 0 }
     return res.json({ ok: true });
-  } catch (err) {
+  } catch {
     return res.status(500).json({ error: 'Erro ao excluir evento' });
   }
 });
@@ -924,7 +924,7 @@ app.post('/api/hero-create', async (req, res) => {
 
     if (HF_TOKEN) {
       try {
-        const promptText = `Você é um narrador épico. Gere:\n- Nome (1-3 palavras) + epíteto,\n- História de origem 4-6 linhas,\n- Frase de impacto 1 linha.\nContexto: raça: ${race}, classe: ${klass}, atributos: ${JSON.stringify(attrs)}.\nSeja conciso e épico. Saída em texto puro.`;
+        const promptText = `Você é um narrador épico. Gere:\n- Nome completo (duas palavras: primeiro nome e sobrenome),\n- História de origem 4-6 linhas,\n- Frase de impacto 1 linha.\nContexto: raça: ${race}, classe: ${klass}, atributos: ${JSON.stringify(attrs)}.\nSeja conciso e épico. Saída em texto puro.`;
         const chat = await hfClient.chatCompletion({
           model: MODEL_ID,
           messages: [
@@ -1742,7 +1742,7 @@ function defaultMissionFromHero(hero = {}) {
   // Probabilidade segundo regra: 30% + atributo*5% - dificuldade*10%
   const attrs = hero.attributes || {};
   const diffPenalty = difficulty === 'easy' ? 0 : difficulty === 'normal' ? 0.10 : 0.20;
-  const probA = clampProb(0.30 + ((Number(attrs.sabedoria) || 0) * 0.05) - diffPenalty); // Investigação cuidadosa
+  const probA = clampProb(0.30 + ((Number(attrs.inteligencia) || 0) * 0.05) - diffPenalty); // Investigação cuidadosa
   const probB = clampProb(0.30 + ((Number(attrs.forca) || 0) * 0.05) - diffPenalty);     // Confronto direto
   const probC = clampProb(0.30 + ((Number(attrs.destreza) || 0) * 0.05) - diffPenalty);  // Astúcia/infiltração
   return {
@@ -1886,5 +1886,20 @@ app.post('/api/logs', rateLimit(60000, 100), async (req, res) => {
     return res.json({ id });
   } catch (err) {
     return res.status(500).json({ error: 'Falha ao registrar log' });
+  }
+});
+// Simple image proxy to avoid client-side blocks
+app.get('/api/proxy-image', async (req, res) => {
+  try {
+    const url = String(req.query.url || '');
+    if (!url || !/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'Invalid url' });
+    const r = await fetch(url);
+    if (!r.ok) return res.status(r.status).end();
+    const ct = r.headers.get('content-type') || 'image/jpeg';
+    res.set('Content-Type', ct);
+    const buf = Buffer.from(await r.arrayBuffer());
+    res.send(buf);
+  } catch (e) {
+    res.status(502).json({ error: 'Proxy fetch failed' });
   }
 });

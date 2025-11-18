@@ -342,7 +342,12 @@ export class WorldStateManager {
 
     if (minutesElapsed >= 1 && hero.stamina.current < hero.stamina.max) {
       const settings = getGameSettings();
-      const ratePerMinute = (settings?.regenStaminaPerMin ?? hero.stamina.recoveryRate ?? 5);
+      let ratePerMinute = (settings?.regenStaminaPerMin ?? hero.stamina.recoveryRate ?? 5);
+      const statsAny = (hero.stats as any) || {};
+      const restBuffUntil = statsAny.restBuffActiveUntil ? new Date(statsAny.restBuffActiveUntil).getTime() : 0;
+      const inDungeon = Boolean(statsAny.inDungeon);
+      if (restBuffUntil && Date.now() < restBuffUntil) ratePerMinute = Math.round(ratePerMinute * (settings?.restBuffStaminaMultiplier ?? 2));
+      if (inDungeon) ratePerMinute = Math.max(1, Math.floor(ratePerMinute * (settings?.dungeonRegenMultiplier ?? 0.5)));
       const wholeMinutes = Math.min(5, Math.floor(minutesElapsed));
       const recoveryAmount = Math.max(ratePerMinute, wholeMinutes * ratePerMinute);
       hero.stamina.current = Math.min(hero.stamina.max, hero.stamina.current + recoveryAmount);
@@ -370,10 +375,25 @@ export class WorldStateManager {
     const minutesElapsed = (now.getTime() - lastTs.getTime()) / (1000 * 60);
 
     if (minutesElapsed >= 1) {
-    const wholeMinutes = Math.min(5, Math.floor(minutesElapsed));
+      const wholeMinutes = Math.min(5, Math.floor(minutesElapsed));
       const settings = getGameSettings();
-      const hpPerMin = settings?.regenHpPerMin ?? 5;
-      const mpPerMin = settings?.regenMpPerMin ?? 5;
+      let hpPerMin = settings?.regenHpPerMin ?? 5;
+      let mpPerMin = settings?.regenMpPerMin ?? 5;
+      const statsAny = (hero.stats as any) || {};
+      const restBuffUntil = statsAny.restBuffActiveUntil ? new Date(statsAny.restBuffActiveUntil).getTime() : 0;
+      const inDungeon = Boolean(statsAny.inDungeon);
+      const meditationUntil = statsAny.meditationBuffActiveUntil ? new Date(statsAny.meditationBuffActiveUntil).getTime() : 0;
+      if (restBuffUntil && Date.now() < restBuffUntil) {
+        hpPerMin = Math.round(hpPerMin * (settings?.restBuffHpMpMultiplier ?? 1.5));
+        mpPerMin = Math.round(mpPerMin * (settings?.restBuffHpMpMultiplier ?? 1.5));
+      }
+      if (inDungeon) {
+        hpPerMin = Math.max(1, Math.floor(hpPerMin * (settings?.dungeonRegenMultiplier ?? 0.5)));
+        mpPerMin = Math.max(1, Math.floor(mpPerMin * (settings?.dungeonRegenMultiplier ?? 0.5)));
+      }
+      if (meditationUntil && Date.now() < meditationUntil) {
+        mpPerMin = mpPerMin + (settings?.meditationMpBonusPerMin ?? 8);
+      }
       const hpRegenAmount = Math.max(hpPerMin, wholeMinutes * hpPerMin);
       const mpRegenAmount = Math.max(mpPerMin, wholeMinutes * mpPerMin);
 

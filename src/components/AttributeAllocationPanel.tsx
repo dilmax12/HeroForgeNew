@@ -3,6 +3,7 @@ import { Hero, HeroAttributes } from '../types/hero';
 import { useHeroStore } from '../store/heroStore';
 import { ATTRIBUTE_CONSTRAINTS, ATTRIBUTE_INFO, getMaxAttributeForRank } from '../utils/attributeSystem';
 import { rankSystem } from '../utils/rankSystem';
+import { medievalTheme } from '../styles/medievalTheme';
 
 interface AttributeAllocationPanelProps {
   hero: Hero;
@@ -29,9 +30,7 @@ const AttributeAllocationPanel: React.FC<AttributeAllocationPanelProps> = ({ her
       'forca',
       'destreza',
       'constituicao',
-      'inteligencia',
-      'sabedoria',
-      'carisma'
+      'inteligencia'
     ] as (keyof HeroAttributes)[]
   ), []);
 
@@ -77,19 +76,19 @@ const AttributeAllocationPanel: React.FC<AttributeAllocationPanelProps> = ({ her
 
   if (pointsAvailable <= 0) {
     return (
-      <div className="bg-gray-100 p-4 rounded border border-gray-300 text-sm text-gray-800">
+      <div className="bg-gray-700 p-4 rounded border border-gray-600 text-sm text-gray-200">
         Nenhum ponto de atributo disponível no momento.
       </div>
     );
   }
 
   return (
-    <div className="bg-white p-4 rounded border border-gray-200 space-y-4">
+    <div className="bg-gray-700 p-4 rounded border border-gray-600 space-y-4 text-gray-100">
       <div className="flex items-center justify-between">
-        <div className="text-sm text-gray-700">
+        <div className="text-sm text-gray-300">
           Pontos disponíveis: <span className="font-semibold">{pointsAvailable}</span>
         </div>
-        <div className="text-sm text-gray-700">
+        <div className="text-sm text-gray-300">
           A gastar: <span className="font-semibold">{pointsToSpend}</span> • Restantes: <span className="font-semibold">{pointsRemaining}</span>
         </div>
       </div>
@@ -101,27 +100,27 @@ const AttributeAllocationPanel: React.FC<AttributeAllocationPanelProps> = ({ her
           const inc = (pending[key] || 0) as number;
           const final = current + inc;
           return (
-            <div key={key} className="border rounded p-3 overflow-hidden">
+            <div key={key} className="bg-gray-800 border border-gray-700 rounded p-3 overflow-hidden">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <span>{info.icon}</span>
-                  <span className="font-medium text-gray-800">{info.name}</span>
+                  <span className="font-medium text-white">{info.name}</span>
                 </div>
-                <div className="text-sm text-gray-700">
+                <div className="text-sm text-gray-300">
                   {current} → <span className="font-semibold">{final}</span>
                 </div>
               </div>
               <div className="mt-2 space-y-2">
-                <div className="text-xs text-gray-500 leading-snug min-w-0 break-words">{info.description}</div>
+                <div className="text-xs text-gray-400 leading-snug min-w-0 break-words">{info.description}</div>
                 <div className="flex items-center justify-end space-x-2">
                   <button
-                    className={`px-2 py-1 text-sm rounded ${canDecrease(key) ? 'bg-gray-200 hover:bg-gray-300' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                    className={`px-2 py-1 text-sm rounded ${canDecrease(key) ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
                     onClick={() => decrement(key)}
                     disabled={!canDecrease(key)}
                   >-</button>
                   <div className="w-8 text-center text-sm">{inc || 0}</div>
                   <button
-                    className={`px-2 py-1 text-sm rounded ${canIncrease(key) ? 'bg-blue-500 text-white hover:bg-blue-600' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                    className={`px-2 py-1 text-sm rounded ${canIncrease(key) ? `bg-gradient-to-r ${medievalTheme.gradients.buttons.primary} text-white` : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
                     onClick={() => increment(key)}
                     disabled={!canIncrease(key)}
                   >+</button>
@@ -134,18 +133,18 @@ const AttributeAllocationPanel: React.FC<AttributeAllocationPanelProps> = ({ her
 
       <div className="flex items-center justify-end space-x-2">
         <button
-          className="px-3 py-2 text-sm rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+          className="px-3 py-2 text-sm rounded bg-gray-700 text-gray-200 hover:bg-gray-600"
           onClick={reset}
         >Cancelar</button>
         <button
-          className={`px-3 py-2 text-sm rounded ${pointsToSpend > 0 ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+          className={`px-3 py-2 text-sm rounded ${pointsToSpend > 0 ? `bg-gradient-to-r ${medievalTheme.gradients.buttons.primary} text-white` : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
           onClick={apply}
           disabled={pointsToSpend <= 0}
         >Aplicar</button>
       </div>
 
       {message && (
-        <div className="text-xs text-gray-600">
+        <div className="text-xs text-gray-400">
           {message}
         </div>
       )}

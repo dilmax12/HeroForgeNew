@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RankCelebration as RankCelebrationData, RankLevel } from '../types/ranks';
 import { RankCard } from './RankCard';
@@ -30,6 +31,7 @@ export const RankCelebration: React.FC<RankCelebrationProps> = ({
   const [isVisible, setIsVisible] = useState(true);
   const [showRewards, setShowRewards] = useState(false);
   const [animationPhase, setAnimationPhase] = useState<'intro' | 'celebrate' | 'rewards'>('intro');
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Trigger entrance animation
@@ -153,6 +155,8 @@ export const RankCelebration: React.FC<RankCelebrationProps> = ({
                 >
                   Continuar Jornada
                 </motion.button>
+
+                
               </div>
             </motion.div>
           </motion.div>

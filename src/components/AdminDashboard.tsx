@@ -7,7 +7,6 @@ import { useGameSettingsStore } from '../store/gameSettingsStore';
 import { metricsManager } from '../utils/metricsSystem';
 import { aiService } from '../services/aiService';
 import { supabase } from '../lib/supabaseClient';
-import SupabaseAuthPanel from './SupabaseAuthPanel';
 import SupabaseHeroesSyncPanel from './SupabaseHeroesSyncPanel';
 import SupabaseQuestsPanel from './SupabaseQuestsPanel';
 import { triggerBackup } from '../services/backupService';
@@ -33,6 +32,13 @@ export default function AdminDashboard() {
     regenStaminaPerMin: s.regenStaminaPerMin,
     deathRecoveryMinutes: s.deathRecoveryMinutes,
     deathPenaltyEnabled: s.deathPenaltyEnabled,
+    restBuffHpMpMultiplier: s.restBuffHpMpMultiplier,
+    restBuffStaminaMultiplier: s.restBuffStaminaMultiplier,
+    restBuffDurationMinutes: s.restBuffDurationMinutes,
+    meditationMpBonusPerMin: s.meditationMpBonusPerMin,
+    meditationDurationMinutes: s.meditationDurationMinutes,
+    meditationCooldownMinutes: s.meditationCooldownMinutes,
+    dungeonRegenMultiplier: s.dungeonRegenMultiplier,
   }));
   const updateSettings = useGameSettingsStore(s => s.updateSettings);
   const npcSettings = useGameSettingsStore(s => ({
@@ -316,6 +322,29 @@ export default function AdminDashboard() {
       .slice(0, 5);
     return { totalGold, avgGold, topItems };
   }, [heroes]);
+
+  const cycles = useMemo(() => {
+    const h = selectedHero;
+    const hpMax = h?.derivedAttributes.hp || 0;
+    const hpCur = h?.derivedAttributes.currentHp ?? hpMax;
+    const mpMax = h?.derivedAttributes.mp || 0;
+    const mpCur = h?.derivedAttributes.currentMp ?? mpMax;
+    const stMax = (h?.stamina as any)?.max ?? 100;
+    const stCur = (h?.stamina as any)?.current ?? ((h?.stamina as any) ?? 0);
+    const hpToFull = hpMax > hpCur ? Math.ceil((hpMax - hpCur) / Math.max(1, settings.regenHpPerMin)) : 0;
+    const mpToFull = mpMax > mpCur ? Math.ceil((mpMax - mpCur) / Math.max(1, settings.regenMpPerMin)) : 0;
+    const stToFullBase = stMax > stCur ? Math.ceil((stMax - stCur) / Math.max(1, settings.regenStaminaPerMin)) : 0;
+    const stRecoveryInDungeon15 = Math.max(0, Math.min(stMax, Math.floor(settings.regenStaminaPerMin * 15)));
+    return {
+      hpToFull,
+      mpToFull,
+      stToFullBase,
+      stRecoveryInDungeon15,
+      questCd: { rapida: 10, padrao: 20, epica: 50 },
+      huntingCdByRank: { F: 8, E: 12, D: 15, C: 20, B: 25, A: 30, S: 40 },
+      dungeonCd: 15
+    };
+  }, [selectedHero?.id, selectedHero?.derivedAttributes?.hp, selectedHero?.derivedAttributes?.currentHp, selectedHero?.derivedAttributes?.mp, selectedHero?.derivedAttributes?.currentMp, (selectedHero?.stamina as any)?.current, (selectedHero?.stamina as any)?.max, settings.regenHpPerMin, settings.regenMpPerMin, settings.regenStaminaPerMin]);
 
   const [adjustments, setAdjustments] = useState({ xp: 100, gold: 100 });
   function applyAdjustments() {
@@ -734,8 +763,7 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
         </div>
       </div>
 
-      {/* Supabase Auth Panel */}
-      <SupabaseAuthPanel />
+      
 
       {/* Supabase Heroes Sync Panel */}
       <SupabaseHeroesSyncPanel />
@@ -796,6 +824,62 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
               onChange={(e) => updateSettings({ deathRecoveryMinutes: Math.max(0, Number(e.target.value)) })}
             />
             <div className="text-xs text-gray-500 mt-2">Nota: O tempo será aplicado em fluxos de masmorra compatíveis.</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+          <div className="bg-white p-4 rounded-lg border border-gray-200 min-h-[96px]">
+            <label className="block text-sm text-gray-600 mb-2">Multiplicador de descanso (HP/MP)</label>
+            <input type="number" step={0.1} className="w-full bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" value={Number(settings.restBuffHpMpMultiplier ?? 1.5)} onChange={(e) => updateSettings({ restBuffHpMpMultiplier: Number(e.target.value) })} />
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-gray-200 min-h-[96px]">
+            <label className="block text-sm text-gray-600 mb-2">Multiplicador de descanso (Stamina)</label>
+            <input type="number" step={0.1} className="w-full bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" value={Number(settings.restBuffStaminaMultiplier ?? 2)} onChange={(e) => updateSettings({ restBuffStaminaMultiplier: Number(e.target.value) })} />
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-gray-200 min-h-[96px]">
+            <label className="block text-sm text-gray-600 mb-2">Duração do descanso (min)</label>
+            <input type="number" className="w-full bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" value={Number(settings.restBuffDurationMinutes ?? 10)} onChange={(e) => updateSettings({ restBuffDurationMinutes: Math.max(0, Number(e.target.value)) })} />
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-gray-200 min-h-[96px]">
+            <label className="block text-sm text-gray-600 mb-2">Bônus de Meditação (MP/min)</label>
+            <input type="number" className="w-full bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" value={Number(settings.meditationMpBonusPerMin ?? 8)} onChange={(e) => updateSettings({ meditationMpBonusPerMin: Math.max(0, Number(e.target.value)) })} />
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-gray-200 min-h-[96px]">
+            <label className="block text-sm text-gray-600 mb-2">Duração da Meditação (min)</label>
+            <input type="number" className="w-full bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" value={Number(settings.meditationDurationMinutes ?? 2)} onChange={(e) => updateSettings({ meditationDurationMinutes: Math.max(0, Number(e.target.value)) })} />
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-gray-200 min-h-[96px]">
+            <label className="block text-sm text-gray-600 mb-2">Cooldown da Meditação (min)</label>
+            <input type="number" className="w-full bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" value={Number(settings.meditationCooldownMinutes ?? 10)} onChange={(e) => updateSettings({ meditationCooldownMinutes: Math.max(0, Number(e.target.value)) })} />
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-gray-200 min-h-[96px]">
+            <label className="block text-sm text-gray-600 mb-2">Multiplicador de regen em Dungeon</label>
+            <input type="number" step={0.1} className="w-full bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" value={Number(settings.dungeonRegenMultiplier ?? 0.5)} onChange={(e) => updateSettings({ dungeonRegenMultiplier: Number(e.target.value) })} />
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-lg border border-gray-200 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">⏱️ Ciclos de Jogo</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white p-4 rounded-lg border border-gray-200">
+            <div className="text-sm text-gray-600">Tempo até recuperar</div>
+            <ul className="mt-2 text-sm text-gray-900">
+              <li>HP: {cycles.hpToFull} min</li>
+              <li>MP: {cycles.mpToFull} min</li>
+              <li>Stamina: {cycles.stToFullBase} min</li>
+            </ul>
+            <div className="text-xs text-gray-500 mt-2">Recuperação em 15 min de cooldown de masmorra: +{cycles.stRecoveryInDungeon15} stamina</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-gray-200">
+            <div className="text-sm text-gray-600">Cooldowns alvo</div>
+            <ul className="mt-2 text-sm text-gray-900">
+              <li>Missão rápida: {cycles.questCd.rapida} min</li>
+              <li>Missão padrão: {cycles.questCd.padrao} min</li>
+              <li>Missão épica: {cycles.questCd.epica} min</li>
+              <li>Caça (por rank): F {cycles.huntingCdByRank.F} • E {cycles.huntingCdByRank.E} • D {cycles.huntingCdByRank.D} • C {cycles.huntingCdByRank.C} • B {cycles.huntingCdByRank.B} • A {cycles.huntingCdByRank.A} • S {cycles.huntingCdByRank.S} min</li>
+              <li>Masmorra: {cycles.dungeonCd} min</li>
+            </ul>
+            <div className="text-xs text-gray-500 mt-2">Ajuste os sliders acima para ver o impacto nos tempos.</div>
           </div>
         </div>
       </div>

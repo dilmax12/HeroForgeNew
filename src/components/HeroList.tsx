@@ -4,7 +4,6 @@ import { HeroGallery } from './HeroGallery';
 import ErrorBoundary from './ErrorBoundary';
 import { useHeroStore } from '../store/heroStore';
 import { Hero } from '../types/hero';
-import { EXAMPLE_HERO_DATA, generateExampleHero } from '../utils/heroExample';
 import { getAltharionLore } from '../utils/story';
 
 const HeroList: React.FC = () => {
@@ -17,13 +16,6 @@ const HeroList: React.FC = () => {
     navigate('/create');
   };
 
-  const handleCreateExampleHero = () => {
-    try {
-      createHero(EXAMPLE_HERO_DATA);
-    } catch (error) {
-      console.error('Erro ao criar herói de exemplo:', error);
-    }
-  };
 
   const handleHeroSelect = (hero: Hero) => {
     navigate(`/hero/${hero.id}`);

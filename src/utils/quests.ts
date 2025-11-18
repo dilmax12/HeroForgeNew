@@ -112,6 +112,14 @@ const COMPANION_GUILD_TEMPLATES: QuestTemplate[] = [
     type: 'exploracao',
     baseReward: { gold: 90, xp: 70, glory: 5, arcaneEssence: 1, items: [{ id: 'essencia-bestial', qty: 1 }] }
   }
+  ,
+  {
+    id: 'guild-ovo-basico',
+    titleTemplate: 'Primeiro Ovo da Guilda em {location}',
+    descriptionTemplate: 'Participe de uma coleta supervisionada com {npc} para obter um ovo comum.',
+    type: 'exploracao',
+    baseReward: { gold: 30, xp: 40, glory: 3, items: [{ id: 'reward-egg-basico', qty: 1 }] }
+  }
 ];
 
 // === DADOS PARA GERAÇÃO PROCEDURAL ===
@@ -305,6 +313,30 @@ export function generateQuestBoard(heroLevel: number = 1, guildLevel: number = 0
     if (guildLevel >= 3) {
       console.log('✅ Gerando missão de guilda épica');
       quests.push(generateQuest('epica', heroLevel, true));
+    }
+    if (heroLevel >= 5) {
+      const variables = {
+        location: getRandomElement(LOCATIONS),
+        npc: getRandomElement(NPCS)
+      } as any;
+      const qid = `guild-ovo-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      quests.push({
+        id: qid,
+        title: interpolateTemplate('Primeiro Ovo da Guilda em {location}', variables),
+        description: interpolateTemplate('Participe de uma coleta supervisionada com {npc} para obter um ovo comum.', variables),
+        type: 'exploracao',
+        difficulty: 'padrao',
+        levelRequirement: Math.max(5, heroLevel),
+        timeLimit: 60,
+        enemies: undefined,
+        rewards: { gold: 30, xp: 40, glory: 3, items: [{ id: 'reward-egg-basico', qty: 1 }] },
+        repeatable: false,
+        isGuildQuest: true,
+        failurePenalty: { gold: 10 },
+        templateId: 'guild-ovo-basico',
+        categoryHint: 'coleta'
+      } as any);
+      console.log('🏰 Missão especial da guilda para Estábulo inserida');
     }
   } else {
     console.log('❌ Nenhuma missão de guilda gerada - guildLevel é 0');

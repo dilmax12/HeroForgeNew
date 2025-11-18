@@ -8,6 +8,14 @@ export interface GameSettingsState {
   deathRecoveryMinutes: number;
   deathPenaltyEnabled: boolean;
 
+  restBuffHpMpMultiplier?: number;
+  restBuffStaminaMultiplier?: number;
+  restBuffDurationMinutes?: number;
+  meditationMpBonusPerMin?: number;
+  meditationDurationMinutes?: number;
+  meditationCooldownMinutes?: number;
+  dungeonRegenMultiplier?: number;
+
   // Buffs globais aplicados pela Guilda (Conselho)
   guildXpBuffPercent?: number; // ex.: 20 para +20% XP
   trainingCostReductionPercent?: number; // ex.: 10 para -10% custo
@@ -36,10 +44,35 @@ export interface GameSettingsState {
   npcRelationKnownThreshold?: number;
   npcRelationFriendThreshold?: number;
   npcRelationBestFriendThreshold?: number;
+  npcRelationAllyThreshold?: number;
+  npcRelationRivalThreshold?: number;
   npcDuelRivalryModerate?: number;
   npcDuelRivalryHigh?: number;
   npcDuelLevelDiffMax?: number;
   npcInteractionCooldownSeconds?: number;
+  npcRelationDecayPerDay?: number;
+  npcRelationPositiveWeight?: number;
+  npcRelationNegativeWeight?: number;
+  npcRelationFactionCascadePercent?: number;
+  relationIntensityPercent?: number;
+  eventsCascadePerDay?: number;
+  interactionsCooldownMinutes?: number;
+  randomEventsEnabled?: boolean;
+  eventsCooldownDaysMin?: number;
+  eventsCooldownDaysMax?: number;
+  rivalEncounterChance?: number;
+  autoInteractionEnabled?: boolean;
+  autoChanceMinPercent?: number;
+  autoChanceMaxPercent?: number;
+  notifSoundEnabled?: boolean;
+  notifVisualMode?: 'compact' | 'full';
+  notifPriorityMode?: 'important_first' | 'normal';
+  notifFrequency?: 'low' | 'normal' | 'high';
+  dailyNpcInteractionsLimit?: number;
+
+  reducedMotionEnabled?: boolean;
+  saveDataEnabled?: boolean;
+  networkEffectiveType?: string;
 
   updateSettings: (updates: Partial<GameSettingsState>) => void;
   resetDefaults: () => void;
@@ -54,11 +87,18 @@ export interface GameSettingsState {
 }
 
 const DEFAULTS = {
-  regenHpPerMin: 5,
+  regenHpPerMin: 6,
   regenMpPerMin: 5,
   regenStaminaPerMin: 5,
   deathRecoveryMinutes: 10,
   deathPenaltyEnabled: true,
+  restBuffHpMpMultiplier: 1.5,
+  restBuffStaminaMultiplier: 2,
+  restBuffDurationMinutes: 10,
+  meditationMpBonusPerMin: 8,
+  meditationDurationMinutes: 2,
+  meditationCooldownMinutes: 10,
+  dungeonRegenMultiplier: 0.5,
   inviteLinksEnabled: true,
   inviteLinkValidityDays: 7,
   invitePrivacyLevel: 'public' as const,
@@ -78,10 +118,34 @@ const DEFAULTS = {
   npcRelationKnownThreshold: 10,
   npcRelationFriendThreshold: 40,
   npcRelationBestFriendThreshold: 75,
+  npcRelationAllyThreshold: 90,
+  npcRelationRivalThreshold: -30,
   npcDuelRivalryModerate: -30,
   npcDuelRivalryHigh: -60,
   npcDuelLevelDiffMax: 5,
   npcInteractionCooldownSeconds: 90,
+  npcRelationDecayPerDay: 1,
+  npcRelationPositiveWeight: 4,
+  npcRelationNegativeWeight: 5,
+  npcRelationFactionCascadePercent: 0.005,
+  relationIntensityPercent: 100,
+  eventsCascadePerDay: 2,
+  interactionsCooldownMinutes: 15,
+  randomEventsEnabled: true,
+  eventsCooldownDaysMin: 2,
+  eventsCooldownDaysMax: 4,
+  rivalEncounterChance: 0.2,
+  autoInteractionEnabled: true,
+  autoChanceMinPercent: 30,
+  autoChanceMaxPercent: 70,
+  notifSoundEnabled: true,
+  notifVisualMode: 'compact' as const,
+  notifPriorityMode: 'important_first' as const,
+  notifFrequency: 'normal' as const,
+  dailyNpcInteractionsLimit: 2,
+  reducedMotionEnabled: false,
+  saveDataEnabled: false,
+  networkEffectiveType: 'unknown',
 };
 
 export const useGameSettingsStore = create<GameSettingsState>()(
@@ -125,6 +189,13 @@ export const useGameSettingsStore = create<GameSettingsState>()(
         regenStaminaPerMin: state.regenStaminaPerMin,
         deathRecoveryMinutes: state.deathRecoveryMinutes,
         deathPenaltyEnabled: state.deathPenaltyEnabled,
+        restBuffHpMpMultiplier: state.restBuffHpMpMultiplier,
+        restBuffStaminaMultiplier: state.restBuffStaminaMultiplier,
+        restBuffDurationMinutes: state.restBuffDurationMinutes,
+        meditationMpBonusPerMin: state.meditationMpBonusPerMin,
+        meditationDurationMinutes: state.meditationDurationMinutes,
+        meditationCooldownMinutes: state.meditationCooldownMinutes,
+        dungeonRegenMultiplier: state.dungeonRegenMultiplier,
         guildXpBuffPercent: state.guildXpBuffPercent,
         trainingCostReductionPercent: state.trainingCostReductionPercent,
         activeGuildEventName: state.activeGuildEventName,
@@ -149,10 +220,34 @@ export const useGameSettingsStore = create<GameSettingsState>()(
         npcRelationKnownThreshold: state.npcRelationKnownThreshold,
         npcRelationFriendThreshold: state.npcRelationFriendThreshold,
         npcRelationBestFriendThreshold: state.npcRelationBestFriendThreshold,
+        npcRelationAllyThreshold: state.npcRelationAllyThreshold,
+        npcRelationRivalThreshold: state.npcRelationRivalThreshold,
         npcDuelRivalryModerate: state.npcDuelRivalryModerate,
         npcDuelRivalryHigh: state.npcDuelRivalryHigh,
         npcDuelLevelDiffMax: state.npcDuelLevelDiffMax,
         npcInteractionCooldownSeconds: state.npcInteractionCooldownSeconds,
+        npcRelationDecayPerDay: state.npcRelationDecayPerDay,
+        npcRelationPositiveWeight: state.npcRelationPositiveWeight,
+        npcRelationNegativeWeight: state.npcRelationNegativeWeight,
+        npcRelationFactionCascadePercent: state.npcRelationFactionCascadePercent,
+        relationIntensityPercent: state.relationIntensityPercent,
+        eventsCascadePerDay: state.eventsCascadePerDay,
+        interactionsCooldownMinutes: state.interactionsCooldownMinutes,
+        randomEventsEnabled: state.randomEventsEnabled,
+        eventsCooldownDaysMin: state.eventsCooldownDaysMin,
+        eventsCooldownDaysMax: state.eventsCooldownDaysMax,
+        rivalEncounterChance: state.rivalEncounterChance,
+        autoInteractionEnabled: state.autoInteractionEnabled,
+        autoChanceMinPercent: state.autoChanceMinPercent,
+        autoChanceMaxPercent: state.autoChanceMaxPercent,
+        notifSoundEnabled: state.notifSoundEnabled,
+        notifVisualMode: state.notifVisualMode,
+        notifPriorityMode: state.notifPriorityMode,
+        notifFrequency: state.notifFrequency,
+        dailyNpcInteractionsLimit: state.dailyNpcInteractionsLimit,
+        reducedMotionEnabled: state.reducedMotionEnabled,
+        saveDataEnabled: state.saveDataEnabled,
+        networkEffectiveType: state.networkEffectiveType,
       }),
     }
   )

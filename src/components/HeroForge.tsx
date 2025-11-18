@@ -2,7 +2,6 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { useHeroStore } from '../store/heroStore'
 import { BlacksmithNPC } from './BlacksmithNPC'
-import NarrativeGeneratorPanel from './NarrativeGeneratorPanel'
 
 const HeroForge: React.FC = () => {
   const { getSelectedHero } = useHeroStore()
@@ -28,7 +27,6 @@ const HeroForge: React.FC = () => {
         </div>
       </div>
       <BlacksmithNPC />
-      <NarrativeGeneratorPanel />
     </div>
   )
 }

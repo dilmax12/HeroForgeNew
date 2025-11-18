@@ -19,30 +19,7 @@ export default function TalentPlanManager() {
       <div className="text-white font-semibold">Planejamento de Talentos</div>
       <div className="text-xs text-gray-300">Planejados: {planned.length} • Desbloqueados: {unlockedPlanned}</div>
       <div className="mt-2 flex gap-2">
-        <button
-          type="button"
-          onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify(planned)); } catch {} }}
-          className="px-2 py-1 rounded bg-indigo-600 text-white text-xs hover:bg-indigo-700"
-        >
-          Exportar plano
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const raw = window.prompt('Cole o JSON do plano de talentos') || ''
-            try { const arr = JSON.parse(raw); if (Array.isArray(arr)) updateHero(hero.id, { plannedTalents: arr }) } catch {}
-          }}
-          className="px-2 py-1 rounded bg-blue-600 text-white text-xs hover:bg-blue-700"
-        >
-          Importar plano
-        </button>
-        <button
-          type="button"
-          onClick={() => updateHero(hero.id, { plannedTalents: getRecommendedTalentPlan(hero.class as any) })}
-          className="px-2 py-1 rounded bg-emerald-600 text-white text-xs hover:bg-emerald-700"
-        >
-          Aplicar plano sugerido
-        </button>
+        <button type="button" onClick={() => updateHero(hero.id, { plannedTalents: getRecommendedTalentPlan(hero.class as any) })} className="px-2 py-1 rounded bg-emerald-600 text-white text-xs hover:bg-emerald-700">Aplicar plano sugerido</button>
         <button
           type="button"
           onClick={() => updateHero(hero.id, { plannedTalents: [] })}

@@ -8,6 +8,7 @@ declare global {
   interface Window { google: any; }
 }
 
+const FALLBACK_AVATAR_DATA_URL = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><rect width='64' height='64' rx='8' fill='%23e5e7eb'/><circle cx='32' cy='24' r='12' fill='%239ca3af'/><rect x='14' y='40' width='36' height='18' rx='9' fill='%239ca3af'/></svg>";
 const GoogleLoginButton: React.FC = () => {
   const btnRef = useRef<HTMLDivElement>(null);
   const gsiInitDoneRef = useRef(false);
@@ -70,7 +71,7 @@ const GoogleLoginButton: React.FC = () => {
     return (
       <div className="flex items-center space-x-2">
         {user?.picture && (
-          <img src={user.picture} alt="avatar" className="w-8 h-8 rounded-full" />
+      <img src={`/api/proxy-image?url=${encodeURIComponent(user.picture || '')}`} alt="avatar" className="w-8 h-8 rounded-full" onError={(e) => { (e.currentTarget as HTMLImageElement).src = FALLBACK_AVATAR_DATA_URL; }} />
         )}
         <span className="text-sm">Olá, {user?.name || user?.email}</span>
       </div>

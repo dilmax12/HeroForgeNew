@@ -6,7 +6,7 @@ import type { Party } from '../types/hero';
 import type { HeroInventory } from '../types/hero';
 import type { ReferralInvite } from '../types/hero';
 import type { EnhancedQuestChoice } from '../types/hero';
-import { generateQuestBoard, QUEST_ACHIEVEMENTS } from '../utils/quests';
+import { generateQuestBoard, generateQuest, QUEST_ACHIEVEMENTS } from '../utils/quests';
 import { resolveCombat, autoResolveCombat } from '../utils/combat';
 import { purchaseItem, sellItem, equipItem, useConsumable, SHOP_ITEMS, ITEM_SETS, generateProceduralItem } from '../utils/shop';
 import { Jewel } from '../types/jewel';
@@ -30,10 +30,14 @@ import { getNewSkillsForLevel } from '../utils/skillSystem';
 import { updateProgressDelta } from '../services/progressService';
 import { worldStateManager } from '../utils/worldState';
 import { runTick as runNPCTick, seedPersonality } from '../utils/npcAI';
+import { updateOnSocial } from '../utils/relationshipSystem';
+import { simulateDuel } from '../utils/duel';
 import { playAmbient, playVoiceCue } from '../utils/audio';
 import { getGameSettings, useGameSettingsStore } from './gameSettingsStore';
 import { getMonetization } from './monetizationStore';
+import { useProgressionStore } from './progressionStore';
 import { generateMysteryEgg, identifyEgg as utilIdentifyEgg, incubateEgg, canHatch, markReadyToHatch, hatchPet, accelerateIncubation, EGG_IDENTIFY_COST, INCUBATION_MS, addPetXP } from '../utils/pets';
+import { canCreateHero, purchaseSlot, getCapacity, getUsed, getNextSlotPrice } from '../services/heroSlots';
 import { ATTRIBUTE_CONSTRAINTS, getMaxAttributeForRank, getTotalAttributePointsCapForRank } from '../utils/attributeSystem';
 import { ATTRIBUTE_POINTS_PER_LEVEL, checkLevelUp } from '../utils/progression';
 
@@ -41,11 +45,16 @@ interface HeroState {
   heroes: Hero[];
   selectedHeroId: string | null;
   availableQuests: Quest[];
+  questCatalog: Record<string, Quest>;
   guilds: Guild[];
   parties: Party[];
   referralInvites: ReferralInvite[];
   dmOverrideLine?: string;
   duelOverlay?: any;
+  npcInteractionOverlay?: any;
+  activitiesLog: Array<{ ts: string; type: 'dialogue' | 'rumor' | 'tip' | 'event'; location?: 'tavern' | 'guild'; npcId?: string; text: string; importance?: 'low' | 'normal' | 'high' }>;
+  lastAutoInteractionAt?: string;
+  dedupeNPCs: () => { checked: number; removed: number };
   // Mascotes e Ovos
   generateEggForSelected: (rarity?: import('../types/hero').EggRarity) => boolean;
   identifyEggForSelected: (eggId: string) => boolean;
@@ -59,6 +68,7 @@ interface HeroState {
   
   // === AÇÕES BÁSICAS ===
   createHero: (heroData: HeroCreationData) => Hero;
+  purchaseHeroSlotForSelected: () => boolean;
   updateHero: (id: string, heroData: Partial<Hero>) => void;
   deleteHero: (id: string) => void;
   selectHero: (id: string | null) => void;
@@ -168,6 +178,7 @@ interface HeroState {
   getSelectedHero: () => Hero | undefined;
   getHeroQuests: (heroId: string) => Quest[];
   getHeroGuild: (heroId: string) => Guild | undefined;
+  getQuestById: (id: string) => Quest | undefined;
 
 
   // === SISTEMA DE CONVITES ===
@@ -194,6 +205,11 @@ interface HeroState {
   acceptDuelInvite: (heroId: string, npcId: string) => boolean;
   declineDuelInvite: (heroId: string, npcId: string) => boolean;
   setDuelOverlay: (overlay?: any) => void;
+  setNPCInteractionOverlay: (overlay?: any) => void;
+  respondToNPCInteraction: (choice: 'accept' | 'decline' | 'later') => void;
+  setPartyInviteTerms: (partyId: string, targetHeroId: string, terms: { duration: 'one_mission' | 'days'; days?: number; rewardShare?: number; leaderPref?: 'inviter' | 'invitee' | 'none' }) => void;
+  recordActivity: (entry: { type: 'dialogue' | 'rumor' | 'tip' | 'event'; location?: 'tavern' | 'guild'; npcId?: string; text: string; importance?: 'low' | 'normal' | 'high' }) => void;
+  triggerAutoInteraction: (location: 'tavern' | 'guild') => void;
 }
 
 // === VALIDAÇÃO E CÁLCULOS ===
@@ -252,10 +268,12 @@ const calculateTotalAttributes = (
     const upgradeLevel = inventory.upgrades?.[itemId!] ?? 0;
     if (item?.bonus) {
       Object.entries(item.bonus).forEach(([attr, bonus]) => {
-        if (bonus && attr in totalAttributes) {
-          const multiplier = 1 + Math.max(0, upgradeLevel) * 0.1; // +10% por nível
-          const adjusted = Math.round((bonus as number) * multiplier);
-          totalAttributes[attr as keyof HeroAttributes] += adjusted;
+        if (!bonus) return;
+        const multiplier = 1 + Math.max(0, upgradeLevel) * 0.1;
+        const adjusted = Math.round((bonus as number) * multiplier);
+        const key = (attr === 'sabedoria') ? 'inteligencia' : (attr === 'carisma') ? 'destreza' : attr;
+        if ((key as keyof HeroAttributes) in totalAttributes) {
+          totalAttributes[key as keyof HeroAttributes] += adjusted;
         }
       });
     }
@@ -279,9 +297,11 @@ const calculateTotalAttributes = (
       });
       const scale = cap > 0 && sum > cap ? (cap / sum) : 1;
       Object.entries(attrAdds).forEach(([attr, val]) => {
-        if (val && (attr as keyof HeroAttributes) in totalAttributes) {
-          const add = Math.max(0, Math.floor(val * scale));
-          totalAttributes[attr as keyof HeroAttributes] += add;
+        if (!val) return;
+        const key = (attr === 'sabedoria') ? 'inteligencia' : (attr === 'carisma') ? 'destreza' : attr;
+        if ((key as keyof HeroAttributes) in totalAttributes) {
+          const add = Math.max(0, Math.floor((val as number) * scale));
+          totalAttributes[key as keyof HeroAttributes] += add;
         }
       });
     }
@@ -318,8 +338,10 @@ const calculateTotalAttributes = (
       const activeSet = ITEM_SETS[w];
       if (activeSet?.bonus) {
         Object.entries(activeSet.bonus).forEach(([attr, bonus]) => {
-          if (bonus && (attr as keyof HeroAttributes) in totalAttributes) {
-            totalAttributes[attr as keyof HeroAttributes] += bonus as number;
+          if (!bonus) return;
+          const key = (attr === 'sabedoria') ? 'inteligencia' : (attr === 'carisma') ? 'destreza' : attr;
+          if ((key as keyof HeroAttributes) in totalAttributes) {
+            totalAttributes[key as keyof HeroAttributes] += bonus as number;
           }
         });
       }
@@ -361,14 +383,18 @@ export const calculateDerivedAttributes = (
   const titleBonus = getTitleAttributeBonus(activeTitleId);
   const totalAttributes: HeroAttributes = { ...baseTotal } as HeroAttributes;
   Object.entries(titleBonus).forEach(([attr, bonus]) => {
-    if (bonus && (attr as keyof HeroAttributes) in totalAttributes) {
-      totalAttributes[attr as keyof HeroAttributes] += bonus as number;
+    if (!bonus) return;
+    const key = (attr === 'sabedoria') ? 'inteligencia' : (attr === 'carisma') ? 'destreza' : attr;
+    if ((key as keyof HeroAttributes) in totalAttributes) {
+      totalAttributes[key as keyof HeroAttributes] += bonus as number;
     }
   });
   if (companionBonus) {
     Object.entries(companionBonus).forEach(([attr, bonus]) => {
-      if (bonus && (attr as keyof HeroAttributes) in totalAttributes) {
-        totalAttributes[attr as keyof HeroAttributes] += bonus as number;
+      if (!bonus) return;
+      const key = (attr === 'sabedoria') ? 'inteligencia' : (attr === 'carisma') ? 'destreza' : attr;
+      if ((key as keyof HeroAttributes) in totalAttributes) {
+        totalAttributes[key as keyof HeroAttributes] += bonus as number;
       }
     });
   }
@@ -431,7 +457,7 @@ export const calculateDerivedAttributes = (
     });
     armorClass += Math.max(0, Math.floor(acBonus));
   }
-  const luck = Math.max(0, Math.floor((totalAttributes.carisma + totalAttributes.sabedoria) / 2));
+  const luck = Math.max(0, Math.floor((totalAttributes.destreza + totalAttributes.inteligencia) / 2));
   const mountSpeed = (() => {
     try {
       const hero = get().getSelectedHero();
@@ -451,7 +477,7 @@ export const calculateDerivedAttributes = (
   })();
   const finalInitiative = initiative + mountSpeed;
   const attackBase = Math.max(0, (totalAttributes.forca || 0) + (totalAttributes.destreza || 0));
-  const magicBase = Math.max(0, (totalAttributes.inteligencia || 0) + Math.floor((totalAttributes.sabedoria || 0) / 2));
+  const magicBase = Math.max(0, (totalAttributes.inteligencia || 0));
   const defenseBase = Math.max(0, (totalAttributes.constituicao || 0) + Math.floor(armorClass / 2));
   let wa = 1, wm = 1, wd = 1;
   switch (heroClass) {
@@ -558,6 +584,7 @@ export const useHeroStore = create<HeroState>()(
       heroes: [],
       selectedHeroId: null,
       availableQuests: [],
+      questCatalog: {},
       guilds: [],
       parties: [],
       referralInvites: [],
@@ -568,6 +595,11 @@ export const useHeroStore = create<HeroState>()(
       
       createHero: (heroData: HeroCreationData) => {
         const timestamp = new Date().toISOString();
+        const heroesNow = get().heroes.filter(h => h.origin !== 'npc');
+        if (!canCreateHero(heroesNow)) {
+          try { notificationBus.emit({ type: 'quest', title: 'Limite de heróis', message: `Slots usados ${getUsed(heroesNow)}/${getCapacity(heroesNow)}. Compre ou desbloqueie mais slots.`, icon: '⚠️', duration: 3500 }); } catch {}
+          throw new Error('Limite de criação atingido');
+        }
         
         const validation = validateAttributes(heroData.attributes);
         if (!validation.isValid) {
@@ -717,6 +749,26 @@ export const useHeroStore = create<HeroState>()(
         return newHero;
       },
 
+      purchaseHeroSlotForSelected: () => {
+        const sel = get().getSelectedHero();
+        if (!sel) return false;
+        const spend = (amount: number) => {
+          const prog = { ...(sel.progression || {}) } as any;
+          const cur = Math.max(0, prog.gold || 0);
+          if (cur < amount) return false;
+          prog.gold = cur - amount;
+          get().updateHero(sel.id, { progression: prog } as any);
+          return true;
+        };
+        const ok = purchaseSlot(spend);
+        if (ok) {
+          try { notificationBus.emit({ type: 'achievement', title: 'Slot comprado', message: `Novo slot de herói desbloqueado. Agora: ${getUsed(get().heroes.filter(h=>h.origin!=='npc'))}/${getCapacity(get().heroes.filter(h=>h.origin!=='npc'))}.`, icon: '⭐', duration: 3500 }); } catch {}
+        } else {
+          try { notificationBus.emit({ type: 'item', title: 'Compra falhou', message: `Preço atual: ${getNextSlotPrice()} ouro`, icon: '🪙', duration: 3000 }); } catch {}
+        }
+        return ok;
+      },
+
       createNPCAdventurer: (overrides) => {
         const races: import('../types/hero').HeroRace[] = ['humano','elfo','anao','orc','halfling'];
         const classes: import('../types/hero').HeroClass[] = ['guerreiro','mago','ladino','clerigo','patrulheiro','paladino','arqueiro','bardo','monge','assassino','barbaro','lanceiro','druida','feiticeiro'];
@@ -745,6 +797,7 @@ export const useHeroStore = create<HeroState>()(
         const current = get().heroes.filter(h => h.origin === 'npc').length;
         const needed = Math.max(0, targetCount - current);
         for (let i = 0; i < needed; i++) { get().createNPCAdventurer({}); }
+        try { get().dedupeNPCs(); } catch {}
       },
       startNPCSimulation: () => {
         const anySelf = useHeroStore as unknown as { _npcTimer?: any };
@@ -761,30 +814,12 @@ export const useHeroStore = create<HeroState>()(
             get().updateHero(n.id, { attributes: n.attributes, progression: n.progression, stats: n.stats, completedQuests: n.completedQuests, derivedAttributes: derived, socialRelations: n.socialRelations, npcMemory: n.npcMemory });
           });
           if (player) {
-            npcs.forEach(n => {
-              const wantsParty = n.npcPersonality?.archetype === 'colaborativo' && n.npcPersonality?.prefersParty;
-              if (!wantsParty) return;
-              const pParty = get().getHeroParty(player.id);
-              const nParty = get().getHeroParty(n.id);
-              if (pParty && (pParty.members.includes(n.id) || (pParty.invites || []).includes(n.id))) return;
-              if (!nParty) {
-                const created = get().createParty(n.id, `Companhia de ${n.name}`);
-                if (!created) return;
-                get().inviteHeroToParty(created.id, n.id, player.id);
-                notificationBus.emit({ type: 'quest', title: 'Convite de Party', message: `${n.name} convidou você para ${created.name}`, icon: '👥', duration: 3000 });
-              } else {
-                if (!nParty.members.includes(player.id) && !(nParty.invites || []).includes(player.id)) {
-                  get().inviteHeroToParty(nParty.id, n.id, player.id);
-                  notificationBus.emit({ type: 'quest', title: 'Convite de Party', message: `${n.name} te convidou para ${nParty.name}`, icon: '👥', duration: 3000 });
-                }
-              }
-            });
           }
           const heroes = get().heroes;
           const lbs = generateAllLeaderboards(heroes);
           trackMetric.custom?.('npc_tick', { npcs: npcs.length, ts: Date.now() });
         };
-        anySelf._npcTimer = setInterval(tick, 10000);
+        anySelf._npcTimer = setInterval(tick, 30000);
       },
       stopNPCSimulation: () => {
         const anySelf = useHeroStore as unknown as { _npcTimer?: any };
@@ -796,6 +831,145 @@ export const useHeroStore = create<HeroState>()(
 
       setDuelOverlay: (overlay) => {
         set({ duelOverlay: overlay });
+      },
+      setNPCInteractionOverlay: (overlay) => {
+        set({ npcInteractionOverlay: overlay });
+      },
+      respondToNPCInteraction: (choice) => {
+        const overlay = get().npcInteractionOverlay;
+        if (!overlay) return;
+        const player = get().getSelectedHero();
+        const npc = get().heroes.find(h => h.id === overlay.npcId);
+        if (!player || !npc) { set({ npcInteractionOverlay: undefined }); return; }
+        let mood: 'amigável' | 'neutro' | 'hostil' = 'neutro';
+        if (choice === 'accept') mood = 'amigável';
+        else if (choice === 'decline') mood = 'hostil';
+        const res = updateOnSocial(npc, player, mood);
+        notificationBus.emit({ type: choice === 'accept' ? 'achievement' : 'stamina', title: 'Interação com NPC', message: `${npc.name}: ${choice === 'accept' ? 'Agradeço!' : choice === 'decline' ? 'Talvez outra hora...' : 'Certo, conversamos depois.'}`, icon: '💬', duration: 2500 });
+        set({ npcInteractionOverlay: undefined });
+      },
+      recordActivity: (entry) => {
+        const s = get();
+        const now = new Date().toISOString();
+        const newLog = [{ ts: now, ...entry }, ...s.activitiesLog].slice(0, 500);
+        set({ activitiesLog: newLog });
+        try {
+          const gs = require('../store/gameSettingsStore').getGameSettings();
+          const mode = gs.notifPriorityMode || 'important_first';
+          const freq = gs.notifFrequency || 'normal';
+          const shouldShow = entry.importance === 'high' || mode === 'normal';
+          if (shouldShow) {
+            const icon = entry.type === 'dialogue' ? '💬' : entry.type === 'rumor' ? '🗣️' : entry.type === 'tip' ? '📜' : '⭐';
+            notificationBus.emit({ type: 'quest', title: 'Atividade', message: entry.text, icon, duration: freq === 'low' ? 2000 : freq === 'high' ? 4000 : 3000 });
+            const gsSound = gs.notifSoundEnabled ?? true;
+            if (gsSound) {
+              const audio = require('../utils/audio');
+              audio.playVoiceCue(430 + Math.floor(Math.random()*60), 180);
+            }
+          }
+        } catch {}
+      },
+      triggerAutoInteraction: (location) => {
+        try {
+          const gs = require('../store/gameSettingsStore').getGameSettings();
+          if (!gs.autoInteractionEnabled) return;
+          const min = Math.max(0, gs.autoChanceMinPercent ?? 30);
+          const max = Math.max(min, gs.autoChanceMaxPercent ?? 70);
+          const chance = (min + Math.random() * (max - min)) / 100;
+          const lastIso = get().lastAutoInteractionAt;
+          const cooldownMin = gs.interactionsCooldownMinutes ?? Math.round((gs.npcInteractionCooldownSeconds ?? 900)/60);
+          const okCooldown = !lastIso || ((Date.now() - new Date(lastIso).getTime()) / 60000) >= cooldownMin;
+          if (!okCooldown) return;
+          if (Math.random() < chance) {
+            const player = get().getSelectedHero();
+            const npc = get().heroes.find(h => h.origin === 'npc');
+            if (!player || !npc) return;
+            const dlg = require('../utils/dialogueEngine');
+            const lines = dlg.generateMixed(npc, player, 2);
+            set({ npcInteractionOverlay: { npcId: npc.id, npcName: npc.name, lines }, lastAutoInteractionAt: new Date().toISOString() });
+            get().recordActivity({ type: 'dialogue', location, npcId: npc.id, text: `${npc.name}: ${lines[0]}`, importance: 'normal' });
+          }
+        } catch {}
+      },
+      dedupeNPCs: () => {
+        const state = get();
+        const npcs = state.heroes.filter(h => h.origin === 'npc');
+        const keyOf = (h: Hero) => `${(h.name || '').toLowerCase()}::${(h.class || '')}`;
+        const groups = new Map<string, Hero[]>();
+        npcs.forEach(h => {
+          const k = keyOf(h);
+          const arr = groups.get(k) || [];
+          arr.push(h);
+          groups.set(k, arr);
+        });
+        let removed = 0;
+        const toRemoveIds: string[] = [];
+        const replacements: Record<string, Hero> = {};
+        groups.forEach((arr, k) => {
+          if (arr.length <= 1) return;
+          // Choose primary by highest level/xp
+          const primary = arr.slice().sort((a,b) => (b.progression?.level||0)-(a.progression?.level||0) || (b.progression?.xp||0)-(a.progression?.xp||0))[0];
+          const others = arr.filter(h => h.id !== primary.id);
+          const merged: Hero = { ...primary } as Hero;
+          others.forEach(o => {
+            merged.progression = {
+              ...merged.progression,
+              xp: Math.max(merged.progression?.xp || 0, o.progression?.xp || 0),
+              gold: Math.max(merged.progression?.gold || 0, o.progression?.gold || 0),
+              level: Math.max(merged.progression?.level || 1, o.progression?.level || 1)
+            };
+            merged.stats = {
+              ...merged.stats,
+              questsCompleted: (merged.stats?.questsCompleted || 0) + (o.stats?.questsCompleted || 0),
+              enemiesDefeated: (merged.stats?.enemiesDefeated || 0) + (o.stats?.enemiesDefeated || 0),
+              itemsFound: (merged.stats?.itemsFound || 0) + (o.stats?.itemsFound || 0),
+              totalCombats: (merged.stats?.totalCombats || 0) + (o.stats?.totalCombats || 0),
+              totalPlayTime: (merged.stats?.totalPlayTime || 0) + (o.stats?.totalPlayTime || 0)
+            } as any;
+            const memA = merged.npcMemory || { interactions: [], preferences: {}, scoreByAction: {}, socialNotesByHeroId: {} };
+            const memB = o.npcMemory || { interactions: [], preferences: {}, scoreByAction: {}, socialNotesByHeroId: {} };
+            merged.npcMemory = {
+              interactions: [...memA.interactions, ...memB.interactions].slice(-50),
+              preferences: { ...(memA.preferences || {}), ...(memB.preferences || {}) },
+              scoreByAction: { ...(memA.scoreByAction || {}), ...(memB.scoreByAction || {}) },
+              friendStatusByHeroId: { ...(memA.friendStatusByHeroId || {}), ...(memB.friendStatusByHeroId || {}) },
+              lastContactByHeroId: { ...(memA.lastContactByHeroId || {}), ...(memB.lastContactByHeroId || {}) },
+              lastInteractionByType: { ...(memA.lastInteractionByType || {}), ...(memB.lastInteractionByType || {}) },
+              socialNotesByHeroId: { ...(memA.socialNotesByHeroId || {}), ...(memB.socialNotesByHeroId || {}) }
+            } as any;
+            removed++;
+            toRemoveIds.push(o.id);
+          });
+          replacements[primary.id] = merged;
+        });
+        if (removed > 0) {
+          const newHeroes = state.heroes
+            .filter(h => !toRemoveIds.includes(h.id))
+            .map(h => (replacements[h.id] ? replacements[h.id] : h));
+          set({ heroes: newHeroes });
+          try { notificationBus.emit({ type: 'item', title: 'NPCs Deduplicados', message: `Atualizados ${removed} duplicados`, icon: '🧹', duration: 2500 }); } catch {}
+        }
+        return { checked: npcs.length, removed };
+      },
+      setPartyInviteTerms: (partyId, targetHeroId, terms) => {
+        const party = get().parties.find(p => p.id === partyId);
+        if (!party) return;
+        const order = ['F','E','D','C','B','A','S'];
+        const idx = (r: string) => Math.max(0, order.indexOf((r || 'F').toUpperCase()));
+        const inviter = get().heroes.find(h => h.id === party.leaderId);
+        const target = get().heroes.find(h => h.id === targetHeroId);
+        let adjusted = { ...terms };
+        if (inviter && target) {
+          const diff = Math.abs(idx(inviter.rankData?.currentRank || 'F') - idx(target.rankData?.currentRank || 'F'));
+          if (diff === 2) {
+            adjusted.rewardShare = Math.max(5, Math.floor((adjusted.rewardShare || 10) * 0.5));
+            try { notificationBus.emit({ type: 'item', title: 'Ajuste de contrato', message: 'Diferença de 2 ranks: recompensa reduzida em 50%.', icon: '⚖️', duration: 2500 }); } catch {}
+          }
+        }
+        const inviteTerms = { ...(party.inviteTerms || {}) };
+        inviteTerms[targetHeroId] = adjusted;
+        const updated = { ...party, inviteTerms };
+        set(state => ({ parties: state.parties.map(p => p.id === partyId ? updated : p) }));
       },
 
       // === DUEL SYSTEM ===
@@ -812,8 +986,7 @@ export const useHeroStore = create<HeroState>()(
         const invite = invites[inviteIdx];
         const nowInvites = invites.filter(i => i.npcId !== npcId);
         const npc = get().heroes.find(h => h.id === npcId);
-        const res = require('../utils/duel') as any;
-        const duelRes = npc ? res.simulateDuel(hero, npc, invite.type) : null;
+        const duelRes = npc ? simulateDuel(hero, npc, invite.type) : null;
         const updates: Partial<Hero> = { duelInvites: nowInvites } as any;
         const stats = { ...hero.stats };
         stats.duelsPlayed = (stats.duelsPlayed || 0) + 1;
@@ -848,6 +1021,51 @@ export const useHeroStore = create<HeroState>()(
         try { notificationBus.emit({ type: 'item', title: 'Duelo recusado', message: 'Convite removido.', icon: '⚔️', duration: 2000 }); } catch {}
         return true;
       },
+      acceptPartyInvite: (heroId, partyId) => {
+        const party = get().parties.find(p => p.id === partyId);
+        if (!party) return false;
+        if (!(party.invites || []).includes(heroId)) return false;
+        const members = [...party.members, heroId];
+        const invites = (party.invites || []).filter(id => id !== heroId);
+        const inviteTerms = { ...(party.inviteTerms || {}) };
+        const acceptedTerms = inviteTerms[heroId];
+        const contractByHeroId = { ...(party.contractByHeroId || {}) };
+        if (acceptedTerms) {
+          contractByHeroId[heroId] = {
+            duration: acceptedTerms.duration || 'one_mission',
+            days: acceptedTerms.days,
+            rewardShare: Math.max(5, Math.min(50, acceptedTerms.rewardShare || 10)),
+            leaderPref: acceptedTerms.leaderPref
+          };
+        }
+        delete inviteTerms[heroId];
+        const updated = { ...party, members, invites, inviteTerms, contractByHeroId };
+        set(state => ({ parties: state.parties.map(p => p.id === partyId ? updated : p) }));
+        // Recompensa imediata simbólica por aceitar ajudar
+        const hero = get().heroes.find(h => h.id === heroId);
+        if (hero && acceptedTerms) {
+          const xpBonus = Math.round(10 + (acceptedTerms.rewardShare || 10));
+          const goldBonus = Math.round((acceptedTerms.rewardShare || 10) * 2);
+          const prog = { ...hero.progression, xp: (hero.progression.xp || 0) + xpBonus, gold: (hero.progression.gold || 0) + goldBonus };
+          get().updateHero(heroId, { progression: prog });
+          try { notificationBus.emit({ type: 'achievement', title: 'Apoio à Party', message: `Você recebeu +${xpBonus} XP e +${goldBonus} ouro pelo acordo`, icon: '🎖️', duration: 3500 }); } catch {}
+        } else {
+          try { notificationBus.emit({ type: 'achievement', title: 'Convite aceito', message: 'Você agora faz parte da party.', icon: '✅', duration: 3500 }); } catch {}
+        }
+        return true;
+      },
+      declinePartyInvite: (heroId, partyId) => {
+        const party = get().parties.find(p => p.id === partyId);
+        if (!party) return false;
+        if (!(party.invites || []).includes(heroId)) return false;
+        const invites = (party.invites || [])?.filter(id => id !== heroId);
+        const inviteTerms = { ...(party.inviteTerms || {}) };
+        delete inviteTerms[heroId];
+        const updated = { ...party, invites, inviteTerms };
+        set(state => ({ parties: state.parties.map(p => p.id === partyId ? updated : p) }));
+        try { notificationBus.emit({ type: 'stamina', title: 'Convite recusado', message: 'Convite removido.', icon: '🚪', duration: 2500 }); } catch {}
+        return true;
+      },
 
       // === PARTY: implementação básica ===
       getHeroParty: (heroId: string) => {
@@ -879,6 +1097,15 @@ export const useHeroStore = create<HeroState>()(
         const party = (Array.isArray(state.parties) ? state.parties : []).find(p => p.id === partyId);
         if (!party) return false;
         if (party.leaderId !== inviterId && !party.members.includes(inviterId)) return false;
+        const inviter = get().heroes.find(h => h.id === inviterId);
+        const target = get().heroes.find(h => h.id === targetHeroId);
+        if (inviter && target) {
+          const inviterRank = inviter.rankData?.currentRank || 'F';
+          const targetRank = target.rankData?.currentRank || 'F';
+          if (inviterRank !== targetRank) {
+            return false;
+          }
+        }
         party.invites = Array.isArray(party.invites) ? party.invites : [];
         if (!party.invites.includes(targetHeroId) && !party.members.includes(targetHeroId)) {
           party.invites.push(targetHeroId);
@@ -888,24 +1115,9 @@ export const useHeroStore = create<HeroState>()(
         return false;
       },
 
-      acceptPartyInvite: (heroId: string, partyId: string) => {
-        const state = get();
-        const party = (Array.isArray(state.parties) ? state.parties : []).find(p => p.id === partyId);
-        if (!party) return false;
-        party.invites = (party.invites || []).filter(id => id !== heroId);
-        if (!party.members.includes(heroId)) party.members.push(heroId);
-        set(s => ({ parties: (Array.isArray(s.parties) ? s.parties : []).map(p => p.id === partyId ? party : p) }));
-        return true;
-      },
+      
 
-      declinePartyInvite: (heroId: string, partyId: string) => {
-        const state = get();
-        const party = (Array.isArray(state.parties) ? state.parties : []).find(p => p.id === partyId);
-        if (!party) return false;
-        party.invites = (party.invites || []).filter(id => id !== heroId);
-        set(s => ({ parties: (Array.isArray(s.parties) ? s.parties : []).map(p => p.id === partyId ? party : p) }));
-        return true;
-      },
+      
 
       leaveParty: (heroId: string) => {
         const state = get();
@@ -2039,10 +2251,11 @@ export const useHeroStore = create<HeroState>()(
         console.log('🔄 Gerando missões - Herói Level:', heroLevel, 'Guilda Level:', guildLevel);
         const heroRank = selectedHero ? rankSystem.calculateRank(selectedHero) : 'F';
         const newQuests = generateQuestBoard(heroLevel, guildLevel, heroRank as any);
+        const nextCatalog: Record<string, Quest> = { ...state.questCatalog };
 
         // Manter missões sticky da lista anterior (evitar desaparecer em refresh)
-        const previousSticky = state.availableQuests.filter(q => q.sticky);
-        const stickyIds = new Set(previousSticky.map(q => q.id));
+        const previousStickyLimited = state.availableQuests.filter(q => q.sticky).slice(0, 3);
+        const stickyIds = new Set(previousStickyLimited.map(q => q.id));
 
         // Preservar missões ATIVAS dos heróis durante o refresh
         // Coleta todos os IDs de missões ativas para evitar que sumam da aba "Ativas"
@@ -2059,7 +2272,7 @@ export const useHeroStore = create<HeroState>()(
             const rankInfo = (rankSystem as any).getRankInfo?.(progress.nextRank);
             const title = rankInfo ? `Desafio de Promoção: ${rankInfo.name}` : `Desafio de Promoção de Rank ${progress.nextRank}`;
             const description = rankInfo ? `A guilda convoca ${selectedHero.name} para provar seu valor e ascender ao rank ${progress.nextRank} - ${rankInfo.description}` : `Prove seu valor para ascender ao rank ${progress.nextRank}. Complete objetivos desafiadores sob avaliação da guilda.`;
-            newQuests.push({
+            const promo = {
               id: promoQuestId,
               title,
               description,
@@ -2073,14 +2286,17 @@ export const useHeroStore = create<HeroState>()(
               isGuildQuest: true,
               sticky: true,
               failurePenalty: { gold: 50, reputation: -10 }
-            });
+            } as Quest;
+            newQuests.push(promo);
+            nextCatalog[promo.id] = promo;
             console.log('🏰 Missão de promoção de rank inserida:', title);
           }
         }
         // Reaplicar missões sticky anteriores que não conflitem por id
-        previousSticky.forEach(stq => {
+        previousStickyLimited.forEach(stq => {
           if (!stickyIds.has(stq.id)) {
             newQuests.push(stq);
+            nextCatalog[stq.id] = stq;
           }
         });
 
@@ -2089,13 +2305,29 @@ export const useHeroStore = create<HeroState>()(
         carryOverActive.forEach(aq => {
           if (!existingIds.has(aq.id)) {
             newQuests.push(aq);
+            nextCatalog[aq.id] = aq;
           }
         });
 
         console.log('📋 Missões geradas:', newQuests.length, 'total,', newQuests.filter(q => q.isGuildQuest).length, 'de guilda');
+        const hasCaca = newQuests.some(q => q.type === 'caca');
+        const hasExploracao = newQuests.some(q => q.type === 'exploracao');
+        if (!hasCaca) {
+          for (let i = 0; i < 5; i++) {
+            const qTry = generateQuest('padrao', heroLevel, false);
+            if (qTry.type === 'caca') { newQuests.push(qTry); nextCatalog[qTry.id] = qTry; break; }
+          }
+        }
+        if (!hasExploracao) {
+          for (let i = 0; i < 5; i++) {
+            const qTry = generateQuest('padrao', heroLevel, false);
+            if (qTry.type === 'exploracao') { newQuests.push(qTry); nextCatalog[qTry.id] = qTry; break; }
+          }
+        }
         const completedSet = new Set<string>(selectedHero?.completedQuests || []);
+        newQuests.forEach(q => { nextCatalog[q.id] = q; });
         const filtered = newQuests.filter(q => !completedSet.has(q.id));
-        set({ availableQuests: filtered });
+        set({ availableQuests: filtered, questCatalog: nextCatalog });
       },
 
       acceptQuest: (heroId: string, questId: string) => {
@@ -2132,6 +2364,7 @@ export const useHeroStore = create<HeroState>()(
         }
         console.log('✅ Todos os requisitos atendidos, adicionando missão às ativas');
         get().updateHero(heroId, { activeQuests: [...hero.activeQuests, questId] });
+        set((s) => ({ questCatalog: { ...s.questCatalog, [questId]: quest } }));
         try { notificationBus.emit({ type: 'quest', title: 'Missão aceita', message: `${quest.title}`, duration: 2500, icon: '✅' }); } catch {}
         console.log('🎉 Missão aceita com sucesso!');
         try { onboardingManager.markStepValidated('accept-quest'); onboardingManager.saveState(); } catch {}
@@ -2198,7 +2431,15 @@ export const useHeroStore = create<HeroState>()(
         console.log('🎉 Missão completada com sucesso! Aplicando recompensas...');
         console.log('💰 Recompensas:', quest.rewards);
         console.log('⚔️ Resultado do combate:', combatResult);
+        try {
+          const curStats = hero.stats || ({} as any);
+          const isColeta = quest.categoryHint === 'coleta' || quest.type === 'exploracao';
+          const nextColeta = (curStats.collectionQuestsCompleted || 0) + (isColeta ? 1 : 0);
+          const stableQuestDone = quest.isGuildQuest && quest.templateId === 'guild-ovo-basico' ? true : (curStats.stableUnlockQuestCompleted === true);
+          get().updateHero(heroId, { stats: { ...hero.stats, collectionQuestsCompleted: nextColeta, stableUnlockQuestCompleted: stableQuestDone } });
+        } catch {}
         
+        const prevHeroBeforeXP = { ...hero } as Hero;
         get().gainXP(heroId, (quest.rewards?.xp || 0) + (combatResult?.xpGained || 0));
         get().gainGold(heroId, (quest.rewards?.gold || 0) + (combatResult?.goldGained || 0));
         if (quest.rewards?.glory) { get().gainGlory(heroId, quest.rewards.glory); }
@@ -2209,10 +2450,17 @@ export const useHeroStore = create<HeroState>()(
           quest.rewards.items.forEach(item => {
             // Suporta tanto formato objeto { id, qty } quanto string 'itemId'
             if (typeof (item as any) === 'string') {
-              get().addItemToInventory(heroId, item as unknown as string, 1);
+              const id = item as unknown as string;
+              if (id === 'reward-egg-basico') {
+                const egg = generateMysteryEgg('comum' as any);
+                const heroAfter = get().heroes.find(h => h.id === heroId)!;
+                get().updateHero(heroId, { eggs: [...(heroAfter.eggs || []), egg] });
+                try { notificationBus.emit({ type: 'item', title: 'Ovo Obtido', message: 'Você recebeu um Ovo Comum da Guilda.', duration: 3500, icon: '🥚' }); } catch {}
+                return;
+              }
+              get().addItemToInventory(heroId, id, 1);
               try {
                 const s = get().heroes.find(h => h.id === heroId)!.stats;
-                const id = item as unknown as string;
                 if (id === 'essencia-bestial') {
                   get().updateHero(heroId, { stats: { ...s, beastEssenceCollected: (s.beastEssenceCollected || 0) + 1 } });
                 } else if (id === 'pergaminho-montaria') {
@@ -2221,6 +2469,16 @@ export const useHeroStore = create<HeroState>()(
               } catch {}
             } else {
               const it = item as { id: string; qty?: number };
+              if (it.id === 'reward-egg-basico') {
+                const qty = it.qty ?? 1;
+                for (let i = 0; i < qty; i++) {
+                  const egg = generateMysteryEgg('comum' as any);
+                  const heroAfter = get().heroes.find(h => h.id === heroId)!;
+                  get().updateHero(heroId, { eggs: [...(heroAfter.eggs || []), egg] });
+                }
+                try { notificationBus.emit({ type: 'item', title: 'Ovo Obtido', message: 'Você recebeu um Ovo Comum da Guilda.', duration: 3500, icon: '🥚' }); } catch {}
+                return;
+              }
               get().addItemToInventory(heroId, it.id, it.qty ?? 1);
               try {
                 const s = get().heroes.find(h => h.id === heroId)!.stats;
@@ -2339,6 +2597,7 @@ export const useHeroStore = create<HeroState>()(
           }
           const newRankData = rankSystem.updateRankData(finalHero, finalHero.rankData);
           get().updateHero(heroId, { rankData: newRankData });
+          try { useProgressionStore.getState().evaluateUnlocks(finalHero, prevHeroBeforeXP); } catch {}
         }
         
         // Update daily goals progress
@@ -2408,6 +2667,12 @@ export const useHeroStore = create<HeroState>()(
           try { notificationBus.emit({ type: 'quest', title: 'Missão abandonada', message: `${questId}`, duration: 2000, icon: '🗑️' }); } catch {}
           return true;
         } catch { return false; }
+      },
+
+      getQuestById: (id: string) => {
+        const q = get().questCatalog[id];
+        if (q) return q;
+        return get().availableQuests.find(q => q.id === id);
       },
 
       clearActiveQuests: (heroId: string) => {
@@ -2594,6 +2859,7 @@ export const useHeroStore = create<HeroState>()(
           }
           const newRankData = rankSystem.updateRankData(updatedHero, updatedHero.rankData);
           get().updateHero(heroId, { rankData: newRankData });
+          try { useProgressionStore.getState().evaluateUnlocks(updatedHero, hero); } catch {}
         }
         
         // Update daily goals progress
@@ -3909,23 +4175,29 @@ export const useHeroStore = create<HeroState>()(
          });
 
          let updatedTitles = [...hero.titles];
-         newlyUnlocked.forEach(a => {
-           const rewardTitleId = a.rewards?.title;
-           if (!rewardTitleId) return;
-           const tpl = AVAILABLE_TITLES.find(t => t.id === rewardTitleId);
-           if (!tpl) return;
-           const already = updatedTitles.some(t => t.id === rewardTitleId);
-           if (!already) {
-             updatedTitles.push({ ...tpl, unlockedAt: new Date() });
-              logActivity.titleEarned({
-                heroId: hero.id,
-                heroName: hero.name,
-                heroClass: hero.class,
-                heroLevel: hero.progression.level,
-                titleEarned: tpl.name
-              });
-           }
-         });
+        newlyUnlocked.forEach(a => {
+          const rewardTitleId = a.rewards?.title;
+          if (!rewardTitleId) return;
+          const tpl = AVAILABLE_TITLES.find(t => t.id === rewardTitleId);
+          if (!tpl) return;
+          const already = updatedTitles.some(t => t.id === rewardTitleId);
+          if (!already) {
+            updatedTitles.push({ ...tpl, unlockedAt: new Date() });
+             logActivity.titleEarned({
+               heroId: hero.id,
+               heroName: hero.name,
+               heroClass: hero.class,
+               heroLevel: hero.progression.level,
+               titleEarned: tpl.name
+             });
+          }
+        });
+
+        const rewardTotals = newlyUnlocked.reduce((acc, a) => {
+          acc.xp += Number(a.rewards?.xp || 0);
+          acc.gold += Number(a.rewards?.gold || 0);
+          return acc;
+        }, { xp: 0, gold: 0 });
 
          // Desbloqueios adicionais com base em classe/nível/estatísticas
          const lvl = hero.progression.level;
@@ -3988,10 +4260,16 @@ export const useHeroStore = create<HeroState>()(
            if (tpl) updatedTitles.push({ ...tpl, unlockedAt: new Date() });
          }
 
-         get().updateHero(hero.id, {
-           achievements: updatedAchievements,
-           titles: updatedTitles
-         });
+        const progression = {
+          ...hero.progression,
+          xp: (hero.progression.xp || 0) + rewardTotals.xp,
+          gold: (hero.progression.gold || 0) + rewardTotals.gold
+        } as any;
+        get().updateHero(hero.id, {
+          achievements: updatedAchievements,
+          titles: updatedTitles,
+          progression
+        });
        },
 
        updateReputation: (factionName: string, change: number) => {
@@ -4077,7 +4355,7 @@ export const useHeroStore = create<HeroState>()(
       
       getSelectedHero: () => {
         const { heroes, selectedHeroId } = get();
-        return heroes.find(hero => hero.id === selectedHeroId);
+        return heroes.find(hero => hero.id === selectedHeroId) || heroes[0];
       },
       
       getHeroQuests: (heroId: string) => {
@@ -4124,10 +4402,9 @@ export const useHeroStore = create<HeroState>()(
           if (heroIndex === -1) return state;
 
           const hero = state.heroes[heroIndex];
-          if (!hero.dailyGoals || hero.dailyGoals.length === 0) return state;
+          let goalsSource = hero.dailyGoals && hero.dailyGoals.length > 0 ? hero.dailyGoals : generateDailyGoals(hero);
 
-          // Remove expired goals first
-          const activeGoals = removeExpiredGoals(hero.dailyGoals);
+          const activeGoals = removeExpiredGoals(goalsSource);
 
           // Contagem antes da atualização para detectar novas conclusões
           const previouslyCompletedCount = activeGoals.filter(g => g.completed).length;

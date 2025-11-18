@@ -42,31 +42,41 @@ function makeUrl(path: string, qs?: URLSearchParams): string {
 }
 
 export async function listEvents(viewerId: string, opts: { tag?: string; ownerId?: string; limit?: number; offset?: number } = {}): Promise<SocialEvent[]> {
-  const q = new URLSearchParams();
-  if (viewerId) q.set('viewerId', viewerId);
-  if (opts.tag) q.set('tag', opts.tag);
-  if (opts.ownerId) q.set('ownerId', opts.ownerId);
-  if (typeof opts.limit === 'number') q.set('limit', String(opts.limit));
-  if (typeof opts.offset === 'number') q.set('offset', String(opts.offset));
-  const res = await fetch(makeUrl('/api/events/list', q));
-  if (!res.ok) throw new Error(`Falha ao listar eventos: ${res.status}`);
-  const data = await res.json();
-  return Array.isArray(data?.events) ? data.events as SocialEvent[] : [];
+  try {
+    if (!API_BASE) return [];
+    const q = new URLSearchParams();
+    if (viewerId) q.set('viewerId', viewerId);
+    if (opts.tag) q.set('tag', opts.tag);
+    if (opts.ownerId) q.set('ownerId', opts.ownerId);
+    if (typeof opts.limit === 'number') q.set('limit', String(opts.limit));
+    if (typeof opts.offset === 'number') q.set('offset', String(opts.offset));
+    const res = await fetch(makeUrl('/api/events/list', q));
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.events) ? data.events as SocialEvent[] : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function listEventsPaged(viewerId: string, opts: { tag?: string; ownerId?: string; limit?: number; offset?: number } = {}): Promise<Paged<SocialEvent>> {
-  const q = new URLSearchParams();
-  if (viewerId) q.set('viewerId', viewerId);
-  if (opts.tag) q.set('tag', opts.tag);
-  if (opts.ownerId) q.set('ownerId', opts.ownerId);
-  if (typeof opts.limit === 'number') q.set('limit', String(opts.limit));
-  if (typeof opts.offset === 'number') q.set('offset', String(opts.offset));
-  const res = await fetch(makeUrl('/api/events/list', q));
-  if (!res.ok) throw new Error(`Falha ao listar eventos: ${res.status}`);
-  const data = await res.json();
-  const items = Array.isArray(data?.events) ? data.events as SocialEvent[] : [];
-  const pagination: Pagination = data?.pagination || { total: items.length, offset: Number(opts.offset||0), limit: Number(opts.limit||items.length||0), hasMore: false };
-  return { items, pagination };
+  try {
+    if (!API_BASE) return { items: [], pagination: { total: 0, offset: Number(opts.offset||0), limit: Number(opts.limit||0), hasMore: false } };
+    const q = new URLSearchParams();
+    if (viewerId) q.set('viewerId', viewerId);
+    if (opts.tag) q.set('tag', opts.tag);
+    if (opts.ownerId) q.set('ownerId', opts.ownerId);
+    if (typeof opts.limit === 'number') q.set('limit', String(opts.limit));
+    if (typeof opts.offset === 'number') q.set('offset', String(opts.offset));
+    const res = await fetch(makeUrl('/api/events/list', q));
+    if (!res.ok) return { items: [], pagination: { total: 0, offset: Number(opts.offset||0), limit: Number(opts.limit||0), hasMore: false } };
+    const data = await res.json();
+    const items = Array.isArray(data?.events) ? data.events as SocialEvent[] : [];
+    const pagination: Pagination = data?.pagination || { total: items.length, offset: Number(opts.offset||0), limit: Number(opts.limit||items.length||0), hasMore: false };
+    return { items, pagination };
+  } catch {
+    return { items: [], pagination: { total: 0, offset: Number(opts.offset||0), limit: Number(opts.limit||0), hasMore: false } };
+  }
 }
 
 export async function createEvent(payload: {
@@ -124,8 +134,8 @@ export async function attendEvent(id: string, viewerId: string, status: 'yes' | 
   return data?.event as SocialEvent;
 }
 
-export async function fetchEventChat(id: string): Promise<EventMessage[]> {
-  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/chat`));
+export async function fetchEventChat(id: string, signal?: AbortSignal): Promise<EventMessage[]> {
+  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/chat`), { signal });
   if (!res.ok) throw new Error(`Falha ao carregar chat: ${res.status}`);
   const data = await res.json();
   return Array.isArray(data?.messages) ? data.messages as EventMessage[] : [];
@@ -145,8 +155,8 @@ export async function addEventMedia(id: string, viewerId: string, url: string, c
   return data?.media as EventMedia;
 }
 
-export async function listEventMedia(id: string): Promise<EventMedia[]> {
-  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/media`));
+export async function listEventMedia(id: string, signal?: AbortSignal): Promise<EventMedia[]> {
+  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/media`), { signal });
   if (!res.ok) throw new Error(`Falha ao listar mídia: ${res.status}`);
   const data = await res.json();
   return Array.isArray(data?.media) ? data.media as EventMedia[] : [];
@@ -161,27 +171,35 @@ export async function rateEvent(id: string, viewerId: string, stars: number, com
 }
 
 export async function recommendEvents(viewerId: string, interestsCsv?: string, opts: { limit?: number; offset?: number } = {}): Promise<SocialEvent[]> {
-  const q = new URLSearchParams();
-  if (viewerId) q.set('viewerId', viewerId);
-  if (interestsCsv) q.set('interests', interestsCsv);
-  if (typeof opts.limit === 'number') q.set('limit', String(opts.limit));
-  if (typeof opts.offset === 'number') q.set('offset', String(opts.offset));
-  const res = await fetch(makeUrl('/api/events/recommendations', q));
-  if (!res.ok) throw new Error(`Falha ao recomendar eventos: ${res.status}`);
-  const data = await res.json();
-  return Array.isArray(data?.events) ? data.events as SocialEvent[] : [];
+  try {
+    const q = new URLSearchParams();
+    if (viewerId) q.set('viewerId', viewerId);
+    if (interestsCsv) q.set('interests', interestsCsv);
+    if (typeof opts.limit === 'number') q.set('limit', String(opts.limit));
+    if (typeof opts.offset === 'number') q.set('offset', String(opts.offset));
+    const res = await fetch(makeUrl('/api/events/recommendations', q));
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.events) ? data.events as SocialEvent[] : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function recommendEventsPaged(viewerId: string, interestsCsv?: string, opts: { limit?: number; offset?: number } = {}): Promise<Paged<SocialEvent>> {
-  const q = new URLSearchParams();
-  if (viewerId) q.set('viewerId', viewerId);
-  if (interestsCsv) q.set('interests', interestsCsv);
-  if (typeof opts.limit === 'number') q.set('limit', String(opts.limit));
-  if (typeof opts.offset === 'number') q.set('offset', String(opts.offset));
-  const res = await fetch(makeUrl('/api/events/recommendations', q));
-  if (!res.ok) throw new Error(`Falha ao recomendar eventos: ${res.status}`);
-  const data = await res.json();
-  const items = Array.isArray(data?.events) ? data.events as SocialEvent[] : [];
-  const pagination: Pagination = data?.pagination || { total: items.length, offset: Number(opts.offset||0), limit: Number(opts.limit||items.length||0), hasMore: false };
-  return { items, pagination };
+  try {
+    const q = new URLSearchParams();
+    if (viewerId) q.set('viewerId', viewerId);
+    if (interestsCsv) q.set('interests', interestsCsv);
+    if (typeof opts.limit === 'number') q.set('limit', String(opts.limit));
+    if (typeof opts.offset === 'number') q.set('offset', String(opts.offset));
+    const res = await fetch(makeUrl('/api/events/recommendations', q));
+    if (!res.ok) return { items: [], pagination: { total: 0, offset: Number(opts.offset||0), limit: Number(opts.limit||0), hasMore: false } };
+    const data = await res.json();
+    const items = Array.isArray(data?.events) ? data.events as SocialEvent[] : [];
+    const pagination: Pagination = data?.pagination || { total: items.length, offset: Number(opts.offset||0), limit: Number(opts.limit||items.length||0), hasMore: false };
+    return { items, pagination };
+  } catch {
+    return { items: [], pagination: { total: 0, offset: Number(opts.offset||0), limit: Number(opts.limit||0), hasMore: false } };
+  }
 }

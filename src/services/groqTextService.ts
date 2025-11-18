@@ -12,9 +12,9 @@ function buildParams(tipo: TextoTipo, contexto = ''): {
     case 'nome':
       return {
         systemMessage:
-          'Você gera NOME curto de herói medieval em PT-BR. Responda SOMENTE com o nome, 1–2 palavras, sem aspas, sem pontuação.',
+          'Gere NOME COMPLETO de herói medieval em PT-BR. Responda SOMENTE com duas palavras: primeiro nome e sobrenome, sem aspas, sem pontuação.',
         prompt:
-          'Gere um nome de herói medieval/fantasia épico e memorável (1–2 palavras). Não inclua explicações.',
+          'Forneça apenas "Nome Sobrenome" épico medieval/fantasia, exatamente duas palavras. Sem epítetos, sem vírgulas, sem explicações.',
         maxTokens: 12,
         temperature: 0.9
       };
@@ -58,7 +58,17 @@ export async function gerarTexto(tipo: TextoTipo, contexto = ''): Promise<string
       maxTokens,
       temperature
     });
-    const texto = (resp.text || '').trim();
+    let texto = (resp.text || '').trim();
+    if (tipo === 'nome') {
+      texto = texto.replace(/["'“”`\.\,;:]/g, '').trim();
+      const parts = texto.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) texto = `${parts[0]} ${parts[1]}`;
+      else if (parts.length === 1) {
+        const surnames = ['da Rocha','do Vale','Silvar','Montclair','Valencius','Stormblade','Noctis','Dawnhart','Ironwood','Winterborn'];
+        const s = surnames[Math.floor(Math.random() * surnames.length)];
+        texto = `${parts[0]} ${s}`;
+      }
+    }
     if (texto.length > 0) return texto;
   } catch (e) {
     // ignorado, usamos fallback abaixo
@@ -66,7 +76,7 @@ export async function gerarTexto(tipo: TextoTipo, contexto = ''): Promise<string
   // Fallback por tipo
   switch (tipo) {
     case 'nome':
-      return 'Valen';
+      return 'Valen Ironwood';
     case 'frase':
       return 'Por honra e aço, avanço sem medo!';
     case 'historia':

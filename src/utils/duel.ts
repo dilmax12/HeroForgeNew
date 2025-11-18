@@ -28,8 +28,8 @@ export function simulateDuel(a: Hero, b: Hero, type: DuelType): DuelResult {
   const bDef = Math.max(0, Math.floor(b.derivedAttributes.armorClass / 2));
   const aIni = Math.max(0, a.derivedAttributes.initiative);
   const bIni = Math.max(0, b.derivedAttributes.initiative);
-  const aMag = Math.max(0, Math.floor((a.attributes.inteligencia + a.attributes.sabedoria) * 0.8));
-  const bMag = Math.max(0, Math.floor((b.attributes.inteligencia + b.attributes.sabedoria) * 0.8));
+  const aMag = Math.max(0, Math.floor((a.attributes.inteligencia) * 0.8));
+  const bMag = Math.max(0, Math.floor((b.attributes.inteligencia) * 0.8));
   const aLuck = Math.max(0, a.derivedAttributes.luck || 0);
   const bLuck = Math.max(0, b.derivedAttributes.luck || 0);
 

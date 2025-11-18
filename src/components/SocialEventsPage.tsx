@@ -4,6 +4,8 @@ import { SocialEvent, listEvents, listEventsPaged, createEvent, recommendEventsP
 import { listFriends } from '../services/userService';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMonetizationStore } from '../store/monetizationStore';
+import { seasonalThemes } from '../styles/medievalTheme';
+import { tokens } from '../styles/designTokens';
 import { computeOccupancyPercent, isNearFull } from '../utils/eventsHelpers';
 import { trackMetric } from '../utils/metricsSystem';
 
@@ -43,6 +45,8 @@ const SocialEventsPage: React.FC = () => {
   const [friends, setFriends] = useState<string[]>([]);
   const isLogged = !!me;
   const { seasonPassActive } = useMonetizationStore();
+  const { activeSeasonalTheme } = useMonetizationStore();
+  const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-slate-700' : 'border-slate-700';
 
   const viewerId = useMemo(() => me?.id || '', [me?.id]);
 
@@ -180,34 +184,34 @@ const SocialEventsPage: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">🎉 Eventos Sociais</h1>
+        <h1 className="text-3xl font-bold text-white">🎉 Eventos Sociais</h1>
         <div className="flex gap-2">
-          <button onClick={() => setTab('explore')} className={`px-4 py-2 rounded ${tab==='explore'?'bg-blue-600 text-white':'bg-gray-200 text-gray-800'}`}>Explorar</button>
-          <button onClick={() => setTab('create')} className={`px-4 py-2 rounded ${tab==='create'?'bg-green-600 text-white':'bg-gray-200 text-gray-800'}`}>Criar Evento</button>
-          <Link to="/organizer" className="px-4 py-2 rounded bg-purple-600 text-white">Painel do Organizador</Link>
+          <button onClick={() => setTab('explore')} className={`px-4 py-2 rounded ${tab==='explore'?tokens.tabActive:tokens.tabInactive}`}>Explorar</button>
+          <button onClick={() => setTab('create')} className={`px-4 py-2 rounded ${tab==='create'?tokens.tabActive:tokens.tabInactive}`}>Criar Evento</button>
+          <Link to="/organizer" className={`${tokens.tabActive}`}>Painel do Organizador</Link>
         </div>
       </div>
 
       {!isLogged && (
-        <div className="bg-red-50 border border-red-200 p-4 rounded mb-6 text-red-700 text-sm">Selecione um herói para atuar como usuário atual.</div>
+        <div className="bg-red-900/20 border border-red-600/40 p-4 rounded mb-6 text-red-300 text-sm">Selecione um herói para atuar como usuário atual.</div>
       )}
 
       {tab==='explore' && (
         <div className="space-y-8">
-          <div className="bg-white p-4 rounded border">
+          <div className={`bg-gray-800 p-4 rounded border ${seasonalBorder}`}>
             <div className="flex gap-2 items-end">
               <div className="flex-1">
-                <label className="block text-sm text-gray-700">Tag</label>
-                <input value={filters.tag} onChange={(e)=>setFilters({ tag: e.target.value })} placeholder="ex: música, jogos" className="mt-1 w-full p-2 border rounded" />
+                <label className="block text-sm text-slate-200">Tag</label>
+                <input value={filters.tag} onChange={(e)=>setFilters({ tag: e.target.value })} placeholder="ex: música, jogos" className="mt-1 w-full p-2 border rounded bg-slate-900 border-slate-600 text-slate-200" />
               </div>
-              <button onClick={load} className="px-4 py-2 rounded bg-gray-800 text-white">Filtrar</button>
-              <label className="flex items-center gap-2 text-xs text-gray-600 ml-2">
+              <button onClick={load} className={`${tokens.tabActive}`}>Filtrar</button>
+              <label className="flex items-center gap-2 text-xs text-slate-400 ml-2">
                 <input type="checkbox" checked={nearFullOnly} onChange={e=>setNearFullOnly(e.target.checked)} />
                 Quase lotados
               </label>
-              <label className="flex items-center gap-2 text-xs text-gray-600 ml-2">
+              <label className="flex items-center gap-2 text-xs text-slate-400 ml-2">
                 <span>Ordenar</span>
-                <select value={sortMode} onChange={e=>setSortMode(e.target.value as any)} className="px-2 py-1 rounded border">
+                <select value={sortMode} onChange={e=>setSortMode(e.target.value as any)} className="px-2 py-1 rounded border bg-slate-900 border-slate-600 text-slate-200">
                   <option value="date">Data</option>
                   <option value="occupancy">Ocupação</option>
                 </select>
@@ -215,20 +219,20 @@ const SocialEventsPage: React.FC = () => {
             </div>
           </div>
           {nearFullOnly && (
-            <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded p-3">Filtrando por eventos quase lotados (ocupação ≥ 90%).</div>
+            <div className="text-xs text-red-300 bg-red-900/20 border border-red-600/40 rounded p-3">Filtrando por eventos quase lotados (ocupação ≥ 90%).</div>
           )}
           {(loading && recommended.length===0) && (
             <div>
-              <div className="text-sm text-gray-600 inline-flex items-center gap-2 mb-3">
+              <div className="text-sm text-slate-400 inline-flex items-center gap-2 mb-3">
                 <span className="inline-block animate-spin h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full" />
                 <span>Carregando sugestões…</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="bg-white p-4 rounded border animate-pulse">
-                    <div className="h-4 bg-gray-200 rounded w-2/3" />
-                    <div className="h-3 bg-gray-200 rounded w-1/3 mt-2" />
-                    <div className="h-24 bg-gray-100 rounded mt-4" />
+                  <div key={i} className="bg-slate-800 p-4 rounded border border-slate-700 animate-pulse">
+                    <div className="h-4 bg-slate-700 rounded w-2/3" />
+                    <div className="h-3 bg-slate-700 rounded w-1/3 mt-2" />
+                    <div className="h-24 bg-slate-800 rounded mt-4" />
                   </div>
                 ))}
               </div>
@@ -237,8 +241,8 @@ const SocialEventsPage: React.FC = () => {
           {recommended.length>0 && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-xl font-semibold text-gray-800">Sugestões para você</h2>
-                <button onClick={load} className="px-3 py-1 rounded bg-gray-200">Atualizar</button>
+                <h2 className="text-xl font-semibold text-white">Sugestões para você</h2>
+                <button onClick={load} className={`${tokens.tabInactive}`}>Atualizar</button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {sortedRecommended
@@ -247,38 +251,38 @@ const SocialEventsPage: React.FC = () => {
                     return isNearFull(ev.capacity, ev.attendees);
                   })
                   .map(ev => (
-                  <div key={ev.id} className="bg-white p-4 rounded border hover:shadow">
+                  <div key={ev.id} className={`bg-gray-800 p-4 rounded border ${seasonalBorder} hover:shadow-lg hover:border-slate-600`}>
                     <div className="flex items-start justify-between">
                       <div>
-                        <div className="text-lg font-semibold text-gray-800">{ev.name}</div>
-                        <div className="text-xs text-gray-600">{new Date(ev.dateTime).toLocaleString()}</div>
-                        {ev.locationText && <div className="text-xs text-gray-600">{ev.locationText}</div>}
+                        <div className="text-lg font-semibold text-white">{ev.name}</div>
+                        <div className="text-xs text-slate-400">{new Date(ev.dateTime).toLocaleString()}</div>
+                        {ev.locationText && <div className="text-xs text-slate-400">{ev.locationText}</div>}
                       </div>
                       <div className="text-2xl">📍</div>
                     </div>
-                    {isNearFull(ev.capacity, ev.attendees) ? (<div className="mt-1 text-[11px] px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 inline-block">Quase lotado</div>) : null}
-                    <div className="text-sm text-gray-700 mt-2 line-clamp-3">{ev.description}</div>
-                    <div className="mt-1 text-[11px] text-gray-600">Ocupação: {computeOccupancyPercent(ev.capacity, ev.attendees)}%</div>
-                    <div className="w-full h-2 bg-gray-200 rounded mt-1">
-                      <div className={`h-2 rounded ${isNearFull(ev.capacity, ev.attendees) ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${computeOccupancyPercent(ev.capacity, ev.attendees)}%` }} />
+                    {isNearFull(ev.capacity, ev.attendees) ? (<div className="mt-1 text-[11px] px-2 py-0.5 rounded bg-red-900/20 text-red-300 border border-red-600/40 inline-block">Quase lotado</div>) : null}
+                    <div className="text-sm text-slate-300 mt-2 line-clamp-3">{ev.description}</div>
+                    <div className="mt-1 text-[11px] text-slate-400">Ocupação: {computeOccupancyPercent(ev.capacity, ev.attendees)}%</div>
+                    <div className="w-full h-2 bg-slate-700 rounded mt-1">
+                      <div className={`h-2 rounded ${isNearFull(ev.capacity, ev.attendees) ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${computeOccupancyPercent(ev.capacity, ev.attendees)}%` }} />
                     </div>
-                    <div className="mt-2 text-xs text-gray-500">{ev.tags.join(', ')}</div>
+                    <div className="mt-2 text-xs text-slate-400">{ev.tags.join(', ')}</div>
                     <div className="mt-3">
-                      <button onClick={()=>navigate(`/event/${ev.id}`)} className="w-full px-3 py-2 rounded bg-blue-600 text-white">Ver Detalhes</button>
+                      <button onClick={()=>navigate(`/event/${ev.id}`)} className={`w-full px-3 py-2 rounded ${tokens.tabActive}`}>Ver Detalhes</button>
                     </div>
                   </div>
                 ))}
               </div>
               <div className="mt-3">
                 {hasMoreRec ? (
-                  <button onClick={showMoreRecommended} disabled={loadingMoreRec} className="px-3 py-2 rounded bg-gray-200">{loadingMoreRec ? (<span className="inline-flex items-center gap-2"><span className="inline-block animate-spin h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full" /> Carregando…</span>) : 'Mostrar mais'}</button>
+                  <button onClick={showMoreRecommended} disabled={loadingMoreRec} className={`${tokens.tabInactive}`}>{loadingMoreRec ? (<span className="inline-flex items-center gap-2"><span className="inline-block animate-spin h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full" /> Carregando…</span>) : 'Mostrar mais'}</button>
                 ) : (
-                  <span className="text-xs text-gray-500">Fim das recomendações</span>
+                  <span className="text-xs text-slate-400">Fim das recomendações</span>
                 )}
                 {errorRec && (
-                  <div className="text-xs text-red-600 mt-1 inline-flex items-center gap-2">
+                  <div className="text-xs text-red-300 mt-1 inline-flex items-center gap-2">
                     <span>{errorRec}</span>
-                    <button onClick={showMoreRecommended} className="px-2 py-0.5 rounded bg-red-100 text-red-700">Tentar novamente</button>
+                    <button onClick={showMoreRecommended} className="px-2 py-0.5 rounded bg-red-900/20 border border-red-600/40 text-red-300">Tentar novamente</button>
                   </div>
                 )}
               </div>
@@ -286,21 +290,21 @@ const SocialEventsPage: React.FC = () => {
           )}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xl font-semibold text-gray-800">Todos os eventos</h2>
-              <button onClick={load} className="px-3 py-1 rounded bg-gray-200">Atualizar</button>
+              <h2 className="text-xl font-semibold text-white">Todos os eventos</h2>
+              <button onClick={load} className={`${tokens.tabInactive}`}>Atualizar</button>
             </div>
             {(loading && events.length===0) && (
               <div>
-                <div className="text-sm text-gray-600 inline-flex items-center gap-2 mb-3">
+                <div className="text-sm text-slate-400 inline-flex items-center gap-2 mb-3">
                   <span className="inline-block animate-spin h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full" />
                   <span>Carregando eventos…</span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} className="bg-white p-4 rounded border animate-pulse">
-                      <div className="h-4 bg-gray-200 rounded w-2/3" />
-                      <div className="h-3 bg-gray-200 rounded w-1/3 mt-2" />
-                      <div className="h-24 bg-gray-100 rounded mt-4" />
+                    <div key={i} className="bg-slate-800 p-4 rounded border border-slate-700 animate-pulse">
+                      <div className="h-4 bg-slate-700 rounded w-2/3" />
+                      <div className="h-3 bg-slate-700 rounded w-1/3 mt-2" />
+                      <div className="h-24 bg-slate-800 rounded mt-4" />
                     </div>
                   ))}
                 </div>
@@ -314,43 +318,43 @@ const SocialEventsPage: React.FC = () => {
                     return isNearFull(ev.capacity, ev.attendees);
                   })
                   .map(ev => (
-                  <div key={ev.id} className="bg-white p-4 rounded border hover:shadow">
+                  <div key={ev.id} className={`bg-gray-800 p-4 rounded border ${seasonalBorder} hover:shadow-lg hover:border-slate-600`}>
                     <div className="flex items-start justify-between">
                       <div>
-                        <div className="text-lg font-semibold text-gray-800">{ev.name}</div>
-                        <div className="text-xs text-gray-600">{new Date(ev.dateTime).toLocaleString()}</div>
-                        {ev.locationText && <div className="text-xs text-gray-600">{ev.locationText}</div>}
+                        <div className="text-lg font-semibold text-white">{ev.name}</div>
+                        <div className="text-xs text-slate-400">{new Date(ev.dateTime).toLocaleString()}</div>
+                        {ev.locationText && <div className="text-xs text-slate-400">{ev.locationText}</div>}
                       </div>
                       <div className="text-2xl">🎟️</div>
                     </div>
-                    {isNearFull(ev.capacity, ev.attendees) ? (<div className="mt-1 text-[11px] px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 inline-block">Quase lotado</div>) : null}
-                    <div className="text-sm text-gray-700 mt-2 line-clamp-3">{ev.description}</div>
-                    <div className="mt-1 text-[11px] text-gray-600">Ocupação: {computeOccupancyPercent(ev.capacity, ev.attendees)}%</div>
-                    <div className="w-full h-2 bg-gray-200 rounded mt-1">
-                      <div className={`h-2 rounded ${isNearFull(ev.capacity, ev.attendees) ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${computeOccupancyPercent(ev.capacity, ev.attendees)}%` }} />
+                    {isNearFull(ev.capacity, ev.attendees) ? (<div className="mt-1 text-[11px] px-2 py-0.5 rounded bg-red-900/20 text-red-300 border border-red-600/40 inline-block">Quase lotado</div>) : null}
+                    <div className="text-sm text-slate-300 mt-2 line-clamp-3">{ev.description}</div>
+                    <div className="mt-1 text-[11px] text-slate-400">Ocupação: {computeOccupancyPercent(ev.capacity, ev.attendees)}%</div>
+                    <div className="w-full h-2 bg-slate-700 rounded mt-1">
+                      <div className={`h-2 rounded ${isNearFull(ev.capacity, ev.attendees) ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${computeOccupancyPercent(ev.capacity, ev.attendees)}%` }} />
                     </div>
-                    <div className="mt-2 text-xs text-gray-500">Capacidade: {ev.capacity}</div>
+                    <div className="mt-2 text-xs text-slate-400">Capacidade: {ev.capacity}</div>
                     <div className="mt-3">
-                      <button onClick={()=>navigate(`/event/${ev.id}`)} className="w-full px-3 py-2 rounded bg-blue-600 text-white">Ver Detalhes</button>
+                      <button onClick={()=>navigate(`/event/${ev.id}`)} className={`w-full px-3 py-2 rounded ${tokens.tabActive}`}>Ver Detalhes</button>
                     </div>
                   </div>
                 ))}
               </div>
               <div className="mt-3">
                 {hasMoreEvents ? (
-                  <button onClick={showMoreEvents} disabled={loadingMoreEvents} className="px-3 py-2 rounded bg-gray-200">{loadingMoreEvents ? (<span className="inline-flex items-center gap-2"><span className="inline-block animate-spin h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full" /> Carregando…</span>) : 'Mostrar mais'}</button>
+                  <button onClick={showMoreEvents} disabled={loadingMoreEvents} className={`${tokens.tabInactive}`}>{loadingMoreEvents ? (<span className="inline-flex items-center gap-2"><span className="inline-block animate-spin h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full" /> Carregando…</span>) : 'Mostrar mais'}</button>
                 ) : (
-                  <span className="text-xs text-gray-500">Fim dos resultados</span>
+                  <span className="text-xs text-slate-400">Fim dos resultados</span>
                 )}
                 {errorEvents && (
-                  <div className="text-xs text-red-600 mt-1 inline-flex items-center gap-2">
+                  <div className="text-xs text-red-300 mt-1 inline-flex items-center gap-2">
                     <span>{errorEvents}</span>
-                    <button onClick={showMoreEvents} className="px-2 py-0.5 rounded bg-red-100 text-red-700">Tentar novamente</button>
+                    <button onClick={showMoreEvents} className="px-2 py-0.5 rounded bg-red-900/20 border border-red-600/40 text-red-300">Tentar novamente</button>
                   </div>
                 )}
               </div>
             </>) : (
-              <div className="text-center py-12 text-gray-500">
+              <div className="text-center py-12 text-slate-400">
                 <div className="text-6xl mb-2">🎟️</div>
                 <div>Nenhum evento disponível</div>
               </div>
@@ -360,43 +364,43 @@ const SocialEventsPage: React.FC = () => {
       )}
 
       {tab==='create' && (
-        <div className="max-w-2xl mx-auto bg-white p-6 rounded border">
+        <div className={`max-w-2xl mx-auto bg-gray-800 p-6 rounded border ${seasonalBorder}`}>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-gray-700">Nome</label>
-              <input value={name} onChange={e=>setName(e.target.value)} className="mt-1 w-full p-2 border rounded" />
+              <label className="block text-sm text-slate-200">Nome</label>
+              <input value={name} onChange={e=>setName(e.target.value)} className="mt-1 w-full p-2 border rounded bg-slate-900 border-slate-600 text-slate-200" />
             </div>
             <div>
-              <label className="block text-sm text-gray-700">Data/Horário</label>
-              <input type="datetime-local" value={dateTime} onChange={e=>setDateTime(e.target.value)} className="mt-1 w-full p-2 border rounded" />
+              <label className="block text-sm text-slate-200">Data/Horário</label>
+              <input type="datetime-local" value={dateTime} onChange={e=>setDateTime(e.target.value)} className="mt-1 w-full p-2 border rounded bg-slate-900 border-slate-600 text-slate-200" />
             </div>
             <div>
-              <label className="block text-sm text-gray-700">Localização</label>
-              <input value={locationText} onChange={e=>setLocationText(e.target.value)} className="mt-1 w-full p-2 border rounded" />
+              <label className="block text-sm text-slate-200">Localização</label>
+              <input value={locationText} onChange={e=>setLocationText(e.target.value)} className="mt-1 w-full p-2 border rounded bg-slate-900 border-slate-600 text-slate-200" />
               <div className="grid grid-cols-2 gap-2 mt-2">
-                <input placeholder="Lat" value={lat} onChange={e=>setLat(e.target.value)} className="p-2 border rounded" />
-                <input placeholder="Lng" value={lng} onChange={e=>setLng(e.target.value)} className="p-2 border rounded" />
+                <input placeholder="Lat" value={lat} onChange={e=>setLat(e.target.value)} className="p-2 border rounded bg-slate-900 border-slate-600 text-slate-200" />
+                <input placeholder="Lng" value={lng} onChange={e=>setLng(e.target.value)} className="p-2 border rounded bg-slate-900 border-slate-600 text-slate-200" />
               </div>
             </div>
             <div>
-              <label className="block text-sm text-gray-700">Descrição</label>
-              <textarea value={description} onChange={e=>setDescription(e.target.value)} rows={4} className="mt-1 w-full p-2 border rounded" />
+              <label className="block text-sm text-slate-200">Descrição</label>
+              <textarea value={description} onChange={e=>setDescription(e.target.value)} rows={4} className="mt-1 w-full p-2 border rounded bg-slate-900 border-slate-600 text-slate-200" />
             </div>
             <div>
-              <label className="block text-sm text-gray-700">Limite de participantes</label>
-              <input type="number" value={capacity} onChange={e=>setCapacity(Number(e.target.value))} className="mt-1 w-full p-2 border rounded" />
-              <div className="text-xs text-gray-500 mt-1">{seasonPassActive?.active ? 'Passe de temporada ativo: capacidade recomendada ampliada.' : 'Capacidade padrão.'}</div>
+              <label className="block text-sm text-slate-200">Limite de participantes</label>
+              <input type="number" value={capacity} onChange={e=>setCapacity(Number(e.target.value))} className="mt-1 w-full p-2 border rounded bg-slate-900 border-slate-600 text-slate-200" />
+              <div className="text-xs text-slate-400 mt-1">{seasonPassActive?.active ? 'Passe de temporada ativo: capacidade recomendada ampliada.' : 'Capacidade padrão.'}</div>
               <div className="mt-2">
-                <button onClick={()=>setCapacity(seasonPassActive?.active ? 200 : 100)} className="px-3 py-2 rounded bg-gray-800 text-white text-xs">Aplicar capacidade sugerida</button>
+                <button onClick={()=>setCapacity(seasonPassActive?.active ? 200 : 100)} className={`${tokens.tabActive} text-xs`}>Aplicar capacidade sugerida</button>
               </div>
             </div>
             <div>
-              <label className="block text-sm text-gray-700">Categorias/tags (separadas por vírgula)</label>
-              <input value={tags} onChange={e=>setTags(e.target.value)} className="mt-1 w-full p-2 border rounded" />
+              <label className="block text-sm text-slate-200">Categorias/tags (separadas por vírgula)</label>
+              <input value={tags} onChange={e=>setTags(e.target.value)} className="mt-1 w-full p-2 border rounded bg-slate-900 border-slate-600 text-slate-200" />
             </div>
             <div>
-              <label className="block text-sm text-gray-700">Privacidade</label>
-              <select value={privacy} onChange={e=>setPrivacy(e.target.value as any)} className="mt-1 w-full p-2 border rounded">
+              <label className="block text-sm text-slate-200">Privacidade</label>
+              <select value={privacy} onChange={e=>setPrivacy(e.target.value as any)} className="mt-1 w-full p-2 border rounded bg-slate-900 border-slate-600 text-slate-200">
                 <option value="public">Público</option>
                 <option value="private">Privado</option>
                 <option value="invite">Convidados específicos</option>
@@ -404,17 +408,17 @@ const SocialEventsPage: React.FC = () => {
             </div>
             {privacy !== 'public' && (
               <div>
-                <label className="block text-sm text-gray-700">Convidados (IDs separados por vírgula)</label>
-                <input value={invitedCsv} onChange={e=>setInvitedCsv(e.target.value)} className="mt-1 w-full p-2 border rounded" />
+                <label className="block text-sm text-slate-200">Convidados (IDs separados por vírgula)</label>
+                <input value={invitedCsv} onChange={e=>setInvitedCsv(e.target.value)} className="mt-1 w-full p-2 border rounded bg-slate-900 border-slate-600 text-slate-200" />
                 {friends.length>0 && (
                   <div className="mt-2">
-                    <div className="text-xs text-gray-600 mb-1">Selecione amigos para adicionar</div>
+                    <div className="text-xs text-slate-400 mb-1">Selecione amigos para adicionar</div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {friends.map(fid => (
                         <button key={fid} type="button" onClick={() => {
                           const ids = invitedCsv.split(',').map(s=>s.trim()).filter(Boolean);
                           if (!ids.includes(fid)) setInvitedCsv(ids.concat(fid).join(', '));
-                        }} className="px-2 py-1 rounded bg-gray-200 text-gray-800 hover:bg-gray-300 text-xs">
+                        }} className={`${tokens.tabInactive} text-xs`}>
                           {fid.slice(0,6)}
                         </button>
                       ))}
@@ -423,7 +427,7 @@ const SocialEventsPage: React.FC = () => {
                 )}
               </div>
             )}
-            <button onClick={handleCreate} disabled={!name.trim() || !dateTime || loading || !isLogged} className="w-full px-4 py-2 rounded bg-green-600 text-white">Criar Evento</button>
+            <button onClick={handleCreate} disabled={!name.trim() || !dateTime || loading || !isLogged} className={`w-full px-4 py-2 rounded ${tokens.tabActive}`}>Criar Evento</button>
           </div>
         </div>
       )}

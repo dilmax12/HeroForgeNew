@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { tokens } from '../styles/designTokens';
 import { Link } from 'react-router-dom';
 import { useGameSettingsStore } from '../store/gameSettingsStore';
 import { useHeroStore } from '../store/heroStore';
@@ -32,7 +33,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     name: 'Treinamento Básico de Combate',
     description: 'Aprenda os fundamentos do combate corpo a corpo',
     icon: '⚔️',
-    cost: 20,
+    cost: 30,
     currency: 'gold',
     duration: 3,
     fatiguePenalty: 15,
@@ -46,7 +47,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     name: 'Treinamento de Agilidade',
     description: 'Melhore sua velocidade e reflexos',
     icon: '🏃',
-    cost: 25,
+    cost: 30,
     currency: 'gold',
     duration: 3,
     fatiguePenalty: 15,
@@ -83,7 +84,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     fatiguePenalty: 10,
     rewards: {
       xp: 35,
-      attributes: { sabedoria: 1 }
+      attributes: { inteligencia: 1 }
     }
   },
   {
@@ -114,7 +115,7 @@ const TRAINING_OPTIONS: TrainingOption[] = [
     fatiguePenalty: 10,
     rewards: {
       xp: 50,
-      attributes: { carisma: 1 }
+      attributes: { destreza: 1 }
     },
     requirements: {
       level: 5
@@ -165,6 +166,7 @@ const Training: React.FC = () => {
   const currentRank = selectedHero?.rankData?.currentRank || (selectedHero ? rankSystem.calculateRank(selectedHero) : undefined);
   const maxAttr = currentRank ? getMaxAttributeForRank(currentRank) : undefined;
   const attemptsByStatus = { ...(selectedHero?.stats as any)?.trainingAttemptsByStatus || {} } as Record<string, number>;
+  
 
   // Atualiza o contador em tempo real enquanto houver treinamento ativo
   useEffect(() => {
@@ -223,6 +225,12 @@ const Training: React.FC = () => {
 
   // Custo com desconto global (buff da Guilda)
   const getDiscountedCost = (option: TrainingOption) => {
+    if (
+      selectedHero.progression.level <= 1 &&
+      (option.id === 'basic-combat' || option.id === 'agility-training')
+    ) {
+      return 0;
+    }
     const discountPercent = useGameSettingsStore.getState().trainingCostReductionPercent || 0;
     const capped = Math.max(0, Math.min(100, discountPercent));
     const discounted = Math.ceil(option.cost * (1 - capped / 100));
@@ -301,34 +309,28 @@ const Training: React.FC = () => {
     else newProgression.arcaneEssence = (prog.arcaneEssence || 0) - effectiveCost;
     updateHero(selectedHero.id, { progression: newProgression });
 
-    // Definir treinamento ativo
     setActiveTraining(option.id);
-    const endTime = Date.now() + (option.duration * 60 * 1000);
+    const isFirstTrainingAtLv1 = (selectedHero.progression.level === 1) && ((selectedHero.stats.trainingsToday || 0) === 0);
+    const effectiveDuration = isFirstTrainingAtLv1 ? 0.5 : option.duration;
+    const endTime = Date.now() + (effectiveDuration * 60 * 1000);
     setTrainingEndTime(endTime);
 
-    // Persistir status de treino ativo para HUD
     updateHero(selectedHero.id, {
       stats: {
         ...selectedHero.stats,
         trainingActiveUntil: new Date(endTime).toISOString(),
         trainingActiveName: option.name,
-        // também marcar último treino iniciado hoje
         lastTrainingDate: nowISO
       }
     });
 
-    // Simular conclusão do treinamento (em produção, isso seria gerenciado pelo backend)
     setTimeout(() => {
       completeTraining(option);
-    }, option.duration * 60 * 1000);
+    }, effectiveDuration * 60 * 1000);
   };
 
   const completeTraining = (option: TrainingOption) => {
-    const updates: any = {
-      progression: {
-        ...selectedHero.progression
-      }
-    };
+    const updates: any = {};
 
     // Escalonar recompensas conforme Fadiga
     const fatigue = selectedHero.progression.fatigue || 0;
@@ -338,13 +340,15 @@ const Training: React.FC = () => {
 
     // Aplicar recompensas
     if (option.rewards.xp) {
-      const gained = Math.floor(option.rewards.xp * effectiveness);
-      updates.progression.xp = (selectedHero.progression.xp || 0) + gained;
+      const isFirstTrainingAtLv1 = (selectedHero.progression.level === 1) && ((selectedHero.stats.trainingsToday || 0) === 0);
+      const baseXP = isFirstTrainingAtLv1 ? 150 : option.rewards.xp;
+      const gained = Math.floor(baseXP * effectiveness);
+      try { useHeroStore.getState().gainXP(selectedHero.id, gained); } catch {}
     }
 
     if (option.rewards.gold) {
       const gained = Math.floor(option.rewards.gold * effectiveness);
-      updates.progression.gold = (selectedHero.progression.gold || 0) + gained;
+      updates.progression = { ...(updates.progression || {}), gold: (selectedHero.progression.gold || 0) + gained };
     }
 
     if (option.rewards.attributes && maxAttr !== undefined) {
@@ -380,13 +384,18 @@ const Training: React.FC = () => {
     // Aplicar Fadiga ao concluir
     const penalty = option.fatiguePenalty ?? 20;
     const nextFatigue = Math.min(100, (selectedHero.progression.fatigue || 0) + penalty);
-    updates.progression.fatigue = nextFatigue;
+    updates.progression = { ...(updates.progression || {}), fatigue: nextFatigue };
 
+    try { delete (updates.progression as any).xp; } catch {}
+    try { delete (updates.progression as any).level; } catch {}
+    try { delete (updates.progression as any).stars; } catch {}
+    try { delete (updates.progression as any).titles; } catch {}
     updateHero(selectedHero.id, updates);
     // Atualizar metas diárias relacionadas
     updateDailyGoalProgress(selectedHero.id, 'attribute-trained', 1);
     if (option.rewards.xp) {
-      updateDailyGoalProgress(selectedHero.id, 'xp-gained', option.rewards.xp);
+      const isFirstTrainingAtLv1 = (selectedHero.progression.level === 1) && ((selectedHero.stats.trainingsToday || 0) >= 1);
+      updateDailyGoalProgress(selectedHero.id, 'xp-gained', isFirstTrainingAtLv1 ? 150 : option.rewards.xp);
     }
     if (option.rewards.gold) {
       updateDailyGoalProgress(selectedHero.id, 'gold-earned', option.rewards.gold);
@@ -440,7 +449,7 @@ const Training: React.FC = () => {
           </span>
         </div>
         <div className="mt-2 flex flex-wrap justify-center gap-2">
-          {(['forca','destreza','constituicao','inteligencia','sabedoria','carisma'] as const)
+          {(['forca','destreza','constituicao','inteligencia'] as const)
             .slice()
             .sort((a,b) => (attemptsByStatus[b]||0) - (attemptsByStatus[a]||0))
             .map(attr => {
@@ -488,16 +497,11 @@ const Training: React.FC = () => {
           const isAvailable = canAfford && meetsReqs && !activeTraining && !attrCapBlocked && !perStatusBlocked;
 
           return (
-            <div
-              key={option.id}
-              className={`bg-white p-6 rounded-lg border-2 shadow-sm ${
-                isAvailable ? 'border-green-400 hover:shadow-md' : 'border-gray-300'
-              } transition-shadow`}
-            >
+            <div key={option.id} className={`${tokens.cardBase} border-2 shadow-sm ${isAvailable ? 'border-green-400 hover:shadow-md' : 'border-gray-700'} transition-shadow`}>
               <div className="text-center mb-4">
                 <div className="text-4xl mb-2">{option.icon}</div>
-                <h3 className="text-lg font-bold text-gray-800">{option.name}</h3>
-                <p className="text-sm text-gray-600 mt-1">{option.description}</p>
+                <h3 className="text-lg font-bold">{option.name}</h3>
+                <p className="text-sm text-gray-300 mt-1">{option.description}</p>
               </div>
 
               {/* Informações */}
@@ -513,7 +517,7 @@ const Training: React.FC = () => {
           </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Duração:</span>
-                  <span className="font-medium">{option.duration} min</span>
+                  <span className="font-medium">{(selectedHero.progression.level === 1 && ((selectedHero.stats.trainingsToday || 0) === 0)) ? '30s' : `${option.duration} min`}</span>
                 </div>
               </div>
 
@@ -534,7 +538,7 @@ const Training: React.FC = () => {
                 <h4 className="text-sm font-medium text-gray-700 mb-1">Recompensas:</h4>
                 <div className="space-y-1">
                   {option.rewards.xp && (
-                    <div className="text-xs text-blue-600">+{option.rewards.xp} XP</div>
+                    <div className="text-xs text-blue-600">+{(selectedHero.progression.level === 1 && ((selectedHero.stats.trainingsToday || 0) === 0)) ? 150 : option.rewards.xp} XP</div>
                   )}
                   {option.rewards.gold && (
                     <div className="text-xs text-yellow-600">+{option.rewards.gold} Ouro</div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { tokens } from '../styles/designTokens';
 import { useHeroStore } from '../store/heroStore';
 import { 
   LEADERBOARD_CONFIGS, 
@@ -44,23 +45,23 @@ const Leaderboards: React.FC = () => {
   const [dailySummary, setDailySummary] = useState<any | null>(null);
 
   useEffect(() => {
-    if (viewHero) {
-      const generatedLeaderboards = generateAllLeaderboards(heroes);
-      setLeaderboards(generatedLeaderboards);
+    if (!viewHero) return;
+    const generatedLeaderboards = generateAllLeaderboards(heroes);
+    setLeaderboards(generatedLeaderboards);
 
-      // Carregar ranking diário e resumo
-      (async () => {
-        try {
-          const res = await fetch('/api/daily/leaderboard');
-          const data = await res.json();
-          setDailyEntries(Array.isArray(data.entries) ? data.entries : []);
-        } catch {}
-        try {
-          const summary = await getOrRunDailyResult(viewHero);
-          setDailySummary(summary);
-        } catch {}
-      })();
-    }
+    const abort = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch('/api/daily/leaderboard', { signal: abort.signal });
+        const data = await res.json();
+        setDailyEntries(Array.isArray(data.entries) ? data.entries : []);
+      } catch {}
+      try {
+        const summary = await getOrRunDailyResult(viewHero);
+        setDailySummary(summary);
+      } catch {}
+    })();
+    return () => { try { abort.abort(); } catch {} };
   }, [viewHero, heroes]);
 
   if (!viewHero) {
@@ -124,7 +125,7 @@ const Leaderboards: React.FC = () => {
     <div className="space-y-6">
       {/* Ranking Diário (MVP) */}
       {viewHero && (
-        <div className={`bg-gray-800 rounded-lg p-4 md:p-6 border ${seasonalBorder}`}>
+        <div className={`${tokens.cardBase} border ${seasonalBorder}`}>
           <div className="flex items-center justify-between mb-3 md:mb-4">
             <h3 className="text-lg md:text-xl font-bold text-white flex items-center">
               <span className="mr-2">📅</span>
@@ -255,17 +256,13 @@ const Leaderboards: React.FC = () => {
       </div>
 
       {/* Seletor de Leaderboard */}
-      <div className="bg-gray-800 rounded-lg p-4 md:p-6">
+      <div className={`${tokens.cardBase}`}>
         <div className="flex flex-wrap gap-2 mb-4 md:mb-6">
           {LEADERBOARD_CONFIGS.map(config => (
             <button
               key={config.id}
               onClick={() => setSelectedLeaderboard(config.id)}
-              className={`flex items-center space-x-2 px-3 md:px-4 py-2 rounded-lg font-medium transition-colors text-sm md:text-base ${
-                selectedLeaderboard === config.id
-                  ? 'bg-amber-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
+              className={`flex items-center space-x-2 px-3 md:px-4 py-2 rounded font-medium transition-colors text-sm md:text-base ${selectedLeaderboard === config.id ? tokens.tabActive : tokens.tabInactive}`}
             >
               <span>{config.icon}</span>
               <span>{config.name}</span>
@@ -274,24 +271,16 @@ const Leaderboards: React.FC = () => {
         </div>
 
         {/* Modo de Visualização */}
-        <div className="flex space-x-2 mb-3 md:mb-4">
+        <div className="flex gap-2 mb-3 md:mb-4">
           <button
             onClick={() => setViewMode('top')}
-            className={`px-3 md:px-4 py-2 rounded-lg font-medium transition-colors text-sm md:text-base ${
-              viewMode === 'top'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
+            className={`px-3 md:px-4 py-2 rounded font-medium transition-colors text-sm md:text-base ${viewMode === 'top' ? tokens.tabActive : tokens.tabInactive}`}
           >
             Top 10
           </button>
           <button
             onClick={() => setViewMode('around')}
-            className={`px-3 md:px-4 py-2 rounded-lg font-medium transition-colors text-sm md:text-base ${
-              viewMode === 'around'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
+            className={`px-3 md:px-4 py-2 rounded font-medium transition-colors text-sm md:text-base ${viewMode === 'around' ? tokens.tabActive : tokens.tabInactive}`}
           >
             Ao Redor de Você
           </button>

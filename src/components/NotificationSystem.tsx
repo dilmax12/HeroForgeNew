@@ -222,6 +222,12 @@ type NotificationListener = (n: NotificationPayload) => void;
 
 class NotificationBus {
   private listeners: Set<NotificationListener> = new Set();
+  private recent: Map<string, number> = new Map();
+  private minIntervalMs = 30000;
+  private recentByType: Map<string, number[]> = new Map();
+  private lastAnyTs: number = 0;
+  private globalMinSpacingMs = 6000;
+  private maxPerMinuteByType: Record<string, number> = { achievement: 3, quest: 3 };
 
   subscribe(listener: NotificationListener): () => void {
     this.listeners.add(listener);
@@ -231,6 +237,23 @@ class NotificationBus {
   }
 
   emit(notification: NotificationPayload) {
+    const key = `${notification.type}|${notification.title}|${notification.message}`;
+    const now = Date.now();
+    const last = this.recent.get(key) || 0;
+    if (now - last < this.minIntervalMs) return;
+    this.recent.set(key, now);
+    if (this.recent.size > 200) {
+      const threshold = now - this.minIntervalMs * 2;
+      this.recent.forEach((ts, k) => { if (ts < threshold) this.recent.delete(k); });
+    }
+    if (now - this.lastAnyTs < this.globalMinSpacingMs) return;
+    const type = notification.type;
+    const cap = this.maxPerMinuteByType[type] || 9999;
+    const arr = (this.recentByType.get(type) || []).filter(ts => now - ts < 60000);
+    if (arr.length >= cap) return;
+    arr.push(now);
+    this.recentByType.set(type, arr);
+    this.lastAnyTs = now;
     this.listeners.forEach((listener) => listener(notification));
   }
 }

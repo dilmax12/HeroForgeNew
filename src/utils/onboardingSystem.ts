@@ -177,6 +177,34 @@ export const ONBOARDING_FLOWS: OnboardingFlow[] = [
       }
     ]
   }
+  ,
+  {
+    id: 'unlock-hunting-basic',
+    name: 'Missões de Caça Básicas',
+    description: 'Introdução às missões de caça',
+    category: 'beginner',
+    steps: [
+      { id: 'go-hunting', title: 'Nova funcionalidade desbloqueada!', description: 'Missões de caça básicas disponíveis', content: 'Abra o painel de Caça para aceitar sua primeira missão básica.', action: { type: 'navigate', target: '/hunting' } }
+    ]
+  },
+  {
+    id: 'unlock-shop-basic',
+    name: 'Loja de Equipamentos Básicos',
+    description: 'Aprenda a comprar e equipar itens',
+    category: 'beginner',
+    steps: [
+      { id: 'go-shop', title: 'Loja desbloqueada!', description: 'Acesse a loja básica', content: 'Visite a loja para comprar equipamentos iniciais.', action: { type: 'navigate', target: '/shop' } }
+    ]
+  },
+  {
+    id: 'unlock-crafting-simple',
+    name: 'Craft Simples',
+    description: 'Como criar itens básicos',
+    category: 'beginner',
+    steps: [
+      { id: 'go-forge', title: 'Craft desbloqueado!', description: 'Acesse a forja', content: 'Abra a forja para ver receitas simples e criar um item.', action: { type: 'navigate', target: '/hero-forge' } }
+    ]
+  }
 ];
 
 export class OnboardingManager {

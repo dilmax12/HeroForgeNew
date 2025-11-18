@@ -433,6 +433,25 @@ export const AVAILABLE_TITLES: Title[] = [
     badge: '👨‍👩‍👦',
     unlockedAt: new Date()
   }
+  ,
+  {
+    id: 'estrategista-das-cartas',
+    name: 'Estrategista das Cartas',
+    description: 'Venceu 10 partidas no Jogo das Cartas',
+    rarity: 'raro',
+    category: 'special',
+    badge: '🃏',
+    unlockedAt: new Date()
+  },
+  {
+    id: 'mestre-do-rps',
+    name: 'Mestre do RPS',
+    description: 'Alcançou sequência de 5 vitórias em Pedra‑Papel‑Tesoura',
+    rarity: 'raro',
+    category: 'special',
+    badge: '🎯',
+    unlockedAt: new Date()
+  }
 ];
 
 // === ACHIEVEMENTS PARA TÍTULOS ===
@@ -505,6 +524,35 @@ export const TITLE_ACHIEVEMENTS: Achievement[] = [
     rewards: {
       xp: 2000,
       title: 'wealthy'
+    }
+  }
+  ,
+  {
+    id: 'cards-champion-achievement',
+    name: 'Campeão das Cartas',
+    description: 'Vença 10 partidas no Jogo das Cartas',
+    rarity: 'raro',
+    unlocked: false,
+    progress: 0,
+    maxProgress: 10,
+    rewards: {
+      xp: 500,
+      gold: 250,
+      title: 'estrategista-das-cartas'
+    }
+  },
+  {
+    id: 'rps-master-achievement',
+    name: 'Mestre do RPS',
+    description: 'Alcance sequência de 5 vitórias em RPS',
+    rarity: 'raro',
+    unlocked: false,
+    progress: 0,
+    maxProgress: 5,
+    rewards: {
+      xp: 400,
+      gold: 200,
+      title: 'mestre-do-rps'
     }
   }
 ];
@@ -611,6 +659,12 @@ export function updateAchievementProgress(hero: Hero): Achievement[] {
       case 'wealthy-achievement':
         newProgress = hero.progression.gold;
         break;
+      case 'cards-champion-achievement':
+        newProgress = Number((hero.stats as any)?.miniCardsWins || 0);
+        break;
+      case 'rps-master-achievement':
+        newProgress = Number((hero.stats as any)?.miniRpsBestStreak || 0);
+        break;
     }
 
     const unlocked = newProgress >= achievement.maxProgress;
@@ -689,6 +743,9 @@ export const TITLE_PASSIVE_ATTRIBUTE_BONUSES: Record<string, Partial<HeroAttribu
   'colecionador-de-reliquias': { inteligencia: 1 },
   'mestre-dos-herois': { carisma: 1 },
   'mestre-dos-dados': { carisma: 2, sabedoria: 1 }
+  ,
+  'estrategista-das-cartas': { inteligencia: 1, carisma: 1 },
+  'mestre-do-rps': { destreza: 1, sabedoria: 1 }
 };
 
 export function getTitleAttributeBonus(titleId?: string): Partial<HeroAttributes> {

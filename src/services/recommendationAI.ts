@@ -192,7 +192,7 @@ TIPOS DE RECOMENDAÇÃO:
       if (!aiService.isConfigured()) {
         return this.generateFallbackRecommendations(request);
       }
-      const response = await aiService.generateText({
+      const response = await aiService.generateTextSafe({
         prompt: this.buildRecommendationPrompt(request),
         systemMessage: this.getSystemPrompt(),
         maxTokens: 1000,
@@ -238,7 +238,7 @@ Nível: ${hero.progression.level}
 Identifique 2-3 pontos fracos principais baseados nos atributos mais baixos e na classe do herói.
 Responda apenas com uma lista simples, uma fraqueza por linha.`;
 
-      const response = await aiService.generateText({
+      const response = await aiService.generateTextSafe({
         prompt,
         systemMessage: 'Você é um analista especializado em balanceamento de personagens de RPG.',
         maxTokens: 150,
@@ -280,7 +280,7 @@ Forneça em JSON:
   "playstyleAdvice": "Conselho sobre estilo de jogo (100-150 palavras)"
 }`;
 
-      const response = await aiService.generateText({
+      const response = await aiService.generateTextSafe({
         prompt,
         systemMessage: 'Você é um especialista em builds otimizados para RPG medieval.',
         maxTokens: 400,
@@ -318,7 +318,7 @@ Os objetivos devem ser:
 
 Responda apenas com uma lista simples, um objetivo por linha.`;
 
-      const response = await aiService.generateText({
+      const response = await aiService.generateTextSafe({
         prompt,
         systemMessage: 'Você cria objetivos diários motivadores para jogadores de RPG.',
         maxTokens: 200,

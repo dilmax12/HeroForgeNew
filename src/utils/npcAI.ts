@@ -1,6 +1,10 @@
 import { Hero, HeroAttributes } from '../types/hero';
 import { notificationBus } from '../components/NotificationSystem';
 import { getGameSettings } from '../store/gameSettingsStore';
+import { updateOnSocial, cascadeGlobalReputation, randomNpcNpcEvent } from './relationshipSystem';
+import { maybeTriggerSpecialEvents } from './relationshipEvents';
+import { getNPCDialogue, getSimsDialogueTriplet } from '../services/npcDialogueService';
+import { useHeroStore } from '../store/heroStore';
 
 type RNG = () => number;
 
@@ -53,6 +57,21 @@ export function runTick(player: Hero | undefined, npcs: Hero[], emit: typeof not
   const settings = getGameSettings();
   const events: Array<{ type: string; title: string; message: string; icon?: string; duration?: number }> = [];
   npcs.forEach(npc => {
+    // Mini-life needs drift
+    const needs = npc.npcNeeds || { fadiga: 20, fome: 20, social: 50, aventura: 40, tarefa: 40 };
+    needs.fadiga = Math.min(100, needs.fadiga + 1);
+    needs.fome = Math.min(100, needs.fome + (rng() < 0.5 ? 0 : 1));
+    needs.social = Math.max(0, needs.social - (rng() < 0.5 ? 0 : 1));
+    needs.aventura = Math.min(100, needs.aventura + (Math.random() < 0.3 ? 2 : 0));
+    needs.tarefa = Math.max(0, needs.tarefa - (Math.random() < 0.2 ? 1 : 0));
+    npc.npcNeeds = needs;
+
+    // Mood from needs and routine
+    const fatigueHigh = needs.fadiga > 70;
+    const hungerHigh = needs.fome > 70;
+    const socialLow = needs.social < 30;
+    const baseMood: Hero['npcMood'] = hungerHigh ? 'irritado' : fatigueHigh ? 'cansado' : socialLow ? 'triste' : 'neutro';
+    npc.npcMood = baseMood;
     const routine = npc.npcRoutine || [];
     const currentSlot = routine.find(r => {
       const [sh, sm] = (r.start || '00:00').split(':').map(Number);
@@ -61,6 +80,16 @@ export function runTick(player: Hero | undefined, npcs: Hero[], emit: typeof not
       return h >= sh && h < eh;
     });
     const bias = currentSlot?.activity || 'exploracao';
+    if (player) {
+      const relVal = (npc.socialRelations || {})[player.id] || 0;
+      if (relVal >= 40) npc.npcMood = 'feliz';
+      else if (relVal >= 20 && npc.npcMood !== 'irritado' && npc.npcMood !== 'cansado') npc.npcMood = 'tranquilo';
+    }
+    if (bias === 'taverna') {
+      needs.fome = Math.max(0, needs.fome - 15);
+      needs.fadiga = Math.max(0, needs.fadiga - 10);
+      needs.social = Math.min(100, needs.social + 10);
+    }
     const pool = bias === 'treino' ? ['treino','treino','social','mercado']
       : bias === 'missao' ? ['missao','missao','exploracao','social']
       : bias === 'social' ? ['social','social','mercado','treino']
@@ -73,6 +102,7 @@ export function runTick(player: Hero | undefined, npcs: Hero[], emit: typeof not
       npc.stats.totalPlayTime = (npc.stats.totalPlayTime || 0) + 1;
       npc.npcMemory?.interactions.push({ heroId: npc.id, ts: new Date().toISOString(), summary: 'treino', impact: 1 });
       events.push({ type: 'xp', title: 'Treino de NPC', message: `${npc.name} aprimorou seus atributos`, icon: '🏋️', duration: 2500 });
+      needs.fome = Math.min(100, needs.fome + 2);
     }
     if (action === 'missao') {
       const gainXp = Math.floor(10 + rng() * 40);
@@ -88,13 +118,18 @@ export function runTick(player: Hero | undefined, npcs: Hero[], emit: typeof not
       events.push({ type: 'quest', title: 'Missão de NPC', message: `${npc.name} concluiu uma missão (+${gainXp} XP, +${gainGold} ouro)`, icon: '📜', duration: 2800 });
     }
     if (action === 'social' && player) {
-      const baseDelta = Math.floor(-3 + rng() * 7);
+      const baseDelta = Math.floor(-1 + rng() * 5);
       const repBoost = Math.floor(((player.reputationFactions || []).reduce((s, f) => s + Math.max(0, f.reputation), 0)) / 500);
-      const delta = clamp(baseDelta + repBoost, -5, 5);
-      adjustAffinity(npc, player.id, delta);
-      const mood = delta >= 2 ? 'amigável' : delta <= -2 ? 'hostil' : 'neutro';
-      npc.npcMemory?.interactions.push({ heroId: player.id, ts: new Date().toISOString(), summary: `social_${mood}`, impact: delta });
+      const effective = clamp(baseDelta + repBoost, -5, 5);
+      const mood = effective >= 2 ? 'amigável' : effective <= -2 ? 'hostil' : 'neutro';
+      const relRes = updateOnSocial(npc, player, mood);
+      npc.npcMemory?.interactions.push({ heroId: player.id, ts: new Date().toISOString(), summary: `social_${mood}`, impact: effective });
       events.push({ type: 'achievement', title: 'Interação Social', message: `${npc.name} interagiu com você (${mood})`, icon: '💬', duration: 2500 });
+      const notes = npc.npcMemory?.socialNotesByHeroId || {};
+      const arr = notes[player.id] || [];
+      notes[player.id] = [...arr, `${new Date().toLocaleString()} • ${mood}`].slice(-20);
+      npc.npcMemory = { ...(npc.npcMemory || {}), socialNotesByHeroId: notes };
+      try { maybeTriggerSpecialEvents(npc, player); } catch {}
       // Atualizar contato
       const mem = npc.npcMemory || { interactions: [], preferences: {}, scoreByAction: {} };
       mem.lastContactByHeroId = { ...(mem.lastContactByHeroId || {}), [player.id]: new Date().toISOString() };
@@ -146,6 +181,7 @@ export function runTick(player: Hero | undefined, npcs: Hero[], emit: typeof not
         mem.lastInteractionByType = { ...(mem.lastInteractionByType || {}), mercado: nowIso };
       }
       npc.npcMemory = mem;
+      needs.fome = Math.max(0, needs.fome - 2);
     }
     if (action === 'exploracao') {
       const found = rng() < 0.3;
@@ -159,6 +195,7 @@ export function runTick(player: Hero | undefined, npcs: Hero[], emit: typeof not
         mem.lastInteractionByType = { ...(mem.lastInteractionByType || {}), exploracao: nowIso };
       }
       npc.npcMemory = mem;
+      needs.fome = Math.min(100, needs.fome + 1);
     }
     const mem = npc.npcMemory || { interactions: [], preferences: {}, scoreByAction: {} };
     const s = mem.scoreByAction || {};
@@ -167,18 +204,11 @@ export function runTick(player: Hero | undefined, npcs: Hero[], emit: typeof not
     npc.npcMemory = mem;
   });
   if (npcs.length > 1) {
-    const a = pick(npcs);
-    let b = pick(npcs);
-    if (a.id === b.id && npcs.length > 1) b = npcs[(npcs.indexOf(a) + 1) % npcs.length];
-    const delta = Math.floor(-2 + rng() * 5);
-    const relA = { ...(a.socialRelations || {}) };
-    relA[b.id] = clamp((relA[b.id] || 0) + delta, -100, 100);
-    a.socialRelations = relA;
-    const relB = { ...(b.socialRelations || {}) };
-    relB[a.id] = clamp((relB[a.id] || 0) + delta, -100, 100);
-    b.socialRelations = relB;
-    events.push({ type: 'quest', title: 'Interação entre NPCs', message: `${a.name} e ${b.name} interagiram (${delta >= 2 ? 'amizade' : delta <= -2 ? 'rivalidade' : 'neutro'})`, icon: delta >= 2 ? '🤝' : delta <= -2 ? '⚔️' : '👋', duration: 2500 });
+    const r = randomNpcNpcEvent(npcs);
+    if (r) events.push({ type: 'quest', title: 'Interação entre NPCs', message: `${r.a.name} e ${r.b.name} interagiram (${r.delta >= 2 ? 'amizade' : r.delta <= -2 ? 'rivalidade' : 'neutro'})`, icon: r.delta >= 2 ? '🤝' : r.delta <= -2 ? '⚔️' : '👋', duration: 2500 });
   }
+
+  if (player && Math.random() < 0.2) cascadeGlobalReputation(player, npcs);
 
   // Desafios de duelo (com base na rivalidade e diferença de nível)
   if (player) {
@@ -186,16 +216,24 @@ export function runTick(player: Hero | undefined, npcs: Hero[], emit: typeof not
     const moderate = settings.npcDuelRivalryModerate ?? -30;
     const high = settings.npcDuelRivalryHigh ?? -60;
     const maxDiff = settings.npcDuelLevelDiffMax ?? 5;
-    const duelCandidates = npcs.filter(n => {
+    const rivals = npcs.filter(n => {
       const r = (n.socialRelations || {})[player.id] || 0;
       const levelDiff = Math.abs((n.progression?.level || n.level || 1) - (player.progression?.level || player.level || 1));
       return (r <= moderate && levelDiff <= maxDiff);
     });
-    if (duelCandidates.length && Math.random() < mod) {
-      const challenger = pick(duelCandidates);
+    const friendlyTrainChance = 0.15;
+    const friendly = npcs.filter(n => {
+      const r = (n.socialRelations || {})[player.id] || 0;
+      const levelDiff = Math.abs((n.progression?.level || n.level || 1) - (player.progression?.level || player.level || 1));
+      return (r > moderate && levelDiff <= maxDiff);
+    });
+    const shouldTrain = friendly.length > 0 && Math.random() < friendlyTrainChance;
+    const pool = rivals.length ? rivals : (shouldTrain ? friendly : []);
+    if (pool.length && Math.random() < mod) {
+      const challenger = pick(pool);
       const r = (challenger.socialRelations || {})[player.id] || 0;
       const levelDiff = Math.abs((challenger.progression?.level || 1) - (player.progression?.level || 1));
-      const type: 'treino' | 'honra' | 'recompensas' = r <= high ? 'honra' : (r <= moderate ? 'treino' : 'recompensas');
+      const type: 'treino' | 'honra' | 'recompensas' = rivals.includes(challenger) ? (r <= high ? 'honra' : 'treino') : 'treino';
       const invite = { npcId: challenger.id, type, expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(), levelDiff };
       const invites = Array.isArray(player.duelInvites) ? player.duelInvites : [];
       (player as any).duelInvites = [...invites, invite];
@@ -204,21 +242,15 @@ export function runTick(player: Hero | undefined, npcs: Hero[], emit: typeof not
   }
 
   // Emit compacted notifications
-  const mode = settings.npcNotificationsMode || 'compact';
-  const maxPerTick = Math.max(0, settings.npcNotifyMaxPerTick ?? 3);
-  if (mode === 'off') return;
-  if (mode === 'normal') {
-    events.slice(0, maxPerTick).forEach(e => emit(e));
-    return;
+  const allowedTitles = new Set(['Interação Social','Nova Relação']);
+  const filtered = events.filter(e => allowedTitles.has(e.title));
+  const maxPerTick = 1;
+  for (let i = 0; i < Math.min(maxPerTick, filtered.length); i++) {
+    const idx = Math.floor(Math.random() * filtered.length);
+    const e = filtered.splice(idx, 1)[0];
+    emit(e);
   }
-  const counts: Record<string, number> = {};
-  events.forEach(e => { counts[e.title] = (counts[e.title] || 0) + 1; });
-  const summary = Object.entries(counts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 4)
-    .map(([title, n]) => `${title} x${n}`)
-    .join(' • ');
-  const highlight = events.find(e => e.title === 'Missão de NPC') || events[0];
-  const msg = `${summary}${highlight ? ` • Destaque: ${highlight.message}` : ''}`.trim();
-  emit({ type: 'quest', title: 'Atividades de NPC', message: msg, icon: '👥', duration: 3500 });
+
+  // Sims-like spontaneous interaction trigger
+  // Overlay de diálogo espontâneo removido do tick global.
 }

@@ -6,7 +6,8 @@ import { Item } from '../types/hero';
 import { useMonetizationStore } from '../store/monetizationStore';
 import ThemePreviewModal from './ThemePreviewModal';
 import { trackMetric } from '../utils/metricsSystem';
-import { seasonalThemes } from '../styles/medievalTheme';
+import { seasonalThemes, medievalTheme } from '../styles/medievalTheme';
+import { tokens } from '../styles/designTokens';
 
 const Shop: React.FC = () => {
   const { getSelectedHero, updateHero } = useHeroStore();
@@ -171,26 +172,27 @@ const Shop: React.FC = () => {
   return (
     <div className="max-w-full lg:max-w-7xl mx-auto p-4 sm:p-6">
       {/* Header */}
-      <div className="text-center mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-4xl font-bold text-gray-800 mb-2">
+      {(() => { const seasonalBorder = ((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.border) || 'border-amber-500/30'; return (
+      <div className={`text-center mb-6 sm:mb-8 ${medievalTheme.layout.containers.panel} p-6 border ${seasonalBorder}`}>
+        <h1 className="text-2xl sm:text-4xl font-bold text-white mb-2">
           🏪 Loja do Aventureiro
         </h1>
-        <p className="text-gray-600 text-sm sm:text-base">
+        <p className="text-slate-300 text-sm sm:text-base">
           Equipamentos, consumíveis e itens especiais para sua jornada
         </p>
         <div className="mt-3 sm:mt-4 flex flex-wrap justify-center gap-2">
-          <div className="bg-yellow-100 border border-yellow-400 rounded-lg p-2 sm:p-3 inline-block">
-            <span className="text-yellow-800 font-medium text-sm sm:text-base">
+          <div className="bg-amber-900/20 border border-amber-500/40 rounded-lg p-2 sm:p-3 inline-block">
+            <span className="text-amber-300 font-medium text-sm sm:text-base">
               💰 Ouro: {selectedHero.progression.gold || 0}
             </span>
           </div>
-          <div className="bg-blue-100 border border-blue-400 rounded-lg p-2 sm:p-3 inline-block">
-            <span className="text-blue-800 font-medium text-sm sm:text-base">
+          <div className="bg-blue-900/20 border border-blue-500/40 rounded-lg p-2 sm:p-3 inline-block">
+            <span className="text-blue-300 font-medium text-sm sm:text-base">
               🏆 Glória: {selectedHero.progression.glory || 0}
             </span>
           </div>
-          <div className="bg-purple-100 border border-purple-400 rounded-lg p-2 sm:p-3 inline-block">
-            <span className="text-purple-800 font-medium text-sm sm:text-base">
+          <div className="bg-purple-900/20 border border-purple-500/40 rounded-lg p-2 sm:p-3 inline-block">
+            <span className="text-purple-300 font-medium text-sm sm:text-base">
               ✨ Essência Arcana: {selectedHero.progression.arcaneEssence || 0}
             </span>
           </div>
@@ -198,36 +200,31 @@ const Shop: React.FC = () => {
         <div className="mt-3 sm:mt-4">
           <a
             href="#cosmetics"
-            className="inline-block px-3 sm:px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors text-sm sm:text-base"
+            className="inline-block px-3 sm:px-4 py-2 bg-gradient-to-r from-rose-600 to-amber-600 text-white rounded-lg hover:brightness-110 transition-colors text-sm sm:text-base"
           >
             💖 Apoie o projeto (Cosméticos)
           </a>
         </div>
       </div>
+      );})()}
 
       {/* Navegação */}
       <div className="flex flex-wrap justify-center gap-2 mb-4 sm:mb-6">
         <button
           onClick={() => { setShowDailyOffers(false); setShowForgeServices(false); trackMetric.featureUsed(selectedHero.id, 'shop-tab-catalog'); }}
-          className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
-            !showDailyOffers && !showForgeServices ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+          className={`px-3 sm:px-4 py-2 rounded font-medium transition-colors text-sm sm:text-base ${(!showDailyOffers && !showForgeServices) ? tokens.tabActive : tokens.tabInactive} focus:outline-none focus:ring-2 focus:ring-indigo-500`}
         >
           Catálogo Geral
         </button>
         <button
           onClick={() => { setShowDailyOffers(true); setShowForgeServices(false); trackMetric.featureUsed(selectedHero.id, 'shop-tab-daily'); }}
-          className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
-            showDailyOffers ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+          className={`px-3 sm:px-4 py-2 rounded font-medium transition-colors text-sm sm:text-base ${showDailyOffers ? tokens.tabActive : tokens.tabInactive} focus:outline-none focus:ring-2 focus:ring-indigo-500`}
         >
           ⭐ Ofertas Diárias
         </button>
         <button
           onClick={() => { setShowDailyOffers(false); setShowForgeServices(true); trackMetric.featureUsed(selectedHero.id, 'shop-tab-forge'); }}
-          className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
-            showForgeServices ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+          className={`px-3 sm:px-4 py-2 rounded font-medium transition-colors text-sm sm:text-base ${showForgeServices ? tokens.tabActive : tokens.tabInactive} focus:outline-none focus:ring-2 focus:ring-indigo-500`}
         >
           ⚒️ Forja e Encantamentos
         </button>
@@ -235,8 +232,8 @@ const Shop: React.FC = () => {
 
       {/* Comunicação de fairness e remover anúncios */}
       <div className="max-w-full sm:max-w-4xl mx-auto mb-6">
-        <div className="rounded-lg border bg-white p-3 sm:p-4">
-          <div className="text-sm sm:text-base text-gray-700">
+        <div className={`rounded-lg border bg-gray-800 p-3 sm:p-4 ${medievalTheme.effects.shadows.small}`}>
+          <div className="text-sm sm:text-base text-gray-200">
             O jogo core é gratuito e justo. Compras são 100% opcionais e apenas cosméticas ou narrativas.
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -275,8 +272,8 @@ const Shop: React.FC = () => {
 
       {/* Banner sazonal com link para Premium */}
       <div className="max-w-full sm:max-w-4xl mx-auto mb-6">
-        <div className="rounded-lg border bg-white p-3 sm:p-4 flex items-center justify-between">
-          <div className="text-sm sm:text-base text-gray-700 flex items-center gap-2">
+        <div className="rounded-lg border bg-gray-800 p-3 sm:p-4 flex items-center justify-between">
+          <div className="text-sm sm:text-base text-gray-200 flex items-center gap-2">
             <span>{((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.accents?.[0]) || '🎭'}</span>
             <span>Ofertas sazonais disponíveis conforme o tema atual.</span>
           </div>
@@ -287,7 +284,7 @@ const Shop: React.FC = () => {
       {showDailyOffers ? (
         /* Ofertas Diárias */
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-center mb-4 sm:mb-6 text-orange-600">
+          <h2 className="text-xl sm:text-2xl font-bold text-center mb-4 sm:mb-6 text-amber-400">
             ⭐ Ofertas Especiais do Dia (20% OFF)
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -297,7 +294,7 @@ const Shop: React.FC = () => {
       ) : showForgeServices ? (
         /* Forja e Encantamentos */
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-center mb-4 sm:mb-6 text-gray-800">⚒️ Forja e Encantamentos</h2>
+          <h2 className="text-xl sm:text-2xl font-bold text-center mb-4 sm:mb-6 text-white">⚒️ Forja e Encantamentos</h2>
 
           {/* Refinar */}
           <div className="mb-6">
@@ -320,7 +317,7 @@ const Shop: React.FC = () => {
                 };
                 const cfg = currentRarity ? cfgMap[currentRarity] : undefined;
                 return (
-                  <div key={slot} className="p-4 rounded-lg border bg-white">
+                  <div key={slot} className="p-4 rounded-lg border bg-gray-800 text-gray-200">
                     <div className="font-semibold">{label}</div>
                     <div className="text-sm text-gray-600">{equippedId ? (baseItem?.name || 'Item Personalizado') : 'Nenhum equipado'}</div>
                     <div className="text-sm mt-1">Raridade: {currentRarity ? currentRarity : '-'}</div>
@@ -387,7 +384,7 @@ const Shop: React.FC = () => {
                 const label = slot === 'weapon' ? 'Arma' : slot === 'armor' ? 'Armadura' : 'Acessório';
                 const enchanted = equippedId ? selectedHero.inventory.enchantments?.[equippedId]?.special : undefined;
                 return (
-                  <div key={slot} className="p-4 rounded-lg border bg-white">
+                  <div key={slot} className="p-4 rounded-lg border bg-gray-800 text-gray-200">
                     <div className="font-semibold">{label}</div>
                     <div className="text-sm text-gray-600">{equippedId ? (SHOP_CATEGORIES.weapons.items.concat(SHOP_CATEGORIES.armor.items, SHOP_CATEGORIES.accessories.items).find(i => i.id === equippedId)?.name || 'Item Personalizado') : 'Nenhum equipado'}</div>
                     <div className="text-sm mt-1">Encanto: {enchanted ? enchanted : '-'}</div>
@@ -414,11 +411,7 @@ const Shop: React.FC = () => {
               <button
                 key={key}
                 onClick={() => setActiveCategory(key)}
-                className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
-                  activeCategory === key
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                className={`px-3 sm:px-4 py-2 rounded font-medium transition-colors text-sm sm:text-base ${activeCategory === key ? tokens.tabActive : tokens.tabInactive} focus:outline-none focus:ring-2 focus:ring-indigo-500`}
               >
                 {category.icon} {category.name}
               </button>
@@ -432,8 +425,8 @@ const Shop: React.FC = () => {
 
           {/* Cosméticos e Premium (visual) */}
           <div id="cosmetics" className="mt-8 sm:mt-12">
-            <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-800">🎨 Cosméticos (visual) e Premium</h2>
-            <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">Personalize molduras e fundos do herói. Itens premium são opcionais e não afetam o balanceamento narrativo.</p>
+            <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-white">🎨 Cosméticos (visual) e Premium</h2>
+            <p className="text-slate-300 mb-4 sm:mb-6 text-sm sm:text-base">Personalize molduras e fundos do herói. Itens premium são opcionais e não afetam o balanceamento narrativo.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
               {[{
                 id: 'frame-gold', name: 'Moldura Dourada', icon: '🟨', req: '500 XP', unlocked: (selectedHero.progression.xp || 0) >= 500
@@ -458,10 +451,10 @@ const Shop: React.FC = () => {
               }, {
                 id: 'season-carnaval', name: 'Tema Sazonal: Mascarada dos Bardos', icon: '🎭', req: 'Sazonal', unlocked: true
               }].map(c => (
-                <div key={c.id} className={`p-3 sm:p-4 rounded-lg border ${c.unlocked ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-gray-50'}`}>
+                <div key={c.id} className={`p-3 sm:p-4 rounded-lg border ${c.unlocked ? 'border-emerald-500/40 bg-emerald-900/10' : 'border-slate-600 bg-slate-800'} text-white`}>
                   <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">{c.icon}</div>
                   <div className="font-semibold text-sm sm:text-base">{c.name}</div>
-                  <div className="text-xs sm:text-sm text-gray-600">Requisito: {c.req}</div>
+                  <div className="text-xs sm:text-sm text-gray-300">Requisito: {c.req}</div>
                   <div className="mt-2 sm:mt-3 flex gap-2">
                 <button
                   onClick={() => { if (c.id.startsWith('frame-')) {
@@ -487,7 +480,7 @@ const Shop: React.FC = () => {
                     const target = map[c.id];
                     useMonetizationStore.getState().setActiveSeasonalTheme(target);
                   }}}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium ${c.unlocked ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'} focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                  className={`px-3 py-2 rounded text-sm font-medium ${c.unlocked ? tokens.tabActive : 'bg-gray-700 text-gray-400 cursor-not-allowed'} focus:outline-none focus:ring-2 focus:ring-indigo-500`}
                 >
                   {c.unlocked ? (
                     c.id.startsWith('frame-')
@@ -525,17 +518,17 @@ const Shop: React.FC = () => {
                 </div>
               ))}
             </div>
-            <div className="mt-6 text-sm text-gray-500">
+            <div className="mt-6 text-sm text-gray-300">
               Itens premium são opcionais; servem apenas para personalização visual.
             </div>
           </div>
           <ThemePreviewModal open={previewOpen} previewFrameId={previewId} onClose={() => setPreviewOpen(false)} />
           {/* Conteúdo Premium: DLCs, Final Alternativo, Passe e Tip Jar */}
           <div id="premium-content" className="mt-10">
-            <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-800">📦 Conteúdo Premium</h2>
-            <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">Opcional, narrativo e sem impacto em balanceamento. Gratuito permanece completo.</p>
+            <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-white">📦 Conteúdo Premium</h2>
+            <p className="text-slate-300 mb-4 sm:mb-6 text-sm sm:text-base">Opcional, narrativo e sem impacto em balanceamento. Gratuito permanece completo.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-              <div className="p-4 rounded-lg border bg-white">
+              <div className="p-4 rounded-lg border bg-gray-800 text-white">
                 <div className="font-semibold">Capítulo Bônus: Ecos do Destino</div>
                 <div className="text-sm text-gray-600 mb-2">Adiciona um capítulo extra à sua jornada com cenas exclusivas.</div>
                 <button
@@ -562,7 +555,7 @@ const Shop: React.FC = () => {
                   className="mt-2 px-3 py-2 rounded bg-amber-600 text-white hover:bg-amber-700"
                 >Comprar DLC</button>
               </div>
-              <div className="p-4 rounded-lg border bg-white">
+              <div className="p-4 rounded-lg border bg-gray-800 text-white">
                 <div className="font-semibold">Final Alternativo: Caminho das Sombras</div>
                 <div className="text-sm text-gray-600 mb-2">Desbloqueia um epílogo alternativo com escolhas dramáticas.</div>
                 <button
@@ -570,7 +563,7 @@ const Shop: React.FC = () => {
                   className="mt-2 px-3 py-2 rounded bg-amber-600 text-white hover:bg-amber-700"
                 >Comprar DLC</button>
               </div>
-              <div className="p-4 rounded-lg border bg-white">
+              <div className="p-4 rounded-lg border bg-gray-800 text-white">
                 <div className="font-semibold">Passe de Temporada</div>
                 <div className="text-sm text-gray-600 mb-2">Conteúdo narrativo exclusivo por temporada.</div>
                 <button
@@ -578,7 +571,7 @@ const Shop: React.FC = () => {
                   className="mt-2 px-3 py-2 rounded bg-purple-600 text-white hover:bg-purple-700"
                 >Ativar Passe</button>
               </div>
-              <div className="p-4 rounded-lg border bg-white">
+              <div className="p-4 rounded-lg border bg-gray-800 text-white">
                 <div className="font-semibold">Apoio ao Criador (Tip Jar)</div>
                 <div className="text-sm text-gray-600 mb-2">Recompensas simbólicas: emblemas e molduras de agradecimento.</div>
                 <div className="flex gap-2">

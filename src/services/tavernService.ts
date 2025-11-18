@@ -219,7 +219,7 @@ Regras: máximo 120 caracteres por rumor, sem spoilers, tom leve e divertido.`;
     const text = (json?.text || json?.resultado || '') as string;
     const lines = String(text)
       .split(/\r?\n/)
-      .map(s => s.replace(/^[-•\d\.\)\s]+/, '').trim())
+      .map(s => s.replace(/^[-•\d.\)\s]+/, '').trim())
       .filter(s => s.length > 0)
       .slice(0, 5);
     return { rumors: lines };

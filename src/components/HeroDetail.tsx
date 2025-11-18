@@ -1,6 +1,7 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useState, Suspense, lazy } from 'react';
 import { useHeroStore } from '../store/heroStore';
+import { getActiveTitle } from '../utils/titles';
 import { SHOP_ITEMS, ITEM_SETS } from '../utils/shop';
 import { getAvailableRecipes } from '../utils/forging';
 
@@ -202,6 +203,16 @@ const HeroDetail = () => {
                 {hero.name}
               </h1>
               <p className="text-sm text-gray-300">{hero.class} • {hero.race}</p>
+              {(() => {
+                const t = getActiveTitle(hero);
+                if (!t) return null;
+                return (
+                  <div className="mt-1 inline-flex items-center gap-2 text-xs">
+                    <span className="px-2 py-1 rounded bg-gray-700/60 border border-white/10 text-gray-200">{t.badge} {t.name}</span>
+                    <Link to="/titles" className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white">Gerenciar</Link>
+                  </div>
+                );
+              })()}
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">

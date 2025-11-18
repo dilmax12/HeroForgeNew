@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import './index.css'
+import { getGameSettings } from './store/gameSettingsStore.ts'
 
 // Configuração dinâmica do basename para diferentes ambientes
 const getBasename = () => {
@@ -45,3 +46,26 @@ if (import.meta.env.PROD) {
     })
   }
 }
+
+// Flags de desempenho baseadas no dispositivo/rede
+try {
+  const store = getGameSettings()
+  const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const conn = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection
+  const saveData = !!(conn && conn.saveData)
+  const effectiveType = conn && conn.effectiveType ? String(conn.effectiveType) : 'unknown'
+  store.updateSettings({ reducedMotionEnabled: reduced, saveDataEnabled: saveData, networkEffectiveType: effectiveType })
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', (e: any) => {
+      try { getGameSettings().updateSettings({ reducedMotionEnabled: !!e.matches }) } catch {}
+    })
+  }
+  if (conn && typeof conn.addEventListener === 'function') {
+    conn.addEventListener('change', () => {
+      try {
+        const c = (navigator as any).connection
+        getGameSettings().updateSettings({ saveDataEnabled: !!(c && c.saveData), networkEffectiveType: c && c.effectiveType ? String(c.effectiveType) : 'unknown' })
+      } catch {}
+    })
+  }
+} catch {}

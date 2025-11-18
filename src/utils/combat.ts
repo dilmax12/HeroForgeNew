@@ -407,10 +407,10 @@ export function resolveSkillUse(user: Hero, target: Hero | CombatEntity, skill: 
       basePower += user.attributes.forca * 0.5;
       break;
     case 'support':
-      basePower += user.attributes.sabedoria * 0.3;
+      basePower += user.attributes.inteligencia * 0.3;
       break;
     case 'buff':
-      basePower += user.attributes.carisma * 0.2;
+      basePower += user.attributes.destreza * 0.2;
       break;
   }
   console.debug('[combat] basePower', basePower);

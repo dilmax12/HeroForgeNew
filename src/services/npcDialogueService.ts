@@ -78,3 +78,37 @@ export function getNPCDialogue(npc: Hero, player: Hero, context: string): string
   }
   return friendlyWrap;
 }
+
+export function getSimsDialogueTriplet(npc: Hero, player: Hero): string[] {
+  const base = npc.npcPersonality?.archetype || 'explorador';
+  const pool: string[] = [
+    'Como vai? Precisa de ajuda com essas ruínas?',
+    'Você tem poções sobrando? Posso trocar por mapas.',
+    'Quer companhia numa missão rápida?',
+    'Ouvi falar de bandidos perto do mercado. Vamos investigar?',
+    'Tem uma corda extra? A minha arrebentou.',
+    'Você viu pegadas estranhas perto da taverna?',
+    'Posso te emprestar um pergaminho, se precisar.',
+    'Treino mais tarde? Preciso melhorar minha guarda.',
+    'Tem essência bestial para troca?',
+    'Quer identificar um ovo raro comigo?',
+    'Precisamos de tochas. Tem algumas?',
+    'Topa explorar a gruta nordeste?',
+    'Você conseguiu montar? Posso te passar um item.',
+    'Tem notícias do conselho da guilda?',
+    'Rastreie comigo — ouvi metal batendo.',
+    'Vamos vender loot no mercado agora?',
+    'Quer comparar mapas? O meu está incompleto.',
+    'Topa escoltar um mercador?',
+    'Tem flechas de sobra? Estou sem.',
+    'Precisamos de água. O poço secou hoje.',
+    'Por que não reunimos uma party para a dungeon?',
+    'Você prefere caminho pela mata ou pelas ruínas?',
+    'Pode me ensinar uma técnica de defesa?',
+    'Tem runas antigas para estudo?',
+  ];
+  const q = pool[Math.floor(Math.random()*pool.length)];
+  const offer = 'Posso te dar cobertura se aceitar.';
+  const req = 'Se tiver um item extra, podemos trocar.';
+  return [q, offer, req];
+}

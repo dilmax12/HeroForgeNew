@@ -610,16 +610,24 @@ export interface Hero {
     riskAffinity: number;
     chatStyle: 'amigavel' | 'sarcastico' | 'formal' | 'quieto';
     prefersParty?: boolean;
+    likesItems?: string[];
+    dislikesItems?: string[];
+    rumorPriceBias?: number; // 0.8 barato, 1.2 caro
   };
+  npcTier?: 'beginner' | 'intermediate' | 'veteran';
+  npcMood?: 'feliz' | 'tranquilo' | 'neutro' | 'estressado' | 'irritado' | 'triste' | 'cansado';
+  npcNeeds?: { fadiga: number; fome: number; social: number; aventura: number; tarefa: number };
   npcMemory?: {
     interactions: { heroId: string; ts: string; summary: string; impact?: number }[];
     preferences?: { quests?: string[]; items?: string[]; locations?: string[] };
     scoreByAction?: Record<string, number>;
-    friendStatusByHeroId?: Record<string, 'conhecido' | 'amigo' | 'melhor_amigo'>;
+    friendStatusByHeroId?: Record<string, 'rival' | 'conhecido' | 'amigo' | 'melhor_amigo' | 'aliado'>;
     lastContactByHeroId?: Record<string, string>;
     lastInteractionByType?: Record<string, string>;
+    socialNotesByHeroId?: Record<string, string[]>;
   };
   npcRoutine?: { start: string; end: string; activity: string; location?: string }[];
+  npcLore?: { passado?: string; objetivo?: string; problema?: string; medo?: string; sonho?: string; unlocked?: string[] };
   
   // Missões ativas
   activeQuests: string[]; // Quest IDs
@@ -657,6 +665,26 @@ export interface Hero {
     duelsWon?: number;
     duelsLost?: number;
     duelsPlayed?: number;
+    // Mini-jogos
+    tavernDiceRolls?: number;
+    tavernBestRoll?: number;
+    tavernCrits?: number;
+    tavernRollDate?: string;
+    tavernRollCount?: number;
+    tavernRerollDate?: string;
+    tavernRerollCount?: number;
+    tavernRerollTokens?: number;
+    // Cartas
+    miniCardsWins?: number;
+    miniCardsLosses?: number;
+    miniCardsBestScore?: number;
+    miniCardsLastDate?: string;
+    // Pedra-Papel-Tesoura
+    miniRpsWins?: number;
+    miniRpsLosses?: number;
+    miniRpsStreak?: number;
+    miniRpsBestStreak?: number;
+    miniRpsLastDate?: string;
   };
   
   // Advanced Features
@@ -700,6 +728,14 @@ export interface Hero {
     specialSkills?: string[];
     permanentBonusAttributes?: Partial<HeroAttributes>;
   };
+  hunting?: {
+    cooldownEndsAt?: string;
+    lastCompletedAt?: string;
+  };
+  questing?: {
+    cooldownEndsAt?: string;
+    lastCompletedAt?: string;
+  };
   friends?: string[];
   bestFriends?: string[];
   duelInvites?: { npcId: string; type: 'treino' | 'honra' | 'recompensas'; expiresAt: string; levelDiff: number }[];
@@ -714,6 +750,8 @@ export interface Party {
   createdAt: string;
   sharedLoot?: boolean;
   sharedXP?: boolean;
+  inviteTerms?: Record<string, { duration: 'one_mission' | 'days'; days?: number; rewardShare?: number; leaderPref?: 'inviter' | 'invitee' | 'none' }>;
+  contractByHeroId?: Record<string, { duration: 'one_mission' | 'days'; days?: number; rewardShare: number; leaderPref?: 'inviter' | 'invitee' | 'none' }>;
 }
 
 export interface HeroCreationData {

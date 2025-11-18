@@ -6,6 +6,10 @@ import { SHOP_ITEMS } from '../utils/shop';
 import AchievementsList from './AchievementsList';
 import ReputationPanel from './ReputationPanel';
 import AttributeAllocationPanel from './AttributeAllocationPanel';
+import { tokens } from '../styles/designTokens';
+import { calculateXPForLevel, LEVEL_CAP } from '../utils/progression';
+import { medievalTheme, seasonalThemes } from '../styles/medievalTheme';
+import { useMonetizationStore } from '../store/monetizationStore';
 
 interface HeroProgressionProps {
   hero: Hero;
@@ -15,13 +19,10 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<'overview' | 'equipment' | 'achievements' | 'reputation'>('overview');
   const { useItem, equipItem, sellItem, unequipItem } = useHeroStore();
+  const { activeSeasonalTheme } = useMonetizationStore();
+  const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-amber-600/30' : 'border-amber-600/30';
 
   // Calcular XP necessário para o próximo nível
-  const calculateXPForLevel = (level: number): number => {
-    return level * 100 + (level - 1) * 50;
-  };
-
-  const LEVEL_CAP = 20;
   const isMaxLevel = hero.progression.level >= LEVEL_CAP;
   const currentLevelXP = calculateXPForLevel(hero.progression.level);
   const nextLevelXP = isMaxLevel ? currentLevelXP : calculateXPForLevel(hero.progression.level + 1);
@@ -114,7 +115,7 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       {/* Header do Herói */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-lg">
+      <div className={`bg-gradient-to-r ${medievalTheme.gradients.backgrounds.hero} text-white p-6 rounded-lg border border-slate-700 shadow-xl`}>
         <div className="flex items-center space-x-4">
           <div className="text-6xl">{hero.avatar}</div>
           <div className="flex-1">
@@ -135,25 +136,19 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
       </div>
 
       {/* Navegação por Abas */}
-      <div className="border-b border-gray-200">
-        <nav className="flex space-x-8">
+      <div className="border-b border-slate-700">
+        <nav className="flex gap-2 flex-wrap">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`
-                flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors
-                ${activeTab === tab.id
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }
-              focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+              className={`flex items-center gap-2 py-2 px-3 rounded border font-medium text-sm transition-colors ${activeTab === tab.id ? tokens.tabActive : tokens.tabInactive} focus:outline-none focus:ring-2 focus:ring-indigo-500`}
             >
               <span>{tab.icon}</span>
               <span className="flex items-center gap-2">
                 {tab.label}
                 {tab.id === 'overview' && typeof hero.attributePoints === 'number' && hero.attributePoints > 0 && (
-                  <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-amber-500 text-white animate-pulse">
+                  <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-amber-600 text-white animate-pulse">
                     {hero.attributePoints} pts
                   </span>
                 )}
@@ -167,42 +162,42 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Progressão de XP */}
-          <div className="bg-white p-6 rounded-lg border border-gray-200">
-            <h3 className="text-xl font-bold mb-4 text-gray-800">📈 Progressão</h3>
+          <div className={`${tokens.cardBase} border ${seasonalBorder}`}>
+            <h3 className="text-xl font-bold mb-4 text-white">📈 Progressão</h3>
             
             <div className="space-y-4">
               <div>
                 <div className="flex justify-between text-sm mb-2">
-                  <span>Experiência</span>
-                  <span>{isMaxLevel ? 'MAX' : `${hero.progression.xp} XP`}</span>
+                  <span className="text-gray-300">Experiência</span>
+                  <span className="text-gray-200">{isMaxLevel ? 'MAX' : `${hero.progression.xp} XP`}</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
+                <div className="w-full bg-gray-700 rounded-full h-3">
                   <div 
-                    className="bg-gradient-to-r from-green-400 to-blue-500 h-3 rounded-full transition-all duration-500"
+                    className={`bg-gradient-to-r ${medievalTheme.gradients.buttons.success} h-3 rounded-full transition-all duration-500`}
                     style={{ width: `${xpPercentage}%` }}
                   />
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-gray-400 mt-1">
                   {isMaxLevel ? 'Nível Máximo' : `${xpProgress}/${xpNeeded} XP para o nível ${hero.progression.level + 1}`}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-700">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">{hero.stats.questsCompleted}</div>
-                  <div className="text-sm text-gray-600">Missões Completas</div>
+                  <div className="text-2xl font-bold text-blue-400">{hero.stats.questsCompleted}</div>
+                  <div className="text-sm text-gray-300">Missões Completas</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-red-600">{hero.stats.totalCombats}</div>
-                  <div className="text-sm text-gray-600">Combates</div>
+                  <div className="text-2xl font-bold text-red-400">{hero.stats.totalCombats}</div>
+                  <div className="text-sm text-gray-300">Combates</div>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Atributos e Bônus */}
-          <div id="atributos" className="bg-white p-6 rounded-lg border border-gray-200 text-gray-900">
-            <h3 className="text-xl font-bold mb-4 text-gray-800">💪 Atributos</h3>
+          <div id="atributos" className={`${tokens.cardBase} border border-slate-700`}>
+            <h3 className="text-xl font-bold mb-4 text-white">💪 Atributos</h3>
             {/* Painel de Alocação de Pontos */}
             <div className="mb-4">
               <AttributeAllocationPanel hero={hero} />
@@ -211,40 +206,32 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-900">Força</span>
-                  <span className="font-medium text-gray-900">{hero.attributes.forca}</span>
+                  <span className="text-sm text-gray-300">Força</span>
+                  <span className="font-medium text-white">{hero.attributes.forca}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-900">Destreza</span>
-                  <span className="font-medium text-gray-900">{hero.attributes.destreza}</span>
+                  <span className="text-sm text-gray-300">Destreza</span>
+                  <span className="font-medium text-white">{hero.attributes.destreza}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-900">Constituição</span>
-                  <span className="font-medium text-gray-900">{hero.attributes.constituicao}</span>
+                  <span className="text-sm text-gray-300">Constituição</span>
+                  <span className="font-medium text-white">{hero.attributes.constituicao}</span>
                 </div>
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-900">Inteligência</span>
-                  <span className="font-medium text-gray-900">{hero.attributes.inteligencia}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-900">Sabedoria</span>
-                  <span className="font-medium text-gray-900">{hero.attributes.sabedoria}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-900">Carisma</span>
-                  <span className="font-medium text-gray-900">{hero.attributes.carisma}</span>
+                  <span className="text-sm text-gray-300">Inteligência</span>
+                  <span className="font-medium text-white">{hero.attributes.inteligencia}</span>
                 </div>
               </div>
             </div>
 
             {/* Atributos Derivados */}
-            <div className={`mt-6 pt-4 border-t transition ${highlightDerived ? 'ring-2 ring-amber-300 rounded-md' : ''}`}>
+            <div className={`mt-6 pt-4 border-t border-slate-700 transition ${highlightDerived ? 'ring-2 ring-amber-500 rounded-md' : ''}`}>
               <div className="flex items-center justify-between mb-3">
-                <h4 className="font-semibold text-gray-900">Atributos Derivados</h4>
+                <h4 className="font-semibold text-white">Atributos Derivados</h4>
                 {highlightDerived && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-700">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-amber-600/20 text-amber-400">
                     <span>⚡</span>
                     <span>Atributos atualizados</span>
                   </span>
@@ -252,44 +239,44 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-900">HP</span>
-                  <span className="font-medium text-gray-900">
+                  <span className="text-sm text-gray-300">HP</span>
+                  <span className="font-medium text-white">
                     {hero.derivedAttributes.currentHp}/{hero.derivedAttributes.hp}
                     {totalBonuses.hp > 0 && <span className="text-green-600"> (+{totalBonuses.hp})</span>}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-900">MP</span>
-                  <span className="font-medium text-gray-900">
+                  <span className="text-sm text-gray-300">MP</span>
+                  <span className="font-medium text-white">
                     {hero.derivedAttributes.currentMp}/{hero.derivedAttributes.mp}
                     {totalBonuses.mp > 0 && <span className="text-blue-600"> (+{totalBonuses.mp})</span>}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-900">Ataque</span>
-                  <span className="font-medium text-gray-900">
+                  <span className="text-sm text-gray-300">Ataque</span>
+                  <span className="font-medium text-white">
                     {hero.attributes.forca}
                     {totalBonuses.attack > 0 && <span className="text-red-600"> (+{totalBonuses.attack})</span>}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-900">Defesa</span>
-                  <span className="font-medium text-gray-900">
+                  <span className="text-sm text-gray-300">Defesa</span>
+                  <span className="font-medium text-white">
                     {hero.derivedAttributes.armorClass}
                     {totalBonuses.defense > 0 && <span className="text-blue-600"> (+{totalBonuses.defense})</span>}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-900">Poder</span>
-                  <span className="font-medium text-gray-900">{powerValue}</span>
+                  <span className="text-sm text-gray-300">Poder</span>
+                  <span className="font-medium text-white">{powerValue}</span>
                 </div>
               </div>
           </div>
           </div>
 
           {/* Inventário Rápido */}
-          <div className="bg-white p-6 rounded-lg border border-gray-200 lg:col-span-2 text-gray-900">
-            <h3 className="text-xl font-bold mb-4 text-gray-900">🎒 Inventário</h3>
+          <div className={`${tokens.cardBase} border ${seasonalBorder} lg:col-span-2`}>
+            <h3 className="text-xl font-bold mb-4 text-white">🎒 Inventário</h3>
             
             {Object.keys(hero.inventory.items).length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -298,14 +285,14 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
                   if (!item || quantity <= 0) return null;
                   
                   return (
-                    <div key={itemId} className="bg-gray-50 p-3 rounded-lg text-center">
+                    <div key={itemId} className="bg-gray-800 border border-gray-700 p-3 rounded-lg text-center">
                       <div className="text-2xl mb-1">{item.icon}</div>
-                      <div className="text-sm font-medium text-gray-900">{item.name}</div>
-                      <div className="text-xs text-gray-700">x{quantity}</div>
+                      <div className="text-sm font-medium text-white">{item.name}</div>
+                      <div className="text-xs text-gray-300">x{quantity}</div>
                       {item.type === 'consumable' && (
                         <button
                           onClick={() => useItem(hero.id, itemId)}
-                          className="mt-2 px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="mt-2 px-2 py-1 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         >
                           Usar
                         </button>
@@ -315,7 +302,7 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
                 })}
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-8 text-gray-400">
                 <div className="text-4xl mb-2">📦</div>
                 <div>Inventário vazio</div>
               </div>
@@ -328,21 +315,21 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Slots de Equipamento (multi) */}
       <div className="lg:col-span-2 space-y-6">
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-bold mb-4 text-gray-800">⚔️ Armas</h3>
+        <div className={`${tokens.cardBase} border ${seasonalBorder}`}>
+          <h3 className="text-lg font-bold mb-4 text-white">⚔️ Armas</h3>
           <div className="grid grid-cols-2 gap-3">
             {['mainHand','offHand'].map((slot, idx) => {
               const id = slot === 'mainHand' ? hero.inventory.equippedMainHand : hero.inventory.equippedOffHand;
               const item = id ? SHOP_ITEMS.find(i => i.id === id) : null;
               return (
-                <div key={`w-${idx}`} className="flex items-center justify-between bg-gray-50 p-3 rounded">
+                <div key={`w-${idx}`} className="flex items-center justify-between bg-gray-800 border border-gray-700 p-3 rounded">
                   {item ? (
                     <>
                       <div className="flex items-center space-x-3">
                         <div className="text-2xl">{item.icon}</div>
                         <div>
-                          <div className="font-medium">{item.name}</div>
-                          <div className="text-xs text-gray-600">{item.description}</div>
+                          <div className="font-medium text-white">{item.name}</div>
+                          <div className="text-xs text-gray-300">{item.description}</div>
                         </div>
                       </div>
                       <button onClick={() => unequipItem(hero.id, id!)} className="px-3 py-1 bg-gray-700 text-white text-sm rounded">Desequipar</button>
@@ -355,21 +342,21 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
             })}
           </div>
         </div>
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-bold mb-4 text-gray-800">🛡️ Armaduras</h3>
+        <div className={`${tokens.cardBase} border ${seasonalBorder}`}>
+          <h3 className="text-lg font-bold mb-4 text-white">🛡️ Armaduras</h3>
           <div className="grid grid-cols-2 gap-3">
             {(['helm','chest','belt','gloves','boots','cape'] as const).map((slot) => {
               const id = (slot === 'helm' ? hero.inventory.equippedHelm : slot === 'chest' ? hero.inventory.equippedChest : slot === 'belt' ? hero.inventory.equippedBelt : slot === 'gloves' ? hero.inventory.equippedGloves : slot === 'boots' ? hero.inventory.equippedBoots : hero.inventory.equippedCape);
               const item = id ? SHOP_ITEMS.find(i => i.id === id) : null;
               return (
-                <div key={`a-${slot}`} className="flex items-center justify-between bg-gray-50 p-3 rounded">
+                <div key={`a-${slot}`} className="flex items-center justify-between bg-gray-800 border border-gray-700 p-3 rounded">
                   {item ? (
                     <>
                       <div className="flex items-center space-x-3">
                         <div className="text-2xl">{item.icon}</div>
                         <div>
-                          <div className="font-medium">{item.name}</div>
-                          <div className="text-xs text-gray-600">{item.description}</div>
+                          <div className="font-medium text-white">{item.name}</div>
+                          <div className="text-xs text-gray-300">{item.description}</div>
                         </div>
                       </div>
                       <button onClick={() => unequipItem(hero.id, id!)} className="px-3 py-1 bg-gray-700 text-white text-sm rounded">Desequipar</button>
@@ -382,21 +369,21 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
             })}
           </div>
         </div>
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-bold mb-4 text-gray-800">💍 Acessórios</h3>
+        <div className={`${tokens.cardBase} border ${seasonalBorder}`}>
+          <h3 className="text-lg font-bold mb-4 text-white">💍 Acessórios</h3>
           <div className="grid grid-cols-3 gap-3">
             {(['ringLeft','ringRight','necklace','earringLeft','earringRight'] as const).map((slot) => {
               const id = slot === 'ringLeft' ? hero.inventory.equippedRingLeft : slot === 'ringRight' ? hero.inventory.equippedRingRight : slot === 'necklace' ? hero.inventory.equippedNecklace : slot === 'earringLeft' ? hero.inventory.equippedEarringLeft : hero.inventory.equippedEarringRight;
               const item = id ? SHOP_ITEMS.find(i => i.id === id) : null;
               return (
-                <div key={`x-${slot}`} className="flex items-center justify-between bg-gray-50 p-3 rounded">
+                <div key={`x-${slot}`} className="flex items-center justify-between bg-gray-800 border border-gray-700 p-3 rounded">
                   {item ? (
                     <>
                       <div className="flex items-center space-x-3">
                         <div className="text-2xl">{item.icon}</div>
                         <div>
-                          <div className="font-medium">{item.name}</div>
-                          <div className="text-xs text-gray-600">{item.description}</div>
+                          <div className="font-medium text-white">{item.name}</div>
+                          <div className="text-xs text-gray-300">{item.description}</div>
                         </div>
                       </div>
                       <button onClick={() => unequipItem(hero.id, id!)} className="px-3 py-1 bg-gray-700 text-white text-sm rounded">Desequipar</button>
@@ -412,30 +399,30 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
       </div>
 
           {/* Resumo de Bônus */}
-          <div className="bg-white p-6 rounded-lg border border-gray-200">
-            <h3 className="text-lg font-bold mb-4 text-gray-800">📊 Bônus Totais</h3>
+          <div className={`${tokens.cardBase} border ${seasonalBorder}`}>
+            <h3 className="text-lg font-bold mb-4 text-white">📊 Bônus Totais</h3>
             <div className="space-y-3">
               <div className="flex justify-between">
-                <span className="text-gray-600">Ataque</span>
-                <span className={`font-medium ${totalBonuses.attack > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                <span className="text-gray-300">Ataque</span>
+                <span className={`font-medium ${totalBonuses.attack > 0 ? 'text-red-400' : 'text-gray-400'}`}>
                   +{totalBonuses.attack}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Defesa</span>
-                <span className={`font-medium ${totalBonuses.defense > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                <span className="text-gray-300">Defesa</span>
+                <span className={`font-medium ${totalBonuses.defense > 0 ? 'text-blue-400' : 'text-gray-400'}`}>
                   +{totalBonuses.defense}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">HP</span>
-                <span className={`font-medium ${totalBonuses.hp > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                <span className="text-gray-300">HP</span>
+                <span className={`font-medium ${totalBonuses.hp > 0 ? 'text-green-400' : 'text-gray-400'}`}>
                   +{totalBonuses.hp}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">MP</span>
-                <span className={`font-medium ${totalBonuses.mp > 0 ? 'text-purple-600' : 'text-gray-400'}`}>
+                <span className="text-gray-300">MP</span>
+                <span className={`font-medium ${totalBonuses.mp > 0 ? 'text-purple-400' : 'text-gray-400'}`}>
                   +{totalBonuses.mp}
                 </span>
               </div>
@@ -443,7 +430,7 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
 
             {/* Itens Equipáveis no Inventário */}
             <div className="mt-6 pt-4 border-t">
-              <h4 className="font-semibold mb-3 text-gray-700">Equipar</h4>
+              <h4 className="font-semibold mb-3 text-white">Equipar</h4>
               <div className="space-y-2">
                 {Object.entries(hero.inventory.items).map(([itemId, quantity]) => {
                   const item = SHOP_ITEMS.find(i => i.id === itemId);
@@ -460,7 +447,7 @@ const HeroProgression: React.FC<HeroProgressionProps> = ({ hero }) => {
                     <button
                       key={itemId}
                       onClick={() => equipItem(hero.id, itemId)}
-                      className="w-full flex items-center space-x-2 p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full flex items-center space-x-2 p-2 bg-gray-800 border border-gray-700 rounded text-white hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <span>{item.icon}</span>
                       <span className="text-sm">{item.name}</span>

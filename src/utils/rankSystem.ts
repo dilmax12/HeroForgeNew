@@ -59,14 +59,12 @@ export class RankSystem {
     for (const req of requirements) {
       switch (req) {
         case 'legendary_quest':
-          // Verifica se completou pelo menos uma missão lendária
-          if (!hero.achievements?.some(a => a.includes('Lendário'))) {
+          if (!Array.isArray(hero.achievements) || !hero.achievements.some(a => (a?.rarity === 'lendario') || String(a?.name || '').toLowerCase().includes('lendário') || String(a?.name || '').toLowerCase().includes('lendario') || String(a?.description || '').toLowerCase().includes('lendário') || String(a?.description || '').toLowerCase().includes('lendario'))) {
             return false;
           }
           break;
         case 'epic_achievement':
-          // Verifica se tem conquistas épicas
-          if (!hero.achievements?.some(a => a.includes('Épico'))) {
+          if (!Array.isArray(hero.achievements) || !hero.achievements.some(a => (a?.rarity === 'epico') || String(a?.name || '').toLowerCase().includes('épico') || String(a?.name || '').toLowerCase().includes('epico') || String(a?.description || '').toLowerCase().includes('épico') || String(a?.description || '').toLowerCase().includes('epico'))) {
             return false;
           }
           break;
@@ -167,8 +165,7 @@ export class RankSystem {
       title: `Promoção para ${rankInfo.name}!`,
       message: `Parabéns, ${hero.name}! Você alcançou o rank ${rank} - ${rankInfo.name}. ${rankInfo.description}`,
       rewards: [
-        ...rewards.map(r => ({ ...r, unlocked: true })),
-        { type: 'special', name: 'Carta de Parabenização da Guilda', description: 'Mensagem oficial celebrando sua promoção', icon: '📜', unlocked: true }
+        ...rewards.map(r => ({ ...r, unlocked: true }))
       ],
       animationType,
       soundEffect: ['S', 'SS', 'SSS'].includes(rank) ? 'legendary_fanfare' : 'rank_up_trumpet',
@@ -292,12 +289,19 @@ export class RankSystem {
         });
       } catch {}
 
+      
+
+      const currentUnlocked = currentRankData.unlockedRewards || [];
+      const unlockedNames = new Set(currentUnlocked.map(r => r.name));
+      const newRewards = (RANK_REWARDS[newRank] || []).filter(r => !unlockedNames.has(r.name)).map(r => ({ ...r, unlocked: true }));
+
       return {
         ...currentRankData,
         currentRank: newRank,
         rankHistory: [...currentRankData.rankHistory, newHistory],
         totalRankPoints: rankPoints,
         rankProgress: progress,
+        unlockedRewards: [...currentUnlocked, ...newRewards],
         pendingCelebrations: [...currentRankData.pendingCelebrations, celebration],
         rankAchievements: {
           ...currentRankData.rankAchievements,

@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useHeroStore } from '../store/heroStore';
-import EnhancedHUD from './EnhancedHUD';
+const EnhancedHUDLazy = React.lazy(() => import('./EnhancedHUD'));
 import NotificationSystem, { useNotifications, notificationBus } from './NotificationSystem';
-import QuickNavigation from './QuickNavigation';
+const QuickNavigationLazy = React.lazy(() => import('./QuickNavigation'));
 import { medievalTheme, getClassIcon, seasonalThemes, getSeasonalButtonGradient } from '../styles/medievalTheme';
+import { rankSystem } from '../utils/rankSystem';
+import { useProgressionStore } from '../store/progressionStore';
 import GoogleLoginButton from './GoogleLoginButton';
 import { useMonetizationStore } from '../store/monetizationStore';
 import { FlowProgress } from './FlowProgress';
 import { FlowControls } from './FlowControls';
-import DMNarrator from './DMNarrator';
-import AdBanner from './AdBanner';
-import InterstitialAd from './InterstitialAd';
-import SeasonalDecor from './SeasonalDecor';
+const AdBannerLazy = React.lazy(() => import('./AdBanner'));
+const InterstitialAdLazy = React.lazy(() => import('./InterstitialAd'));
+const SeasonalDecorLazy = React.lazy(() => import('./SeasonalDecor'));
 import { FLOW_STEPS, getStepIndex } from '../utils/flow';
 import { trackMetric } from '../utils/metricsSystem';
 import { worldStateManager } from '../utils/worldState';
@@ -37,9 +38,6 @@ const Layout = () => {
   const [syncing, setSyncing] = useState(false);
   const [lastSyncedFor, setLastSyncedFor] = useState<string | null>(null);
   const { setConfig, activeThemeId } = useMonetizationStore();
-  const [progressLoading, setProgressLoading] = useState(false);
-  const [progressError, setProgressError] = useState<string | null>(null);
-  const [playerProgress, setPlayerProgress] = useState<{ missions_completed: number; achievements_unlocked: number; playtime_minutes: number; last_login?: string | null } | null>(null);
   const [notifCount, setNotifCount] = useState<number>(0);
   const [organizerNearCount, setOrganizerNearCount] = useState<number>(0);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
@@ -47,6 +45,7 @@ const Layout = () => {
   const [iosTipOpen, setIosTipOpen] = useState<boolean>(false);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [partyInvitesCount, setPartyInvitesCount] = useState<number>(0);
+  
 
   useEffect(() => {
     let mounted = true;
@@ -278,44 +277,7 @@ const Layout = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (!supabaseConfigured) return;
-    if (sbUserId) {
-      fetchPlayerProgressHeader();
-    }
-  }, [sbUserId]);
-
-  async function fetchPlayerProgressHeader() {
-    setProgressLoading(true);
-    setProgressError(null);
-    try {
-      const { data } = await supabase.auth.getUser();
-      const userId = data?.user?.id || null;
-      if (!userId) {
-        setProgressError('Faça login para ver seu progresso.');
-        setPlayerProgress(null);
-      } else {
-        const res = await fetch(`/api/player-progress?action=get&id=${encodeURIComponent(userId)}`);
-        const json = await res.json();
-        if (!res.ok) throw new Error(json?.error || 'Falha ao carregar progresso');
-        setPlayerProgress(json?.progress || null);
-      }
-    } catch (e: any) {
-      setProgressError(e?.message || String(e));
-      setPlayerProgress(null);
-    } finally {
-      setProgressLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!supabaseConfigured) return;
-    let timer: any = null;
-    if (sbUserId) {
-      timer = setInterval(() => { fetchPlayerProgressHeader(); }, 5 * 60 * 1000);
-    }
-    return () => { if (timer) clearInterval(timer); };
-  }, [sbUserId]);
+  
 
   // Assinar barramento global de notificações para exibir toasts
   useEffect(() => {
@@ -372,6 +334,31 @@ const Layout = () => {
       ? `px-2 py-1 rounded bg-gradient-to-r ${g} text-white font-semibold hover:brightness-110 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500`
       : `hover:text-amber-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded`;
   };
+
+  const GatedLink: React.FC<{ to: string; label: string; feature?: 'hunting_basic' | 'shop_basic' | 'crafting_simple' | 'stable_basic'; testId?: string }>= ({ to, label, feature, testId }) => {
+    const { getSelectedHero } = useHeroStore();
+    const hero = getSelectedHero();
+    if (!feature) return <Link to={to} className={navLinkClass(to)} data-testid={testId}>{label}</Link>;
+    const status = useProgressionStore.getState().getGateStatus(feature, hero);
+    if (status.enabled) return <Link to={to} className={navLinkClass(to)} data-testid={testId}>{label}</Link>;
+    return (
+      <span title={`${status.reason || 'Bloqueado'} • ${status.nextHint || ''}`} className="opacity-60 cursor-not-allowed px-2 py-1 rounded">
+        🔒 {label}
+      </span>
+    );
+  };
+
+  const DungeonNavLink: React.FC = () => {
+    const { getSelectedHero } = useHeroStore();
+    const hero = getSelectedHero();
+    if (!hero) return <Link to="/dungeon-infinita" className={navLinkClass('/dungeon-infinita')}>🗝️ Dungeon Infinita</Link>;
+    const rank = (hero.rankData?.currentRank) || rankSystem.calculateRank(hero);
+    const allowed = ['C','B','A','S','SS','SSS'].includes(rank);
+    if (!allowed) {
+      return <span title={`Requer rank C • Rank atual ${rank}`} className="opacity-60 cursor-not-allowed px-2 py-1 rounded">🔒 🗝️ Dungeon Infinita</span>;
+    }
+    return <Link to="/dungeon-infinita" className={navLinkClass('/dungeon-infinita')}>🗝️ Dungeon Infinita</Link>;
+  }
 
   const groupButtonClass = (active: boolean) => {
     const g = getSeasonalButtonGradient(useMonetizationStore.getState().activeSeasonalTheme as any);
@@ -445,86 +432,10 @@ const Layout = () => {
                 return null
               })()}
               <div className="hidden md:flex items-center gap-2 ml-2">
-                <Link to="/journey" className={navLinkClass('/journey')}>Jornada</Link>
-                <Link to="/shop" className={navLinkClass('/shop')}>Loja</Link>
-                <Link to="/premium" className={navLinkClass('/premium')}>Premium</Link>
-                <Link to="/social-events" className={navLinkClass('/social-events')}>Eventos</Link>
+                <GatedLink to="/journey" label="Jornada" />
+                <GatedLink to="/shop" label="Loja" feature="shop_basic" />
+                <GatedLink to="/premium" label="Premium" />
               </div>
-              <div className="hidden md:flex items-center gap-2 ml-2 bg-slate-800 border border-slate-600 px-2 py-1 rounded">
-                {useMonetizationStore.getState().seasonPassActive?.active && (
-                  <span className="text-xs text-amber-300">✨ Premium</span>
-                )}
-                {useMonetizationStore.getState().adsRemoved && (
-                  <span className="text-xs text-emerald-300">🚫 Ads</span>
-                )}
-                {useMonetizationStore.getState().activeThemeId && (
-                  <span className="text-xs text-indigo-300">Tema: {useMonetizationStore.getState().activeThemeId}</span>
-                )}
-                {useMonetizationStore.getState().activeFrameId && (
-                  <span className="text-xs text-cyan-300">Frame: {useMonetizationStore.getState().activeFrameId}</span>
-                )}
-                <span className="text-xs text-gray-200">{sbEmail ? `🔓 ${sbEmail}` : '🔒 Não logado'}</span>
-                {syncing && (<span className="text-xs text-amber-300">⏳ Sync</span>)}
-                {supabaseConfigured && (
-                  <>
-                    <button onClick={fetchPlayerProgressHeader} disabled={progressLoading} className={`px-2 py-1 rounded text-xs border ${progressLoading ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed' : 'bg-white text-gray-800 border-gray-300'}`}>{progressLoading ? (<span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></span><span>Progresso</span></span>) : 'Progresso'}</button>
-                    {playerProgress?.last_login && (() => {
-                      const d = new Date(playerProgress.last_login);
-                      const diffMs = Date.now() - d.getTime();
-                      const mins = Math.floor(diffMs / 60000);
-                      const hours = Math.floor(mins / 60);
-                      const days = Math.floor(hours / 24);
-                      const rel = days > 0 ? `${days}d` : hours > 0 ? `${hours}h` : `${mins}m`;
-                      return (<span className="text-xs text-gray-300">Últ. login: {rel}</span>);
-                    })()}
-                    {progressError && <span className="text-xs text-red-400">{progressError}</span>}
-                    {playerProgress && (
-                      <div className="flex items-center gap-2 text-xs text-gray-200">
-                        <span>📋 {playerProgress.missions_completed}</span>
-                        <span>🏆 {playerProgress.achievements_unlocked}</span>
-                        <span>⏱️ {playerProgress.playtime_minutes}m</span>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-              {(() => {
-                const s = useMonetizationStore.getState();
-                const themes = s.ownedThemes || [];
-                const frames = s.ownedFrames || [];
-                return (
-                  <>
-                    {themes.length > 0 && (
-                      <button
-                        onClick={() => {
-                          const cur = s.activeThemeId || themes[0];
-                          const idx = Math.max(0, themes.indexOf(cur));
-                          const next = themes[(idx + 1) % themes.length];
-                          useMonetizationStore.getState().setActiveTheme(next);
-                          try { trackMetric.featureUsed(selectedHero?.id || 'system', 'theme-switch'); } catch {}
-                          try { addNotification({ id: `theme-${Date.now()}`, type: 'info', title: 'Tema aplicado', message: `Tema ${next} ativo`, timeoutMs: 3000 }); } catch {}
-                        }}
-                        className="ml-1 px-2 py-1 rounded text-xs bg-indigo-700 text-white"
-                        title="Trocar tema"
-                      >Tema ↻</button>
-                    )}
-                    {frames.length > 0 && (
-                      <button
-                        onClick={() => {
-                          const cur = s.activeFrameId || frames[0];
-                          const idx = Math.max(0, frames.indexOf(cur));
-                          const next = frames[(idx + 1) % frames.length];
-                          useMonetizationStore.getState().setActiveFrame(next);
-                          try { trackMetric.featureUsed(selectedHero?.id || 'system', 'frame-switch'); } catch {}
-                          try { addNotification({ id: `frame-${Date.now()}`, type: 'info', title: 'Frame aplicado', message: `Frame ${next} ativo`, timeoutMs: 3000 }); } catch {}
-                        }}
-                        className="ml-1 px-2 py-1 rounded text-xs bg-cyan-700 text-white"
-                        title="Trocar frame"
-                      >Frame ↻</button>
-                    )}
-                  </>
-                )
-              })()}
               
             </div>
             
@@ -566,25 +477,24 @@ const Layout = () => {
             </div>
           )}
 
-          <nav className="mt-3 md:mt-4">
+          <nav className="mt-3 md:mt-4 overflow-visible">
             <div className="flex w-full justify-between items-center">
-              <div className="flex gap-3 md:gap-6 flex-wrap items-center">
+              <div className="flex gap-2 sm:gap-3 md:gap-6 items-center flex-wrap overflow-visible">
                 <div className="relative">
                   <button
                     onClick={() => setOpenGroup(openGroup === 'aventura' ? null : 'aventura')}
-                    className={`${groupButtonClass(isAnyActive(['/journey','/create','/gallery','/dungeon-infinita','/tavern']))} text-sm md:text-base`}
+                    className={`${groupButtonClass(isAnyActive(['/journey','/create','/gallery','/dungeon-infinita']))} text-sm md:text-base`}
                   >
                     🧭 Aventura
                   </button>
                   {openGroup === 'aventura' && (
                     <div className="absolute z-40 mt-2 w-56 bg-slate-800 border border-slate-600 rounded shadow-lg p-2">
                       <ul className="space-y-1 text-sm">
-                        <li><Link to="/journey" className={navLinkClass('/journey')}>🏠 Início</Link></li>
+                        <li><GatedLink to="/journey" label="🏠 Início" /></li>
                         <li><Link to={(() => { const p = new URLSearchParams(location.search); const ref = p.get('ref'); const by = p.get('by'); return ref ? `/create?ref=${ref}${by?`&by=${by}`:''}` : "/create"; })()} className={navLinkClass('/create')}>{medievalTheme.icons.ui.profile} Criar Herói</Link></li>
                         <li><Link to="/gallery" className={navLinkClass('/gallery')}>{medievalTheme.icons.ui.inventory} Ver Galeria</Link></li>
-                        <li><Link to="/dungeon-infinita" className={navLinkClass('/dungeon-infinita')}>🗝️ Dungeon Infinita</Link></li>
+                        <li><DungeonNavLink /></li>
                         {/* Arena de Duelos removida */}
-                        <li><Link to="/tavern" className={navLinkClass('/tavern')}>🍺 Taverna</Link></li>
                       </ul>
                     </div>
                   )}
@@ -600,9 +510,9 @@ const Layout = () => {
                   {openGroup === 'gestao' && (
                     <div className="absolute z-40 mt-2 w-56 bg-slate-800 border border-slate-600 rounded shadow-lg p-2">
                       <ul className="space-y-1 text-sm">
-                        <li><Link to="/inventory" className={navLinkClass('/inventory')}>🎒 Inventário</Link></li>
-                        <li><Link to="/stable" className={navLinkClass('/stable')}>🐴 Estábulo</Link></li>
-                        <li><Link to="/hero-forge" className={navLinkClass('/hero-forge')}>⚒️ Forja</Link></li>
+                        <li><GatedLink to="/inventory" label="🎒 Inventário" feature="hunting_basic" /></li>
+                        <li><GatedLink to="/stable" label="🐴 Estábulo" feature="stable_basic" /></li>
+                        <li><GatedLink to="/hero-forge" label="⚒️ Forja" feature="crafting_simple" /></li>
                       </ul>
                     </div>
                   )}
@@ -611,7 +521,7 @@ const Layout = () => {
                 <div className="relative">
                   <button
                     onClick={() => setOpenGroup(openGroup === 'comunidade' ? null : 'comunidade')}
-                    className={`${groupButtonClass(isAnyActive(['/guild-hub','/social-events','/friends','/notifications']))} text-sm md:text-base`}
+                    className={`${groupButtonClass(isAnyActive(['/guild-hub','/tavern']))} text-sm md:text-base`}
                   >
                     👥 Comunidade
                   </button>
@@ -619,10 +529,7 @@ const Layout = () => {
                     <div className="absolute z-40 mt-2 w-56 bg-slate-800 border border-slate-600 rounded shadow-lg p-2">
                       <ul className="space-y-1 text-sm">
                         <li><Link to="/guild-hub" className={navLinkClass('/guild-hub')}>🏰 Guilda dos Aventureiros</Link></li>
-                        <li><Link to="/social-events" className={navLinkClass('/social-events')}>🎉 Eventos</Link></li>
-                        <li><Link to="/friends" className={navLinkClass('/friends')}>🤝 Amigos</Link></li>
-                        <li><Link to="/party-invites" className={navLinkClass('/party-invites')}>📨 Convites {partyInvitesCount > 0 && (<span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white">{partyInvitesCount}</span>)}</Link></li>
-                        <li><Link to="/notifications" className={navLinkClass('/notifications')}>🔔 Notificações {notifCount > 0 && (<span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white">{notifCount}</span>)}</Link></li>
+                        <li><Link to="/tavern" className={navLinkClass('/tavern')}>🍺 Taverna</Link></li>
                       </ul>
                     </div>
                   )}
@@ -657,8 +564,8 @@ const Layout = () => {
                   {openGroup === 'extras' && (
                     <div className="absolute right-0 z-40 mt-2 w-64 bg-slate-800 border border-slate-600 rounded shadow-lg p-2">
                       <ul className="space-y-1 text-sm">
-                        <li><Link to="/leaderboards" className={navLinkClass('/leaderboards')}>{medievalTheme.icons.ui.leaderboard} Ranking</Link></li>
-                        <li><Link to="/shop" className={navLinkClass('/shop')}>🏪 Loja</Link></li>
+                        <li><GatedLink to="/leaderboards" label={`${medievalTheme.icons.ui.leaderboard} Ranking`} /></li>
+                        <li><GatedLink to="/shop" label="🏪 Loja" feature="shop_basic" /></li>
                         <li><Link to="/premium" className={navLinkClass('/premium')}>✨ Premium</Link></li>
                         <li><Link to={organizerNearCount > 0 ? "/organizer?nearFull=1" : "/organizer"} title="Eventos quase lotados no seu painel" className={navLinkClass('/organizer')}>🛠️ Organizador {organizerNearCount > 0 && (<span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white">{organizerNearCount}</span>)}</Link></li>
                         <li><Link to="/events-history" className={navLinkClass('/events-history')}>🗂️ Histórico</Link></li>
@@ -669,7 +576,9 @@ const Layout = () => {
               )}
             </div>
           </nav>
-          <SeasonalDecor />
+          <React.Suspense fallback={null}>
+            <SeasonalDecorLazy />
+          </React.Suspense>
           {/* Minibarra de progresso e controles do fluxo removidos quando não há herói criado */}
         </div>
       </header>
@@ -677,28 +586,20 @@ const Layout = () => {
       <main className="container mx-auto py-6 md:py-8 px-3 md:px-4">
         {/* Banner Ad Top */}
         <div className="mb-4">
-          <AdBanner style={{ display: 'block', minHeight: 60 }} />
+          <React.Suspense fallback={null}>
+            <AdBannerLazy style={{ display: 'block', minHeight: 60 }} />
+          </React.Suspense>
         </div>
-        {/* Banner global de convite quando houver código na URL */}
-        {new URLSearchParams(location.search).get('ref') && (
-          <div className="mb-4 rounded-lg p-3 bg-emerald-800/30 border border-emerald-500/30">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-emerald-200">Você tem um convite ativo. A criação de um herói com esse convite concede bônus ao convidador.</div>
-              <Link
-                to={(() => { const p = new URLSearchParams(location.search); const ref = p.get('ref'); const by = p.get('by'); return `/create?ref=${ref}${by?`&by=${by}`:''}`; })()}
-                className={`px-3 py-1 rounded bg-gradient-to-r ${((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.buttonGradient) || 'from-emerald-600 to-emerald-700'} text-white text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 hover:brightness-110 flex items-center gap-2`}
-              >
-                {((seasonalThemes as any)[useMonetizationStore.getState().activeSeasonalTheme || '']?.accents?.[0]) || ''}
-                <span>Criar com convite</span>
-              </Link>
-            </div>
-          </div>
-        )}
+        {/* Banner de convite removido */}
         <Outlet />
       </main>
       
       {/* Enhanced HUD - show/hide with toggle */}
-      {selectedHero && hudVisible && <EnhancedHUD hero={selectedHero} />}
+      {selectedHero && hudVisible && (
+        <React.Suspense fallback={null}>
+          <EnhancedHUDLazy hero={selectedHero} />
+        </React.Suspense>
+      )}
 
       {/* HUD Toggle Button */}
       {selectedHero && (
@@ -720,7 +621,9 @@ const Layout = () => {
       />
       
       {/* Quick Navigation */}
-      <QuickNavigation />
+      <React.Suspense fallback={null}>
+        <QuickNavigationLazy />
+      </React.Suspense>
       
       <footer className="bg-gray-800 py-6 mt-10 md:mt-12">
         <div className="container mx-auto px-3 md:px-4 text-center text-gray-400 text-sm md:text-base">
@@ -728,7 +631,9 @@ const Layout = () => {
         </div>
       </footer>
       {/* Interstitial Ad mount */}
-      <InterstitialAd />
+      <React.Suspense fallback={null}>
+        <InterstitialAdLazy />
+      </React.Suspense>
     </div>
   );
 };

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Hero } from '../types/hero';
 import { QUEST_ACHIEVEMENTS } from '../utils/quests';
 import Achievement from './Achievement';
+import { medievalTheme, seasonalThemes } from '../styles/medievalTheme';
+import { useMonetizationStore } from '../store/monetizationStore';
 
 interface AchievementsListProps {
   hero: Hero;
@@ -56,8 +58,33 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ hero }) => {
     };
   });
 
+  const cardsWins = Number((hero.stats as any)?.miniCardsWins || 0);
+  const rpsBest = Number((hero.stats as any)?.miniRpsBestStreak || 0);
+  const titleAchievements = [
+    {
+      id: 'cards-champion-achievement',
+      title: 'Campeão das Cartas',
+      description: 'Vença 10 partidas no Jogo das Cartas',
+      icon: '🃏',
+      maxProgress: 10,
+      progress: cardsWins,
+      isUnlocked: !!(hero.achievements || []).find(a => a.id === 'cards-champion-achievement') || !!(hero.progression.achievements || []).find(a => a.id === 'cards-champion-achievement')
+    },
+    {
+      id: 'rps-master-achievement',
+      title: 'Mestre do RPS',
+      description: 'Alcance sequência de 5 vitórias em RPS',
+      icon: '🎯',
+      maxProgress: 5,
+      progress: rpsBest,
+      isUnlocked: !!(hero.achievements || []).find(a => a.id === 'rps-master-achievement') || !!(hero.progression.achievements || []).find(a => a.id === 'rps-master-achievement')
+    }
+  ];
+
+  const combinedAchievements = [...allAchievements, ...titleAchievements];
+
   // Filtrar achievements
-  const filteredAchievements = allAchievements.filter(achievement => {
+  const filteredAchievements = combinedAchievements.filter(achievement => {
     if (filter === 'unlocked' && !achievement.isUnlocked) return false;
     if (filter === 'locked' && achievement.isUnlocked) return false;
     if (rarityFilter !== 'all' && achievement.rarity !== rarityFilter) return false;
@@ -65,14 +92,17 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ hero }) => {
   });
 
   // Estatísticas
-  const unlockedCount = allAchievements.filter(a => a.isUnlocked).length;
-  const totalCount = allAchievements.length;
+  const unlockedCount = combinedAchievements.filter(a => a.isUnlocked).length;
+  const totalCount = combinedAchievements.length;
   const completionPercentage = Math.round((unlockedCount / totalCount) * 100);
+
+  const { activeSeasonalTheme } = useMonetizationStore();
+  const seasonalBorder = activeSeasonalTheme ? (seasonalThemes as any)[activeSeasonalTheme]?.border || 'border-amber-600/30' : 'border-amber-600/30';
 
   return (
     <div className="space-y-6">
       {/* Header com Estatísticas */}
-      <div className="bg-gradient-to-r from-purple-500 to-blue-600 text-white p-6 rounded-lg">
+      <div className={`bg-gradient-to-r ${medievalTheme.gradients.backgrounds.hero} text-white p-6 rounded-lg border border-slate-700`}>
         <h2 className="text-2xl font-bold mb-2">🏆 Conquistas</h2>
         <div className="flex items-center space-x-6">
           <div>
@@ -81,9 +111,9 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ hero }) => {
           </div>
           <div className="flex-1">
             <div className="text-sm mb-1">Progresso Geral</div>
-            <div className="w-full bg-white bg-opacity-20 rounded-full h-3">
+            <div className="w-full bg-gray-700 rounded-full h-3">
               <div 
-                className="bg-white h-3 rounded-full transition-all duration-500"
+                className={`h-3 rounded-full transition-all duration-500 bg-gradient-to-r ${medievalTheme.gradients.buttons.royal}`}
                 style={{ width: `${completionPercentage}%` }}
               />
             </div>
@@ -93,13 +123,13 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ hero }) => {
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-wrap gap-4 p-4 bg-gray-50 rounded-lg">
+      <div className={`flex flex-wrap gap-4 p-4 rounded-lg border ${seasonalBorder} bg-gray-800`}>
         <div className="flex items-center space-x-2">
-          <label className="text-sm font-medium text-gray-700">Status:</label>
+          <label className="text-sm font-medium text-gray-200">Status:</label>
           <select 
             value={filter} 
             onChange={(e) => setFilter(e.target.value as any)}
-            className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-1 border border-gray-700 bg-gray-900 text-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="all">Todas</option>
             <option value="unlocked">Desbloqueadas</option>
@@ -108,11 +138,11 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ hero }) => {
         </div>
         
         <div className="flex items-center space-x-2">
-          <label className="text-sm font-medium text-gray-700">Raridade:</label>
+          <label className="text-sm font-medium text-gray-200">Raridade:</label>
           <select 
             value={rarityFilter} 
             onChange={(e) => setRarityFilter(e.target.value)}
-            className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-1 border border-gray-700 bg-gray-900 text-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="all">Todas</option>
             <option value="comum">Comum</option>
@@ -144,13 +174,13 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ hero }) => {
 
       {/* Títulos Desbloqueados */}
       {hero.progression.titles && hero.progression.titles.length > 0 && (
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-xl font-bold mb-4 text-gray-800">🎖️ Títulos Conquistados</h3>
+        <div className={`bg-gray-800 p-6 rounded-lg border border-gray-700`}>
+          <h3 className="text-xl font-bold mb-4 text-white">🎖️ Títulos Conquistados</h3>
           <div className="flex flex-wrap gap-2">
             {hero.progression.titles.map((title, index) => (
               <span 
                 key={index}
-                className="inline-flex items-center px-3 py-2 rounded-full text-sm font-medium bg-gradient-to-r from-purple-100 to-blue-100 text-purple-800 border border-purple-200"
+                className={`inline-flex items-center px-3 py-2 rounded-full text-sm font-medium text-white bg-gradient-to-r ${medievalTheme.gradients.buttons.royal} border border-purple-700/40`}
               >
                 {title}
               </span>
@@ -160,9 +190,9 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ hero }) => {
       )}
 
       {/* Dicas para Próximas Conquistas */}
-      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-        <h4 className="font-semibold text-blue-800 mb-2">💡 Próximas Conquistas</h4>
-        <div className="text-sm text-blue-700 space-y-1">
+      <div className="bg-blue-900/20 p-4 rounded-lg border border-blue-600/30">
+        <h4 className="font-semibold text-blue-300 mb-2">💡 Próximas Conquistas</h4>
+        <div className="text-sm text-blue-200 space-y-1">
           {!hero.progression.achievements.some(a => a.id === 'primeira-missao') && (
             <div>• Complete sua primeira missão para desbloquear "Primeira Aventura"</div>
           )}

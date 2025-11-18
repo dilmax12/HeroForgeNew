@@ -7,6 +7,7 @@ import { getClassIcon } from '../styles/medievalTheme';
 import { ELEMENT_INFO } from '../utils/elementSystem';
 import { getElementInfoSafe } from '../utils/elementSystem';
 import { worldStateManager } from '../utils/worldState';
+import { getMissionBuffPercent } from '../utils/relationBenefits';
 import { computeRewardMultiplier } from '../utils/dungeonConfig';
 
 // Componente para seleção de herói
@@ -101,7 +102,8 @@ const QuestBoard: React.FC = () => {
     updateHero,
     updateDailyGoalProgress,
     selectHero,
-    heroes
+    heroes,
+    getQuestById
   } = useHeroStore();
   
   const selectedHero = getSelectedHero();
@@ -133,6 +135,8 @@ const QuestBoard: React.FC = () => {
     } catch { return false; }
   });
   const [forceUpdate, setForceUpdate] = useState(0);
+  const [refreshCooldownEndsAt, setRefreshCooldownEndsAt] = useState<number | null>(null);
+  const [nowTs, setNowTs] = useState<number>(() => Date.now());
 
   // Selecionar automaticamente o primeiro herói se não há nenhum selecionado
   useEffect(() => {
@@ -148,13 +152,21 @@ const QuestBoard: React.FC = () => {
     console.log('Estado do herói selecionado mudou:', selectedHero?.name || 'Nenhum');
   }, [selectedHero]);
 
-  // Rotação automática de missões a cada 1h
+  // Rotação automática de missões a cada 10 min
   useEffect(() => {
     const intervalId = setInterval(() => {
       refreshQuests(selectedHero?.progression.level || 1);
-    }, 60 * 60 * 1000);
+    }, 10 * 60 * 1000);
     return () => clearInterval(intervalId);
   }, [selectedHero?.id]);
+
+  const handleManualRefresh = () => {
+    if (!selectedHero) return;
+    const now = Date.now();
+    if (refreshCooldownEndsAt && now < refreshCooldownEndsAt) return;
+    refreshQuests(selectedHero.progression.level);
+    setRefreshCooldownEndsAt(now + 5 * 60 * 1000);
+  };
 
   // Narrativas removidas: não geramos mais missões narrativas
 
@@ -223,9 +235,30 @@ const QuestBoard: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const t = setInterval(() => setNowTs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const cdMs = useMemo(() => {
+    const ends = selectedHero?.questing?.cooldownEndsAt ? new Date(selectedHero.questing.cooldownEndsAt).getTime() : 0;
+    return ends ? Math.max(0, ends - nowTs) : 0;
+  }, [selectedHero?.questing?.cooldownEndsAt, nowTs]);
+  const cdActive = cdMs > 0;
+
+  const formatRemaining = (ms: number) => {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const hh = Math.floor(s / 3600);
+    const mm = Math.floor((s % 3600) / 60);
+    const ss = s % 60;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return hh > 0 ? `${pad(hh)}:${pad(mm)}:${pad(ss)}` : `${pad(mm)}:${pad(ss)}`;
+  };
+
   const canAcceptQuest = (quest: Quest) => {
     return selectedHero.progression.level >= quest.levelRequirement &&
-           !selectedHero.activeQuests.includes(quest.id);
+           !selectedHero.activeQuests.includes(quest.id) &&
+           !cdActive;
   };
 
   const handleAcceptQuest = (quest: Quest) => {
@@ -257,6 +290,11 @@ const QuestBoard: React.FC = () => {
     const staminaCostPerPhase = useMemo(() => (quest.difficulty === 'rapida' ? 2 : 3), [quest.difficulty]);
     const biome = quest.biomeHint || 'Floresta Nebulosa';
     const category = quest.categoryHint || (quest.type === 'caca' ? 'controle' : 'controle');
+    const cdMsQ = useMemo(() => {
+      const ends = hero?.questing?.cooldownEndsAt ? new Date(hero.questing.cooldownEndsAt).getTime() : 0;
+      return ends ? Math.max(0, ends - Date.now()) : 0;
+    }, [hero?.questing?.cooldownEndsAt]);
+    const cdActiveQ = cdMsQ > 0;
 
     useEffect(() => {
       try {
@@ -283,6 +321,7 @@ const QuestBoard: React.FC = () => {
     };
 
     const start = () => {
+      if (cdActiveQ) { setError('Cooldown ativo para missões. Aguarde o tempo de recarga.'); return; }
       if ((hero.stamina?.current || 0) < staminaCostPerPhase) { setError('Stamina insuficiente para iniciar.'); return; }
       setRunning(true);
       setFinished(false);
@@ -298,7 +337,9 @@ const QuestBoard: React.FC = () => {
     const resolvePhase = () => {
       if (finished) return;
       const extraPhaseCost = phaseIndex >= 2 ? 1 : 0;
-      const totalCost = staminaCostPerPhase + extraPhaseCost;
+      const help = (hero.stats as any)?.helpStatus;
+      const staminaDiscount = help && help.staminaCostReduction ? Math.max(0, Math.min(2, help.staminaCostReduction)) : 0;
+      const totalCost = Math.max(1, (staminaCostPerPhase + extraPhaseCost) - staminaDiscount);
       if ((hero.stamina?.current || 0) < totalCost) { setError('Stamina insuficiente para prosseguir.'); setRunning(false); return; }
       worldStateManager.consumeStamina(hero, totalCost);
       updateHero(hero.id, { stamina: hero.stamina });
@@ -307,7 +348,8 @@ const QuestBoard: React.FC = () => {
       const attr = hero.attributes;
       const classBonus = category === 'controle' ? (attr.destreza || 0) * 0.01 : category === 'coleta' ? (attr.inteligencia || 0) * 0.01 : category === 'escolta' ? (attr.constituicao || 0) * 0.008 : (attr.forca || 0) * 0.008;
       const floor = 0.2;
-      const successChance = Math.max(floor, Math.min(0.95, (base - phaseIndex * riskStep) + classBonus));
+      const helpSuccessBoost = help && help.successBoostPercent ? Math.max(0, Math.min(0.2, help.successBoostPercent)) : 0;
+      const successChance = Math.max(floor, Math.min(0.95, (base - phaseIndex * riskStep) + classBonus + helpSuccessBoost));
       const roll = Math.random();
       const success = roll < successChance;
       const mult = computeRewardMultiplier(streak);
@@ -315,8 +357,14 @@ const QuestBoard: React.FC = () => {
       const goldBase = (quest.baseRewardsHint?.gold || 25);
       const boss = category === 'especial' && phaseIndex + 1 === phasesTotal;
       const bossMult = boss ? 1.5 : 1;
-      const xp = Math.round((success ? xpBase : Math.round(xpBase * 0.5)) * mult * bossMult);
-      const gold = Math.round((success ? goldBase : Math.round(goldBase * 0.3)) * mult * bossMult);
+      const buffPct = getMissionBuffPercent(hero);
+      const { getHeroParty, consumeOneMissionContract } = useHeroStore.getState();
+      const party = getHeroParty(hero.id);
+      const contractSharePct = party && party.contractByHeroId && party.contractByHeroId[hero.id] ? Math.max(0, Math.min(0.5, (party.contractByHeroId[hero.id].rewardShare || 0) / 100)) : 0;
+      const helpXpPct = help && help.boostXpPercent ? Math.max(0, Math.min(0.5, help.boostXpPercent)) : 0;
+      const helpGoldPct = help && help.goldBonusPercent ? Math.max(0, Math.min(0.5, help.goldBonusPercent)) : 0;
+      const xp = Math.round(((success ? xpBase : Math.round(xpBase * 0.5)) * (1 + contractSharePct)) * mult * bossMult * (1 + buffPct + helpXpPct));
+      const gold = Math.round(((success ? goldBase : Math.round(goldBase * 0.3)) * (1 + contractSharePct)) * mult * bossMult * (1 + Math.min(0.25, buffPct) + helpGoldPct));
       gainXP(hero.id, xp);
       gainGold(hero.id, gold);
 
@@ -333,7 +381,9 @@ const QuestBoard: React.FC = () => {
       const ids = categoryPools[category] || [];
       const extraIds: string[] = [];
       if (ids.length) {
-        const dropChance = boss ? 1 : success ? 0.7 : 0.4;
+        const dropChanceBase = boss ? 1 : success ? 0.7 : 0.4;
+        const helpLootBonus = help && help.lootDropBonusPercent ? Math.max(0, Math.min(0.5, help.lootDropBonusPercent)) : 0;
+        const dropChance = Math.min(1, dropChanceBase + helpLootBonus);
         const hour = new Date().getHours();
         const isNight = hour < 6 || hour >= 18;
         const isDay = hour >= 8 && hour < 17;
@@ -359,13 +409,15 @@ const QuestBoard: React.FC = () => {
         'Caverna Antiga': ['Troll de Pedra','Slime Ácido']
       };
       const baseAmbush = category === 'escolta' ? 0.25 : 0.15;
-      const ambush = Math.random() < (baseAmbush + (quest.difficulty === 'dificil' ? 0.05 : quest.difficulty === 'epica' ? 0.1 : 0));
+      const ambushShield = help && help.ambushReductionPercent ? Math.max(0, Math.min(0.9, help.ambushReductionPercent)) : 0;
+      const ambush = Math.random() < Math.max(0, (baseAmbush + (quest.difficulty === 'dificil' ? 0.05 : quest.difficulty === 'epica' ? 0.1 : 0)) * (1 - ambushShield));
       let npcAfter = npcIntegrity;
       let ambushText = '';
       if (ambush) {
         const enemies = ENEMIES_BY_BIOME[biome] || ['Inimigos'];
         const foe = enemies[Math.floor(Math.random() * enemies.length)];
-        const ambushDamageBase = Math.round((hero.derivedAttributes.hp || 20) * 0.1);
+        const ambushDamageBaseRaw = Math.round((hero.derivedAttributes.hp || 20) * 0.1);
+        const ambushDamageBase = Math.max(0, Math.round(ambushDamageBaseRaw * (1 - ambushShield)));
         const curHp2 = hero.derivedAttributes.currentHp ?? (hero.derivedAttributes.hp || 0);
         const newHp2 = Math.max(0, curHp2 - ambushDamageBase);
         updateHero(hero.id, { derivedAttributes: { ...hero.derivedAttributes, currentHp: newHp2 } });
@@ -389,7 +441,7 @@ const QuestBoard: React.FC = () => {
       if (npcAfter !== undefined && npcAfter !== null) setNpcIntegrity(npcAfter);
 
       const mapName = (id: string) => SHOP_ITEMS.find(i => i.id === id)?.name || id;
-      const result = { phase: phaseIndex + 1, success, xp, gold, narrative: (success ? `Progresso na fase ${phaseIndex + 1}.` : `Revés na fase ${phaseIndex + 1}.`) + ambushText, itemsAwarded: [...itemsEquip.map((i: any) => ({ id: i.id, name: i.name })), ...extraIds.map(id => ({ id, name: mapName(id) }))] };
+      const result = { phase: phaseIndex + 1, success, xp, gold, narrative: (success ? `Progresso na fase ${phaseIndex + 1}.` : `Revés na fase ${phaseIndex + 1}.`) + ambushText + (buffPct > 0 ? ` • Buff de relação +${Math.round(buffPct*100)}%` : '') + (contractSharePct > 0 ? ` • Acordo da party +${Math.round(contractSharePct*100)}%` : ''), itemsAwarded: [...itemsEquip.map((i: any) => ({ id: i.id, name: i.name })), ...extraIds.map(id => ({ id, name: mapName(id) }))] };
       const nextLogs = [...log, { phase: phaseIndex + 1, xp, gold, narrative: result.narrative }];
       setLog(prev => [...prev, result]);
       if ((itemsEquip.length > 0) || (extraIds.length > 0)) setAnyLoot(true);
@@ -401,9 +453,42 @@ const QuestBoard: React.FC = () => {
         setFinished(true);
         setRunning(false);
         updateDailyGoalProgress(hero.id, 'quest-completed', 1);
+        const map: Record<QuestDifficulty, number> = { rapida: 10, padrao: 20, epica: 50 };
+        const cdMin = map[quest.difficulty] || 15;
+        let endsMs = Date.now() + cdMin * 60 * 1000;
+        if (help && help.reduceCooldownMinutes) {
+          endsMs = Math.max(Date.now(), endsMs - (help.reduceCooldownMinutes * 60 * 1000));
+        }
+        const ends = new Date(endsMs).toISOString();
+        updateHero(hero.id, { questing: { ...(hero.questing || {}), cooldownEndsAt: ends, lastCompletedAt: new Date().toISOString() } });
+        if (help && help.missionsRemaining) {
+          const next = { ...help, missionsRemaining: Math.max(0, (help.missionsRemaining || 0) - 1) };
+          if (next.missionsRemaining <= 0) {
+            const stats = { ...(hero.stats || {}) } as any;
+            delete stats.helpStatus;
+            updateHero(hero.id, { stats });
+          } else {
+            const stats = { ...(hero.stats || {}) } as any;
+            stats.helpStatus = next;
+            updateHero(hero.id, { stats });
+          }
+        }
         if ((quest.difficulty === 'rapida') && !anyLoot) {
           const consolation = category === 'coleta' ? 'erva-sangue' : 'osso-antigo';
           addItemToInventory(hero.id, consolation, 1);
+        }
+        // Ajuste de relação com líder NPC conforme resultado desta missão
+        if (party) {
+          const leader = useHeroStore.getState().heroes.find(h => h.id === party.leaderId);
+          if (leader && leader.origin === 'npc') {
+            const rel = { ...(leader.socialRelations || {}) };
+            const delta = success ? 3 : -2;
+            rel[hero.id] = Math.max(-100, Math.min(100, (rel[hero.id] || 0) + delta));
+            useHeroStore.getState().updateHero(leader.id, { socialRelations: rel });
+          }
+        }
+        if (party && party.contractByHeroId && party.contractByHeroId[hero.id]) {
+          consumeOneMissionContract(party.id, hero.id);
         }
       }
       persistState(Math.min(nextPhase, phasesTotal), npcAfter, !willFinish, willFinish, nextLogs.map(e => ({ phase: e.phase, xp: (e as any).xp || 0, gold: (e as any).gold || 0, narrative: (e as any).narrative || '' })));
@@ -422,8 +507,9 @@ const QuestBoard: React.FC = () => {
         <div className="text-gray-300 text-sm">Fases: {phasesTotal} • Dificuldade: {quest.difficulty}</div>
         {!running && !finished && (
           <div className="mt-3">
-            <button onClick={start} className="px-3 py-2 rounded bg-green-600 text-white hover:bg-green-700">Iniciar</button>
+            <button onClick={start} disabled={cdActiveQ} className="px-3 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">Iniciar</button>
             <button onClick={() => setAutoRun(v => !v)} className={`ml-2 px-3 py-2 rounded ${autoRun ? 'bg-teal-600' : 'bg-teal-700'} text-white hover:bg-teal-500`}>{autoRun ? 'Auto: ON' : 'Auto: OFF'}</button>
+            {cdActiveQ && <div className="mt-2 text-sm text-amber-300">Cooldown ativo: aguarde {formatRemaining(cdMsQ)}.</div>}
             {error && <div className="mt-2 text-sm text-red-300">{error}</div>}
           </div>
         )}
@@ -572,7 +658,7 @@ const QuestBoard: React.FC = () => {
                 : 'bg-gray-600 text-gray-400 cursor-not-allowed'
             }`}
           >
-            {canAcceptQuest(quest) ? 'Aceitar Missão' : 'Requisitos não atendidos'}
+            {canAcceptQuest(quest) ? 'Aceitar Missão' : (cdActive ? `Aguarde recarga (${formatRemaining(cdMs)})` : 'Requisitos não atendidos')}
           </button>
           );
           if (alreadyCompleted && !isActive) return (
@@ -614,12 +700,25 @@ const QuestBoard: React.FC = () => {
         } catch {}
         return null;
       })()}
+      {cdActive && (
+        <div className="mb-4 p-3 rounded-lg bg-amber-900/20 border border-amber-600/40 text-amber-200 text-sm">
+          ⏱️ Cooldown de missões ativo: aguarde {formatRemaining(cdMs)} para aceitar ou iniciar uma nova missão.
+        </div>
+      )}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h2 className="text-3xl font-bold text-amber-400">Quadro de Missões {companionsOnly && <span className="ml-2 text-sm px-2 py-1 rounded bg-emerald-800/40 text-emerald-200 border border-emerald-600/40">Companheiros ({availableQuests.filter(q => q.isGuildQuest).length})</span>}</h2>
-          <div className="mt-1 text-sm text-gray-300">Novas missões a cada 1h • Rápidas (5–20 min) • Épicas (2–3h)</div>
+          <div className="mt-1 text-sm text-gray-300">Novas missões a cada 1h • Rápidas (5–10 min) • Épicas (25–40 min)</div>
         </div>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2">
+          <button
+            onClick={handleManualRefresh}
+            disabled={refreshCooldownEndsAt ? Date.now() < refreshCooldownEndsAt : false}
+            className={`px-3 py-2 rounded-md font-medium transition-colors ${refreshCooldownEndsAt && Date.now() < refreshCooldownEndsAt ? 'bg-gray-700 text-gray-400 cursor-not-allowed' : 'bg-gray-600 text-white hover:bg-gray-500'}`}
+            title={refreshCooldownEndsAt && Date.now() < refreshCooldownEndsAt ? `Aguarde ${Math.max(0, Math.ceil(((refreshCooldownEndsAt - Date.now())/60000)))} min` : 'Atualizar lista de missões'}
+          >
+            Atualizar Missões
+          </button>
           <button
             onClick={() => setCompanionsOnly(v => { try { localStorage.setItem('questboard_companions_only', v ? '0' : '1'); } catch {}; return !v; })}
             className={`px-3 py-2 rounded-md font-medium transition-colors ${companionsOnly ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'}`}
@@ -691,6 +790,8 @@ const QuestBoard: React.FC = () => {
       {/* Quest Content */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {selectedTab === 'available' && availableUniq
+          .filter(q => !selectedHero.activeQuests.includes(q.id))
+          .filter(q => !(selectedHero.completedQuests || []).includes(q.id))
           .filter(q => (companionsOnly ? q.isGuildQuest : true))
           .map(quest => (
             <React.Fragment key={`available-${quest.id}`}>
@@ -699,7 +800,7 @@ const QuestBoard: React.FC = () => {
           ))}
         {/* Conteúdo Narrativas removido */}
         {selectedTab === 'active' && activeIdsUniq
-          .map(id => availableUniq.find(q => q.id === id))
+          .map(id => getQuestById(id) || availableUniq.find(q => q.id === id))
           .filter((q): q is Quest => !!q)
           .map((q, idx) => (
             <div key={`active-${q.id}-${idx}`}>
@@ -716,7 +817,7 @@ const QuestBoard: React.FC = () => {
             </div>
           ))}
         {selectedTab === 'completed' && completedIdsUniq
-          .map(id => availableUniq.find(q => q.id === id))
+          .map(id => getQuestById(id) || availableUniq.find(q => q.id === id))
           .filter((q): q is Quest => !!q)
           .map((q, idx) => (
             <React.Fragment key={`completed-${q.id}-${idx}`}>
@@ -761,12 +862,20 @@ const QuestBoard: React.FC = () => {
 
 const ConcludeButton: React.FC<{ heroId: string; questId: string; onConcluded?: () => void }> = ({ heroId, questId, onConcluded }) => {
   const completeQuest = useHeroStore(s => s.completeQuest);
+  const updateHero = useHeroStore(s => s.updateHero);
+  const heroes = useHeroStore(s => s.heroes);
   const [busy, setBusy] = React.useState(false);
   const handle = async () => {
     if (busy) return;
     setBusy(true);
     try {
       completeQuest(heroId, questId, false);
+      const current = heroes.find(h => h.id === heroId);
+      if (current) {
+        const cdMin = 20;
+        const ends = new Date(Date.now() + cdMin * 60 * 1000).toISOString();
+        updateHero(heroId, { questing: { ...(current.questing || {}), cooldownEndsAt: ends, lastCompletedAt: new Date().toISOString() } });
+      }
       onConcluded?.();
     } finally {
       setBusy(false);
@@ -798,6 +907,10 @@ const AutoCompleteMission: React.FC<{ hero: Hero; quest: Quest }> = ({ hero, que
       setStarted(true);
       setTimeout(() => {
         completeQuest(hero.id, quest.id, false);
+        const map: Record<QuestDifficulty, number> = { rapida: 10, padrao: 20, epica: 50 };
+        const cdMin = map[quest.difficulty] || 15;
+        const ends = new Date(Date.now() + cdMin * 60 * 1000).toISOString();
+        updateHero(hero.id, { questing: { ...(hero.questing || {}), cooldownEndsAt: ends, lastCompletedAt: new Date().toISOString() } });
       }, 100);
     } catch {}
   }, [hero.id, quest.id, started]);

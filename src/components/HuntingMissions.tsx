@@ -35,6 +35,16 @@ export default function HuntingMissions() {
   const rankProgress = useMemo(() => (hero ? getHeroRankProgress(hero.id) : null), [hero?.id, hero?.progression?.xp, hero?.stats?.questsCompleted])
   const [autoRun, setAutoRun] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
+  const cdMs = useMemo(() => {
+    const ends = hero?.hunting?.cooldownEndsAt ? new Date(hero.hunting.cooldownEndsAt).getTime() : 0
+    return ends ? Math.max(0, ends - Date.now()) : 0
+  }, [hero?.hunting?.cooldownEndsAt])
+  const cdActive = cdMs > 0
+  const getHuntingCooldownMinutes = () => {
+    const r = (hero?.rankData?.currentRank || 'F') as 'F'|'E'|'D'|'C'|'B'|'A'|'S'
+    const map: Record<'F'|'E'|'D'|'C'|'B'|'A'|'S', number> = { F: 8, E: 12, D: 15, C: 20, B: 25, A: 30, S: 40 }
+    return map[r] || 15
+  }
 
   const phasesTotal = useMemo(() => mission?.phases || 0, [mission?.phases])
   const rank = hero?.rankData?.currentRank
@@ -64,6 +74,7 @@ export default function HuntingMissions() {
   const start = () => {
     if (!hero || !mission) return
     if (!canEnter) { setError('Rank insuficiente para esta missão de caça.'); return }
+    if (cdActive) { setError('Cooldown ativo para Missões de Caça. Aguarde o tempo de recarga.'); return }
     const needed = worldStateManager.computeEffectiveStaminaCost(hero, staminaCostPerPhase)
     const currentStamina = (hero.stamina as any)?.current ?? (hero.stamina as any) ?? 0
     if (currentStamina < needed) { setError('Stamina insuficiente para iniciar a caçada.'); return }
@@ -265,6 +276,9 @@ export default function HuntingMissions() {
         const newRankData = rankSystem.updateRankData({ ...current, stats: newStats }, ensuredRank)
         store.updateHero(hero.id, { rankData: newRankData })
         updateDailyGoalProgress(hero.id, 'quest-completed', 1)
+        const cdMin = getHuntingCooldownMinutes()
+        const ends = new Date(Date.now() + cdMin * 60 * 1000).toISOString()
+        store.updateHero(hero.id, { hunting: { ...(current.hunting || {}), cooldownEndsAt: ends, lastCompletedAt: new Date().toISOString() } })
       }
       if (mission.rankRequired === 'F' && !anyLoot) {
         const consolation = mission.category === 'coleta' ? 'erva-sangue' : 'osso-antigo'
@@ -285,6 +299,9 @@ export default function HuntingMissions() {
     const newRankData = rankSystem.updateRankData({ ...current, stats: newStats }, ensuredRank)
     store.updateHero(hero.id, { rankData: newRankData })
     updateDailyGoalProgress(hero.id, 'quest-completed', 1)
+    const cdMin = getHuntingCooldownMinutes()
+    const ends = new Date(Date.now() + cdMin * 60 * 1000).toISOString()
+    store.updateHero(hero.id, { hunting: { ...(current.hunting || {}), cooldownEndsAt: ends, lastCompletedAt: new Date().toISOString() } })
     setFinished(true)
     setRunning(false)
   }
@@ -386,13 +403,14 @@ export default function HuntingMissions() {
           )}
           {!running && !finished && (
             <div className="mt-3">
-              <button onClick={start} disabled={!hero || !canEnter} className="px-3 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">Iniciar Caçada</button>
-              <button onClick={reroll} disabled={!hero || running} className="ml-2 px-3 py-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50">Nova Missão</button>
+              <button onClick={start} disabled={!hero || !canEnter || cdActive} className="px-3 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">Iniciar Caçada</button>
+              <button onClick={reroll} disabled={!hero || running || cdActive} className="ml-2 px-3 py-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50">Nova Missão</button>
               <button onClick={() => setShowDetails(v => !v)} className="ml-2 px-3 py-2 rounded bg-gray-700 text-white hover:bg-gray-600">{showDetails ? 'Ocultar Detalhes' : 'Detalhes da Missão'}</button>
               {!canEnter && <div className="mt-2 text-sm text-red-300">Rank insuficiente para esta missão.</div>}
               {hero && (((hero.stamina as any)?.current ?? (hero.stamina as any) ?? 0) < worldStateManager.computeEffectiveStaminaCost(hero as any, staminaCostPerPhase)) && <div className="mt-2 text-sm text-amber-300">Stamina insuficiente para iniciar. Restaure energia antes de prosseguir.</div>}
               {hero && estimatedTotalStamina > (((hero.stamina as any)?.current ?? (hero.stamina as any) ?? 0)) && <div className="mt-2 text-sm text-amber-300">Atenção: stamina atual pode não ser suficiente para todas as fases.</div>}
               {canEnter && mission.rankRequired === 'F' && <div className="mt-2 text-sm text-emerald-300">Missão inicial liberada para Novatos (Rank F).</div>}
+              {cdActive && <div className="mt-2 text-sm text-amber-300">Cooldown ativo: aguarde {Math.ceil(cdMs/60000)} min.</div>}
               {error && <div className="mt-2 text-sm text-red-300">{error}</div>}
             </div>
           )}
@@ -451,7 +469,7 @@ export default function HuntingMissions() {
                 </div>
               )}
               <div className="mt-2">
-                <button onClick={restart} className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Repetir Missão</button>
+                <button onClick={() => setFinished(false)} className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Completar Missão</button>
               </div>
             </div>
           )}

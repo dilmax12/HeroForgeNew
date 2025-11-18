@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useHeroStore } from '../store/heroStore';
 import { medievalTheme, seasonalThemes, getSeasonalButtonGradient } from '../styles/medievalTheme';
@@ -73,10 +73,10 @@ const StepCard: React.FC<{
 const ProgressBar: React.FC<{ percent: number; label?: string }> = ({ percent, label }) => {
   return (
     <div>
-      {label && <div className="text-xs text-gray-400 mb-1">{label}</div>}
-      <div className="w-full h-3 bg-gray-700 rounded-full overflow-hidden" role="progressbar" aria-valuenow={Math.max(0, Math.min(100, percent))} aria-valuemin={0} aria-valuemax={100}>
+      {label && <div className="text-xs text-slate-400 mb-1">{label}</div>}
+      <div className="w-full h-3 bg-slate-700 rounded-full overflow-hidden" role="progressbar" aria-valuenow={Math.max(0, Math.min(100, percent))} aria-valuemin={0} aria-valuemax={100}>
         <div
-          className="h-3 bg-gradient-to-r from-amber-400 to-yellow-500 rounded-full transition-all duration-500"
+          className={`h-3 bg-gradient-to-r ${medievalTheme.gradients.buttons.success} rounded-full transition-all duration-500`}
           style={{ width: `${Math.max(0, Math.min(100, percent))}%` }}
         />
       </div>
@@ -103,6 +103,8 @@ const JourneyFlow: React.FC = () => {
   const [recommendedEvents, setRecommendedEvents] = useState<any[]>([]);
   const [recLoading, setRecLoading] = useState(false);
   const [trackerExpandedFlowId, setTrackerExpandedFlowId] = useState<string | null>(null);
+  const progressAbortRef = useRef<AbortController | null>(null);
+  const isMountedRef = useRef<boolean>(true);
   const navigate = useNavigate();
   const location = useLocation();
   const params = new URLSearchParams(location.search);
@@ -181,48 +183,78 @@ const JourneyFlow: React.FC = () => {
     }
   }
 
-  async function fetchPlayerProgress() {
-    setProgressLoading(true);
-    setProgressError(null);
+  async function fetchPlayerProgress(signal?: AbortSignal) {
+    if (signal?.aborted) return;
+    if (isMountedRef.current) {
+      setProgressLoading(true);
+      setProgressError(null);
+    }
     try {
       if (!supabaseConfigured) {
-        setProgressError('Nuvem desativada neste ambiente.');
-        setPlayerProgress(null);
+        if (!signal?.aborted && isMountedRef.current) {
+          setProgressError('Nuvem desativada neste ambiente.');
+          setPlayerProgress(null);
+        }
         return;
       }
       const { data } = await supabase.auth.getUser();
       const userId = data?.user?.id || null;
       if (!userId) {
-        setProgressError('Faça login para ver seu progresso.');
-        setPlayerProgress(null);
+        if (!signal?.aborted && isMountedRef.current) {
+          setProgressError('Faça login para ver seu progresso.');
+          setPlayerProgress(null);
+        }
       } else {
-        const res = await fetch(`/api/player-progress?action=get&id=${encodeURIComponent(userId)}`);
+        const res = await fetch(`/api/player-progress?action=get&id=${encodeURIComponent(userId)}`, { signal });
         const json = await res.json();
         if (!res.ok) throw new Error(json?.error || 'Falha ao carregar progresso');
-        setPlayerProgress(json?.progress || null);
+        if (!signal?.aborted && isMountedRef.current) {
+          setPlayerProgress(json?.progress || null);
+        }
       }
     } catch (e: any) {
-      setProgressError(e?.message || String(e));
-      setPlayerProgress(null);
+      if (e?.name === 'AbortError') return;
+      if (!signal?.aborted && isMountedRef.current) {
+        setProgressError(e?.message || String(e));
+        setPlayerProgress(null);
+      }
     } finally {
-      setProgressLoading(false);
+      if (!signal?.aborted && isMountedRef.current) {
+        setProgressLoading(false);
+      }
     }
   }
 
   useEffect(() => {
+    isMountedRef.current = true;
     let timer: any = null;
-    if (progressLoading) return;
-    fetchPlayerProgress();
-    timer = setInterval(() => { fetchPlayerProgress(); }, 5 * 60 * 1000);
+    const run = () => {
+      if (progressAbortRef.current) {
+        try { progressAbortRef.current.abort(); } catch {}
+      }
+      progressAbortRef.current = new AbortController();
+      fetchPlayerProgress(progressAbortRef.current.signal);
+    };
+    if (!progressLoading) {
+      run();
+      timer = setInterval(run, 5 * 60 * 1000);
+    }
     const onVis = () => {
       if (document.hidden) {
         if (timer) { clearInterval(timer); timer = null; }
       } else {
-        if (!timer) timer = setInterval(() => { fetchPlayerProgress(); }, 5 * 60 * 1000);
+        if (!timer) timer = setInterval(run, 5 * 60 * 1000);
       }
     };
     document.addEventListener('visibilitychange', onVis);
-    return () => { if (timer) clearInterval(timer); document.removeEventListener('visibilitychange', onVis); };
+    return () => {
+      if (timer) clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVis);
+      if (progressAbortRef.current) {
+        try { progressAbortRef.current.abort(); } catch {}
+      }
+      isMountedRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -413,126 +445,17 @@ const JourneyFlow: React.FC = () => {
         </div>
       </div>
 
-      <div className="mb-8">
-        <ol className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {[
-            { label: 'Criar Herói', to: referralCode ? `/create?ref=${referralCode}${inviterBy?`&by=${inviterBy}`:''}` : '/create' },
-            { label: 'Galeria', to: '/gallery' },
-            { label: 'Missões IA', to: '/quests' },
-            { label: 'Evolução', to: '/evolution' }
-          ].map((s, i) => (
-            <li key={i}>
-              <button onClick={() => navigate(s.to)} className={`w-full px-3 py-2 rounded bg-gray-800 text-white text-xs border border-white/10 hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500`}>{i+1}. {s.label}</button>
-            </li>
-          ))}
-        </ol>
-      </div>
+      
 
-      <div className={`grid grid-cols-1 md:grid-cols-4 gap-4 mb-8`}>
-        <div className={`rounded-xl p-4 bg-white/10 border ${seasonalBorder}`}>
-        <div className="flex items-center gap-2 mb-2" aria-live="polite">
-          <div className="text-sm text-gray-400">Seu Progresso</div>
-          <button onClick={fetchPlayerProgress} disabled={progressLoading} className={`px-2 py-1 rounded text-xs border ${progressLoading ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed' : 'bg-white text-gray-800 border-gray-300'}`}>{progressLoading ? (<span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></span><span>Atualizando</span></span>) : 'Atualizar'}</button>
-        </div>
-        {progressError && <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">{progressError}</div>}
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            <div className="bg-white/5 border border-white/10 rounded p-2">
-              <div className="text-xs text-gray-400" title="Total de missões concluídas em toda a conta">Missões</div>
-              <div className="text-lg text-white">{playerProgress?.missions_completed ?? '—'}</div>
-            </div>
-            <div className="bg-white/5 border border-white/10 rounded p-2">
-              <div className="text-xs text-gray-400" title="Total de conquistas desbloqueadas">Conquistas</div>
-              <div className="text-lg text-white">{playerProgress?.achievements_unlocked ?? '—'}</div>
-            </div>
-            <div className="bg-white/5 border border-white/10 rounded p-2">
-              <div className="text-xs text-gray-400" title="Minutos acumulados de tempo de jogo">Tempo (min)</div>
-              <div className="text-lg text-white">{playerProgress?.playtime_minutes ?? '—'}</div>
-            </div>
-            <div className="bg-white/5 border border-white/10 rounded p-2">
-              <div className="text-xs text-gray-400" title="Data/hora do último login registrado">Último login</div>
-              <div className="text-xs text-white">{playerProgress?.last_login ? new Date(playerProgress.last_login).toLocaleString() : '—'}</div>
-            </div>
-          </div>
-        </div>
-      </div>
+      
 
       {/* Capítulos sugeridos pela IA */}
       <NarrativeChapters />
 
-      <div className={`mt-8 rounded-xl p-6 bg-white/10 border ${seasonalBorder}`}>
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-xl font-bold text-amber-300">🎪 Eventos Recomendados</div>
-          <div className="text-sm text-gray-300">{recLoading ? 'Carregando…' : ''}</div>
-        </div>
-        {recommendedEvents.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {recommendedEvents.map((ev: any) => (
-              <div key={ev.id} className="rounded-lg p-4 bg-white/5 border border-white/10">
-                <div className="text-white font-semibold">{ev.name}</div>
-                <div className="text-xs text-gray-300">{new Date(ev.dateTime).toLocaleString()}</div>
-                {ev.locationText && <div className="text-xs text-gray-300">{ev.locationText}</div>}
-                <div className="mt-2 text-xs text-gray-400">{(ev.tags||[]).join(', ')}</div>
-                <div className="mt-3">
-                  <Link to={`/event/${ev.id}`} className="px-3 py-2 rounded bg-amber-600 text-black text-xs">Abrir</Link>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-sm text-gray-400">Sem recomendações no momento.</div>
-        )}
-      </div>
+      
 
-      {/* Resultados Diários (Modo Ocioso) */}
-      <div className={`mt-8 rounded-xl p-6 bg-white/10 border ${seasonalBorder}`} data-testid="idle-daily-panel">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-xl font-bold text-amber-300">{medievalTheme.icons.ui.calendar} Resultados Diários</div>
-          <div className="text-sm text-gray-300">Envio automático ativo</div>
-        </div>
-        {daily && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            <div className="rounded-lg p-4 bg-white/5 border border-white/10">
-              <div className="text-sm text-gray-400">Execuções</div>
-              <div className="text-2xl font-bold">{daily.runs?.length ?? 0}</div>
-            </div>
-            <div className="rounded-lg p-4 bg-white/5 border border-white/10">
-              <div className="text-sm text-gray-400">XP Hoje</div>
-              <div className="text-2xl font-bold">{daily.xpTotal ?? 0}</div>
-            </div>
-            <div className="rounded-lg p-4 bg-white/5 border border-white/10">
-              <div className="text-sm text-gray-400">Ouro Hoje</div>
-              <div className="text-2xl font-bold">{daily.goldTotal ?? 0}</div>
-            </div>
-            <div className="rounded-lg p-4 bg-white/5 border border-white/10">
-              <div className="text-sm text-gray-400">Vitórias</div>
-              <div className="text-2xl font-bold">{daily.victories ?? 0}</div>
-            </div>
-          </div>
-        )}
-        {Array.isArray(leaderboard) && leaderboard.length > 0 && (
-          <div className="mt-4">
-            <div className="text-sm text-gray-300 mb-2">Top de hoje</div>
-            <div className="space-y-2">
-              {leaderboard.slice(0, 5).map((entry: any, idx: number) => (
-                <div key={`${entry.heroId}_${idx}`} className={`flex items-center justify-between p-3 rounded-lg border ${hero && entry.heroId === (hero.id || hero.name) ? 'border-amber-400 bg-amber-900/10' : 'border-white/10 bg-white/5'}`}>
-                  <div className="flex items-center gap-3">
-                    <span className="text-gray-400">#{idx + 1}</span>
-                    <span className="font-semibold text-white">{entry.heroName}</span>
-                    <span className="text-gray-400 text-sm">({entry.class})</span>
-                  </div>
-                  <div className="text-sm text-gray-200">
-                    <span className="mr-3">XP: {entry.xpToday}</span>
-                    <span className="mr-3">Ouro: {entry.goldToday}</span>
-                    <span>Vitórias: {entry.victoriesToday}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      
 
-      {/* Passos Essenciais */}
       <div className="space-y-4">
         <StepCard
           title="Criar Herói (com IA)"
