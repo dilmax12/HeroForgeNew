@@ -789,7 +789,14 @@ export const useHeroStore = create<HeroState>()(
         } as HeroCreationData;
         const h = get().createHero(heroData);
         seedPersonality(h);
-        get().updateHero(h.id, { origin: 'npc', controlledByAI: true, npcPersonality: h.npcPersonality, npcRoutine: h.npcRoutine, npcMemory: h.npcMemory, socialRelations: {} });
+        const player = get().getSelectedHero();
+        const pers = h.npcPersonality || { archetype: 'explorador', traits: [], chatStyle: 'amigavel' };
+        let baseRel = Math.floor(-20 + Math.random() * 40);
+        if ((pers.traits || []).includes('generoso') || pers.chatStyle === 'amigavel') baseRel += 8;
+        if ((pers.traits || []).includes('desconfiado') || pers.archetype === 'competitivo') baseRel -= 12;
+        baseRel = Math.max(-60, Math.min(25, baseRel));
+        const initialRelations = player && player.origin !== 'npc' ? { [player.id]: baseRel } : {};
+        get().updateHero(h.id, { origin: 'npc', controlledByAI: true, npcPersonality: h.npcPersonality, npcRoutine: h.npcRoutine, npcMemory: h.npcMemory, socialRelations: initialRelations });
         return get().heroes.find(x => x.id === h.id)!;
       },
 

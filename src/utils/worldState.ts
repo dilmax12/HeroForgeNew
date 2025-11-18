@@ -31,10 +31,10 @@ export class WorldStateManager {
       },
       activeEvents: [],
       npcStatus: {
-        'Capitão da Guarda': { alive: true, relationToPlayer: 0, currentLocation: 'Quartel' },
-        'Mercador Aldric': { alive: true, relationToPlayer: 5, currentLocation: 'Mercado' },
-        'Sábia Elara': { alive: true, relationToPlayer: 0, currentLocation: 'Biblioteca' },
-        'Ferreiro Gorin': { alive: true, relationToPlayer: 0, currentLocation: 'Forja' }
+        'Capitão da Guarda': { alive: true, relationToPlayer: (Math.random() < 0.45 ? -5 - Math.floor(Math.random() * 10) : Math.floor(Math.random() * 6)), currentLocation: 'Quartel' },
+        'Mercador Aldric': { alive: true, relationToPlayer: (Math.random() < 0.35 ? -5 - Math.floor(Math.random() * 10) : 5), currentLocation: 'Mercado' },
+        'Sábia Elara': { alive: true, relationToPlayer: (Math.random() < 0.4 ? -5 - Math.floor(Math.random() * 10) : Math.floor(Math.random() * 4)), currentLocation: 'Biblioteca' },
+        'Ferreiro Gorin': { alive: true, relationToPlayer: (Math.random() < 0.3 ? -5 - Math.floor(Math.random() * 10) : Math.floor(Math.random() * 4)), currentLocation: 'Forja' }
       },
       decisionLog: [],
       worldEvents: [],

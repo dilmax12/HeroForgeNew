@@ -12,8 +12,9 @@ const ThemePreviewModal: React.FC<Props> = ({ open, onClose, previewFrameId }) =
   const { setActiveFrame } = useMonetizationStore();
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[1000] bg-black/60 flex items-center justify-center">
-      <div className="w-[92vw] max-w-2xl rounded-2xl border border-white/20 bg-slate-900 shadow-2xl">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative z-10 w-[92vw] max-w-2xl rounded-2xl border border-white/20 bg-slate-900 shadow-2xl">
         <div className="p-4 border-b border-white/10 flex items-center justify-between">
           <div className="text-sm text-gray-200">Pré-visualização de Moldura</div>
           <button onClick={onClose} className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600">Fechar</button>

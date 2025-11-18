@@ -1,3 +1,5 @@
+import { supabase, supabaseConfigured } from '../lib/supabaseClient';
+
 export type SocialEvent = {
   id: string;
   name: string;
@@ -20,6 +22,7 @@ export type EventMessage = { id: string; userId: string; text: string; ts: numbe
 export type EventMedia = { id: string; userId: string; url: string; caption?: string; ts: number };
 export type Pagination = { total: number; offset: number; limit: number; hasMore: boolean };
 export type Paged<T> = { items: T[]; pagination: Pagination };
+export type PageLinks = { prev?: string; next?: string };
 
 const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.VITE_API_BASE_URL) || (() => {
   try {
@@ -41,6 +44,49 @@ function makeUrl(path: string, qs?: URLSearchParams): string {
   }
 }
 
+async function authHeaders(userId?: string): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {};
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+  } catch {}
+  if (!headers['Authorization'] && userId && !supabaseConfigured) headers['X-User-Id'] = userId;
+  return headers;
+}
+
+function parseLinkHeader(link?: string | null): PageLinks {
+  const out: PageLinks = {};
+  if (!link) return out;
+  const parts = String(link).split(',');
+  for (const p of parts) {
+    const m = /<([^>]+)>;\s*rel="(prev|next)"/i.exec(p.trim());
+    if (m) {
+      const url = m[1];
+      const rel = m[2].toLowerCase();
+      if (rel === 'prev') out.prev = url; else if (rel === 'next') out.next = url;
+    }
+  }
+  return out;
+}
+
+async function handleError(res: Response): Promise<never> {
+  if (res.status === 409) {
+    throw new Error('Limite de participantes atingido');
+  }
+  try {
+    const j = await res.json();
+    const code = j?.code || `HTTP_${res.status}`;
+    const msg = j?.message || j?.error || (res.status === 409 ? 'Limite de participantes atingido' : `Falha HTTP ${res.status}`);
+    const err = new Error(msg);
+    (err as any).code = code;
+    (err as any).details = j?.details;
+    throw err;
+  } catch {
+    throw new Error(`Falha HTTP ${res.status}`);
+  }
+}
+
 export async function listEvents(viewerId: string, opts: { tag?: string; ownerId?: string; limit?: number; offset?: number } = {}): Promise<SocialEvent[]> {
   try {
     if (!API_BASE) return [];
@@ -50,7 +96,8 @@ export async function listEvents(viewerId: string, opts: { tag?: string; ownerId
     if (opts.ownerId) q.set('ownerId', opts.ownerId);
     if (typeof opts.limit === 'number') q.set('limit', String(opts.limit));
     if (typeof opts.offset === 'number') q.set('offset', String(opts.offset));
-    const res = await fetch(makeUrl('/api/events/list', q));
+    const headers = await authHeaders(viewerId);
+    const res = await fetch(makeUrl('/api/events/list', q), { headers });
     if (!res.ok) return [];
     const data = await res.json();
     return Array.isArray(data?.events) ? data.events as SocialEvent[] : [];
@@ -68,7 +115,8 @@ export async function listEventsPaged(viewerId: string, opts: { tag?: string; ow
     if (opts.ownerId) q.set('ownerId', opts.ownerId);
     if (typeof opts.limit === 'number') q.set('limit', String(opts.limit));
     if (typeof opts.offset === 'number') q.set('offset', String(opts.offset));
-    const res = await fetch(makeUrl('/api/events/list', q));
+    const headers = await authHeaders(viewerId);
+    const res = await fetch(makeUrl('/api/events/list', q), { headers });
     if (!res.ok) return { items: [], pagination: { total: 0, offset: Number(opts.offset||0), limit: Number(opts.limit||0), hasMore: false } };
     const data = await res.json();
     const items = Array.isArray(data?.events) ? data.events as SocialEvent[] : [];
@@ -92,8 +140,9 @@ export async function createEvent(payload: {
   ownerId: string;
   invitedIds?: string[];
 }): Promise<SocialEvent> {
-  const res = await fetch(makeUrl('/api/events/create'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  if (!res.ok) throw new Error(`Falha ao criar evento: ${res.status}`);
+  const headers = { 'Content-Type': 'application/json', ...(await authHeaders(payload.ownerId)) };
+  const res = await fetch(makeUrl('/api/events/create'), { method: 'POST', headers, body: JSON.stringify(payload) });
+  if (!res.ok) return handleError(res);
   const data = await res.json();
   return data?.event as SocialEvent;
 }
@@ -101,71 +150,72 @@ export async function createEvent(payload: {
 export async function getEvent(id: string, viewerId?: string): Promise<SocialEvent | null> {
   const q = new URLSearchParams();
   if (viewerId) q.set('viewerId', viewerId);
-  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}`, q));
+  const headers = await authHeaders(viewerId);
+  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}`, q), { headers });
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Falha ao obter evento: ${res.status}`);
+  if (!res.ok) return handleError(res);
   const data = await res.json();
   return data?.event as SocialEvent;
 }
 
 export async function updateEvent(id: string, actorId: string, updates: Partial<Omit<SocialEvent, 'id' | 'ownerId' | 'createdAt'>>): Promise<SocialEvent> {
-  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/update`), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ actorId, updates }) });
-  if (!res.ok) throw new Error(`Falha ao atualizar evento: ${res.status}`);
+  const headers = { 'Content-Type': 'application/json', ...(await authHeaders(actorId)) };
+  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/update`), { method: 'POST', headers, body: JSON.stringify({ actorId, updates }) });
+  if (!res.ok) return handleError(res);
   const data = await res.json();
   return data?.event as SocialEvent;
 }
 
 export async function deleteEvent(id: string, actorId: string): Promise<boolean> {
-  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/delete`), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ actorId }) });
-  if (!res.ok) throw new Error(`Falha ao excluir evento: ${res.status}`);
+  const headers = { 'Content-Type': 'application/json', ...(await authHeaders(actorId)) };
+  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/delete`), { method: 'POST', headers, body: JSON.stringify({ actorId }) });
+  if (!res.ok) return handleError(res);
   const data = await res.json();
   return !!data?.ok;
 }
 
 export async function attendEvent(id: string, viewerId: string, status: 'yes' | 'no' | 'maybe'): Promise<SocialEvent> {
-  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/attend`), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ viewerId, status }) });
-  if (!res.ok) {
-    if (res.status === 409) {
-      try { const j = await res.json(); throw new Error(j?.error || 'Limite de participantes atingido'); } catch { throw new Error('Limite de participantes atingido'); }
-    }
-    throw new Error(`Falha ao confirmar presença: ${res.status}`);
-  }
+  const headers = { 'Content-Type': 'application/json', ...(await authHeaders(viewerId)) };
+  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/attend`), { method: 'POST', headers, body: JSON.stringify({ viewerId, status }) });
+  if (!res.ok) return handleError(res);
   const data = await res.json();
   return data?.event as SocialEvent;
 }
 
 export async function fetchEventChat(id: string, signal?: AbortSignal): Promise<EventMessage[]> {
   const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/chat`), { signal });
-  if (!res.ok) throw new Error(`Falha ao carregar chat: ${res.status}`);
+  if (!res.ok) return handleError(res);
   const data = await res.json();
   return Array.isArray(data?.messages) ? data.messages as EventMessage[] : [];
 }
 
 export async function sendEventChat(id: string, viewerId: string, text: string): Promise<EventMessage> {
-  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/chat`), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ viewerId, text }) });
-  if (!res.ok) throw new Error(`Falha ao enviar mensagem: ${res.status}`);
+  const headers = { 'Content-Type': 'application/json', ...(await authHeaders(viewerId)) };
+  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/chat`), { method: 'POST', headers, body: JSON.stringify({ viewerId, text }) });
+  if (!res.ok) return handleError(res);
   const data = await res.json();
   return data?.message as EventMessage;
 }
 
 export async function addEventMedia(id: string, viewerId: string, url: string, caption?: string): Promise<EventMedia> {
-  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/media`), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ viewerId, url, caption }) });
-  if (!res.ok) throw new Error(`Falha ao adicionar mídia: ${res.status}`);
+  const headers = { 'Content-Type': 'application/json', ...(await authHeaders(viewerId)) };
+  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/media`), { method: 'POST', headers, body: JSON.stringify({ viewerId, url, caption }) });
+  if (!res.ok) return handleError(res);
   const data = await res.json();
   return data?.media as EventMedia;
 }
 
 export async function listEventMedia(id: string, signal?: AbortSignal): Promise<EventMedia[]> {
   const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/media`), { signal });
-  if (!res.ok) throw new Error(`Falha ao listar mídia: ${res.status}`);
+  if (!res.ok) return handleError(res);
   const data = await res.json();
   return Array.isArray(data?.media) ? data.media as EventMedia[] : [];
 }
 
 export async function rateEvent(id: string, viewerId: string, stars: number, comment?: string): Promise<boolean> {
-  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/rate`), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ viewerId, stars, comment }) });
-  if (res.status === 409) return false;
-  if (!res.ok) throw new Error(`Falha ao avaliar: ${res.status}`);
+  const headers = { 'Content-Type': 'application/json', ...(await authHeaders(viewerId)) };
+  const res = await fetch(makeUrl(`/api/events/${encodeURIComponent(id)}/rate`), { method: 'POST', headers, body: JSON.stringify({ viewerId, stars, comment }) });
+  if (!res.ok) return handleError(res);
   const data = await res.json();
   return !!data?.ok;
 }
@@ -177,7 +227,8 @@ export async function recommendEvents(viewerId: string, interestsCsv?: string, o
     if (interestsCsv) q.set('interests', interestsCsv);
     if (typeof opts.limit === 'number') q.set('limit', String(opts.limit));
     if (typeof opts.offset === 'number') q.set('offset', String(opts.offset));
-    const res = await fetch(makeUrl('/api/events/recommendations', q));
+    const headers = await authHeaders(viewerId);
+    const res = await fetch(makeUrl('/api/events/recommendations', q), { headers });
     if (!res.ok) return [];
     const data = await res.json();
     return Array.isArray(data?.events) ? data.events as SocialEvent[] : [];
@@ -193,7 +244,8 @@ export async function recommendEventsPaged(viewerId: string, interestsCsv?: stri
     if (interestsCsv) q.set('interests', interestsCsv);
     if (typeof opts.limit === 'number') q.set('limit', String(opts.limit));
     if (typeof opts.offset === 'number') q.set('offset', String(opts.offset));
-    const res = await fetch(makeUrl('/api/events/recommendations', q));
+    const headers = await authHeaders(viewerId);
+    const res = await fetch(makeUrl('/api/events/recommendations', q), { headers });
     if (!res.ok) return { items: [], pagination: { total: 0, offset: Number(opts.offset||0), limit: Number(opts.limit||0), hasMore: false } };
     const data = await res.json();
     const items = Array.isArray(data?.events) ? data.events as SocialEvent[] : [];

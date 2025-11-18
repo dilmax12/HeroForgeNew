@@ -72,7 +72,7 @@ const StepCard: React.FC<{
 
 const ProgressBar: React.FC<{ percent: number; label?: string }> = ({ percent, label }) => {
   return (
-    <div>
+    <div data-testid="journey-progress">
       {label && <div className="text-xs text-slate-400 mb-1">{label}</div>}
       <div className="w-full h-3 bg-slate-700 rounded-full overflow-hidden" role="progressbar" aria-valuenow={Math.max(0, Math.min(100, percent))} aria-valuemin={0} aria-valuemax={100}>
         <div
@@ -476,6 +476,7 @@ const JourneyFlow: React.FC = () => {
           to="/gallery"
           examples={["Ex: Editar avatar", "Ex: Favoritar um título"]}
           stepIndex={2}
+          testId="open-gallery-button"
         />
         <StepCard
           title="Missões IA"
@@ -485,6 +486,7 @@ const JourneyFlow: React.FC = () => {
           to="/quests"
           examples={["Ex: Escolher caminho de exploração", "Ex: Ganhar XP e ouro"]}
           stepIndex={3}
+          testId="open-quests-button"
         />
         <StepCard
           title="Evoluir Herói"
@@ -494,6 +496,7 @@ const JourneyFlow: React.FC = () => {
           to="/evolution"
           examples={["Ex: Subir para nível 2", "Ex: Desbloquear um título"]}
           stepIndex={4}
+          testId="open-evolution-button"
         />
       </div>
 

@@ -55,6 +55,7 @@ try {
   const saveData = !!(conn && conn.saveData)
   const effectiveType = conn && conn.effectiveType ? String(conn.effectiveType) : 'unknown'
   store.updateSettings({ reducedMotionEnabled: reduced, saveDataEnabled: saveData, networkEffectiveType: effectiveType })
+  store.updateSettings({ autoInteractionEnabled: true })
   if (window.matchMedia) {
     window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', (e: any) => {
       try { getGameSettings().updateSettings({ reducedMotionEnabled: !!e.matches }) } catch {}

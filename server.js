@@ -4,12 +4,168 @@ import Stripe from 'stripe';
 import dotenv from 'dotenv';
 import { InferenceClient } from '@huggingface/inference';
 import { createClient as createSbClient } from '@supabase/supabase-js';
+let ZOD = null;
+try { ZOD = await import('zod'); } catch {}
+function sendError(res, status, code, message, details){ const body = { code, message }; if (details) body.details = details; return res.status(status).json(body); }
 
 dotenv.config();
 
 const app = express();
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '256kb' }));
+function sanitizeString(v) {
+  if (v === undefined || v === null) return '';
+  const s = String(v);
+  return s.replace(/[<>"'`]/g, c => ({ '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' }[c] || c)).replace(/\s+/g, ' ').trim();
+}
+function sanitizeArrayOfStrings(arr, max = 20, itemMaxLen = 64) {
+  const a = Array.isArray(arr) ? arr : [];
+  return a.slice(0, max).map(t => sanitizeString(String(t).slice(0, itemMaxLen)));
+}
+function clampNumber(n, min, max) {
+  const x = Number(n);
+  if (Number.isNaN(x)) return min;
+  return Math.max(min, Math.min(max, x));
+}
+function isValidId(s) {
+  const v = String(s || '');
+  return /^[a-zA-Z0-9_-]{1,64}$/.test(v);
+}
+function isString(v) { return typeof v === 'string'; }
+function isNumber(v) { return typeof v === 'number' && Number.isFinite(v); }
+function isArrayOfStrings(v, maxLen = 64) { return Array.isArray(v) && v.every(x => typeof x === 'string' && x.length <= maxLen); }
+function validateEventCreatePayload(payload) {
+  if (!isString(payload?.name) || !String(payload.name).trim()) return 'name inválido';
+  if (!isString(payload?.dateTime)) return 'dateTime inválido';
+  if (!isString(payload?.ownerId) || !isValidId(payload.ownerId)) return 'ownerId inválido';
+  if (payload?.locationText !== undefined && !isString(payload.locationText)) return 'locationText inválido';
+  if (payload?.description !== undefined && !isString(payload.description)) return 'description inválido';
+  if (payload?.capacity !== undefined && !isNumber(payload.capacity)) return 'capacity inválido';
+  if (payload?.lat !== undefined && !isNumber(payload.lat)) return 'lat inválido';
+  if (payload?.lng !== undefined && !isNumber(payload.lng)) return 'lng inválido';
+  if (payload?.tags !== undefined && !isArrayOfStrings(payload.tags, 32)) return 'tags inválido';
+  if (payload?.invitedIds !== undefined && !isArrayOfStrings(payload.invitedIds, 64)) return 'invitedIds inválido';
+  if (payload?.privacy !== undefined && !['public','private','invite'].includes(String(payload.privacy))) return 'privacy inválido';
+  return null;
+}
+function validateEventUpdatePayload(updates) {
+  if (updates?.name !== undefined && !isString(updates.name)) return 'name inválido';
+  if (updates?.dateTime !== undefined && !isString(updates.dateTime)) return 'dateTime inválido';
+  if (updates?.locationText !== undefined && !isString(updates.locationText)) return 'locationText inválido';
+  if (updates?.description !== undefined && !isString(updates.description)) return 'description inválido';
+  if (updates?.capacity !== undefined && !isNumber(updates.capacity)) return 'capacity inválido';
+  if (updates?.lat !== undefined && !isNumber(updates.lat)) return 'lat inválido';
+  if (updates?.lng !== undefined && !isNumber(updates.lng)) return 'lng inválido';
+  if (updates?.tags !== undefined && !isArrayOfStrings(updates.tags, 32)) return 'tags inválido';
+  if (updates?.invitedIds !== undefined && !isArrayOfStrings(updates.invitedIds, 64)) return 'invitedIds inválido';
+  if (updates?.privacy !== undefined && !['public','private','invite'].includes(String(updates.privacy))) return 'privacy inválido';
+  return null;
+}
+function validateChatPayload(body) {
+  if (!isString(body?.viewerId) || !isValidId(body.viewerId)) return 'viewerId inválido';
+  if (!isString(body?.text) || !String(body.text).trim()) return 'text inválido';
+  return null;
+}
+function validateMediaPayload(body) {
+  if (!isString(body?.viewerId) || !isValidId(body.viewerId)) return 'viewerId inválido';
+  if (!isString(body?.url) || !String(body.url).trim()) return 'url inválido';
+  if (body?.caption !== undefined && !isString(body.caption)) return 'caption inválido';
+  return null;
+}
+function validateRatePayload(body) {
+  if (!isString(body?.viewerId) || !isValidId(body.viewerId)) return 'viewerId inválido';
+  if (!isNumber(body?.stars)) return 'stars inválido';
+  if (body?.comment !== undefined && !isString(body.comment)) return 'comment inválido';
+  return null;
+}
+
+function zodValidate(schema, data) {
+  try {
+    schema.parse(data);
+    return null;
+  } catch (e) {
+    const first = (e && e.errors && e.errors[0]) || null;
+    const msg = first?.message || 'Payload inválido';
+    return msg;
+  }
+}
+const ZEventCreate = ZOD ? ZOD.z.object({
+  name: ZOD.z.string().min(1).max(80),
+  dateTime: ZOD.z.string(),
+  ownerId: ZOD.z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/),
+  locationText: ZOD.z.string().max(200).optional(),
+  description: ZOD.z.string().max(2000).optional(),
+  capacity: ZOD.z.number().int().min(1).max(10000).optional(),
+  lat: ZOD.z.number().optional(),
+  lng: ZOD.z.number().optional(),
+  tags: ZOD.z.array(ZOD.z.string().max(32)).max(20).optional(),
+  invitedIds: ZOD.z.array(ZOD.z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/)).max(200).optional(),
+  privacy: ZOD.z.enum(['public','private','invite']).optional()
+}) : null;
+const ZEventUpdate = ZOD ? ZOD.z.object({
+  name: ZOD.z.string().max(80).optional(),
+  dateTime: ZOD.z.string().optional(),
+  locationText: ZOD.z.string().max(200).optional(),
+  description: ZOD.z.string().max(2000).optional(),
+  capacity: ZOD.z.number().int().min(1).max(10000).optional(),
+  lat: ZOD.z.number().optional(),
+  lng: ZOD.z.number().optional(),
+  tags: ZOD.z.array(ZOD.z.string().max(32)).max(20).optional(),
+  invitedIds: ZOD.z.array(ZOD.z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/)).max(200).optional(),
+  privacy: ZOD.z.enum(['public','private','invite']).optional()
+}) : null;
+const ZChat = ZOD ? ZOD.z.object({ viewerId: ZOD.z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/), text: ZOD.z.string().min(1).max(500) }) : null;
+const ZMedia = ZOD ? ZOD.z.object({ viewerId: ZOD.z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/), url: ZOD.z.string().url(), caption: ZOD.z.string().max(200).optional() }) : null;
+const ZRate = ZOD ? ZOD.z.object({ viewerId: ZOD.z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/), stars: ZOD.z.number().int().min(1).max(5), comment: ZOD.z.string().max(500).optional() }) : null;
+function getHeaderUserId(req) {
+  const hdr = req.headers['x-user-id'];
+  return hdr ? String(hdr) : '';
+}
+function requireHeaderMatchOr403(req, res, idValue) {
+  const hdr = getHeaderUserId(req);
+  if (hdr && hdr !== String(idValue)) {
+    res.status(403).json({ error: 'Cabeçalho X-User-Id não corresponde' });
+    return true;
+  }
+  return false;
+}
+async function validateSupabaseToken(req, expectedId) {
+  try {
+    const auth = String(req.headers.authorization || '').trim();
+    const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
+    if (!token) return false;
+    const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+    const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return true;
+    const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error) return false;
+    const uid = data && data.user ? String(data.user.id || '') : '';
+    if (!uid) return false;
+    return !expectedId || String(uid) === String(expectedId);
+  } catch {
+    return false;
+  }
+}
+function supabaseEnvConfigured() {
+  const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  return Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
+}
+
+async function checkIdentity(req, res, expectedId) {
+  const auth = String(req.headers.authorization || '').trim();
+  const hasToken = auth.toLowerCase().startsWith('bearer ');
+  if (hasToken || supabaseEnvConfigured()) {
+    const ok = await validateSupabaseToken(req, expectedId);
+    if (!ok) { res.status(401).json({ error: 'Token inválido' }); return false; }
+    return true;
+  }
+  const hdr = getHeaderUserId(req);
+  if (!hdr) { res.status(401).json({ error: 'Identidade ausente' }); return false; }
+  if (hdr !== String(expectedId)) { res.status(403).json({ error: 'Cabeçalho X-User-Id não corresponde' }); return false; }
+  return true;
+}
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
 app.use((req, res, next) => {
   const origin = String(req.headers.origin || '');
@@ -17,11 +173,11 @@ app.use((req, res, next) => {
     res.set('Access-Control-Allow-Origin', origin);
     res.set('Vary', 'Origin');
     res.set('Access-Control-Allow-Credentials', 'true');
-    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-User-Id');
     res.set('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
   } else if (!ALLOWED_ORIGINS.length) {
     res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-User-Id');
     res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
@@ -61,6 +217,29 @@ app.use('/api/hf-text', rateLimit(60000, 12));
 app.use('/api/gerar-imagem', rateLimit(60000, 8));
 app.use('/api/pollinations-image', rateLimit(60000, 20));
 app.use('/api/login-google', rateLimit(60000, 10));
+app.use('/api/events', rateLimit(60000, 60));
+async function supabaseLogLatency(label, req, ms){
+  try{
+    const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+    const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if(!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return;
+    if(Math.random()>0.1) return; // sample 10%
+    const supabase = createSbClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    try{ await supabase.storage.createBucket('server_logs',{ public:false }); }catch{}
+    const id = `lat-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+    const payload = { id, ts:new Date().toISOString(), label, method:req.method, path:req.path, ms };
+    const buf = Buffer.from(JSON.stringify(payload),'utf-8');
+    await supabase.storage.from('server_logs').upload(`${id}.json`, buf, { contentType:'application/json', upsert:true });
+  }catch{}
+}
+function latency(label){return (req,res,next)=>{const s=Date.now();res.on('finish',()=>{const d=Date.now()-s;try{console.log(JSON.stringify({type:'latency',label,method:req.method,path:req.path,ms:d,ts:new Date().toISOString()}));}catch{} supabaseLogLatency(label,req,d);});next();}}
+app.use('/api/events', latency('events'));
+app.use('/api/gerar-texto', latency('ia-text'));
+app.use('/api/hf-text', latency('ia-text'));
+app.use('/api/gerar-imagem', latency('ia-image'));
+app.use('/api/hero-create', latency('ia-hero-create'));
+app.use('/api/groq-openai', latency('ia-groq'));
+app.use('/api/groq-chat', latency('ia-groq'));
 
 // Memória simples para leaderboard diário (apenas em dev server)
 const dailyLeaderboardByDay = {};
@@ -77,8 +256,10 @@ app.all('/api/tavern', (req, res) => {
     if (!action) return res.status(400).json({ error: 'Missing action' });
     if (action === 'dice' && req.method === 'POST') {
       const { heroId, heroName, roll, critical = false, betAmount = null, opponentName = null } = req.body || {};
-      if (!heroName || typeof roll !== 'number') return res.status(400).json({ error: 'Parâmetros inválidos' });
-      tavernDiceEvents.push({ heroId, heroName, roll, critical: !!critical, betAmount: betAmount, opponentName, created_at: new Date().toISOString() });
+      const safeName = sanitizeString(heroName).slice(0, 64);
+      const safeOpponent = sanitizeString(opponentName).slice(0, 64);
+      if (!safeName || typeof roll !== 'number') return res.status(400).json({ error: 'Parâmetros inválidos' });
+      tavernDiceEvents.push({ heroId: sanitizeString(heroId).slice(0,64), heroName: safeName, roll, critical: !!critical, betAmount: betAmount, opponentName: safeOpponent, created_at: new Date().toISOString() });
       return res.json({ ok: true });
     }
     if (action === 'dice-weekly' && req.method === 'GET') {
@@ -223,23 +404,27 @@ function eventPublicView(e, viewerId) {
 app.post('/api/events/create', async (req, res) => {
   try {
     const { name, dateTime, locationText, lat, lng, description, capacity, tags, privacy, ownerId, invitedIds } = req.body || {};
-    if (!name || !dateTime || !ownerId) return res.status(400).json({ error: 'name, dateTime e ownerId são obrigatórios' });
+    const schemaErrCreate = ZEventCreate ? zodValidate(ZEventCreate, req.body || {}) : validateEventCreatePayload(req.body || {});
+    if (schemaErrCreate) return sendError(res, 400, 'INVALID_PAYLOAD', schemaErrCreate);
+    if (!name || !dateTime || !ownerId) return sendError(res, 400, 'MISSING_FIELDS', 'name, dateTime e ownerId são obrigatórios');
+    if (!isValidId(ownerId)) return sendError(res, 400, 'INVALID_ID', 'ownerId inválido');
+    if (!(await checkIdentity(req, res, ownerId))) return;
     const id = `e-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
     const ev = {
       id,
-      name: String(name).slice(0, 80),
-      description: String(description || '').slice(0, 2000),
+      name: sanitizeString(String(name).slice(0, 80)),
+      description: sanitizeString(String(description || '').slice(0, 2000)),
       dateTime: new Date(dateTime).toISOString(),
-      locationText: String(locationText || '').slice(0, 200),
+      locationText: sanitizeString(String(locationText || '').slice(0, 200)),
       lat: typeof lat === 'number' ? lat : undefined,
       lng: typeof lng === 'number' ? lng : undefined,
       capacity: Math.max(1, Math.min(10000, Number(capacity || 100))),
-      tags: Array.isArray(tags) ? tags.slice(0, 20).map(t => String(t).slice(0, 32)) : [],
+      tags: sanitizeArrayOfStrings(tags, 20, 32),
       privacy: ['public','private','invite'].includes(String(privacy)) ? String(privacy) : 'public',
-      ownerId: String(ownerId),
+      ownerId: sanitizeString(String(ownerId)).slice(0,64),
       createdAt: new Date().toISOString(),
       attendees: {},
-      invitedIds: Array.isArray(invitedIds) ? invitedIds.map(x => String(x)) : [],
+      invitedIds: sanitizeArrayOfStrings(invitedIds || [], 200, 64),
       messages: [],
       media: [],
       ratings: [],
@@ -267,6 +452,7 @@ app.get('/api/events/list', (req, res) => {
     const ownerId = String(req.query.ownerId || '');
     const limit = Math.max(1, Math.min(100, Number(req.query.limit || 50)));
     const offset = Math.max(0, Number(req.query.offset || 0));
+    res.set('Cache-Control', 'private, max-age=15');
     const all = Array.from(activeEvents.values()).filter(e => {
       if (e.deleted) return false;
       if (ownerId && e.ownerId !== ownerId) return false;
@@ -276,9 +462,56 @@ app.get('/api/events/list', (req, res) => {
       return e.ownerId === viewerId || (Array.isArray(e.invitedIds) && e.invitedIds.includes(viewerId));
     });
     const slice = all.slice(offset, offset + limit).map(e => eventPublicView(e, viewerId));
+    const latest = Math.max(0, ...slice.map(e => new Date(e.createdAt || e.dateTime || 0).getTime()));
+    const etag = `"list-${ownerId}-${tag}-${offset}-${limit}-${all.length}-${latest}"`;
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.set('ETag', etag);
+    res.set('X-Total-Count', String(all.length));
+    const links = [];
+    if (offset > 0) {
+      const prevOffset = Math.max(0, offset - limit);
+      links.push(`<${req.path}?viewerId=${encodeURIComponent(viewerId)}&ownerId=${encodeURIComponent(ownerId)}&tag=${encodeURIComponent(tag)}&offset=${prevOffset}&limit=${limit}>; rel="prev"`);
+    }
+    if (offset + limit < all.length) {
+      const nextOffset = offset + limit;
+      links.push(`<${req.path}?viewerId=${encodeURIComponent(viewerId)}&ownerId=${encodeURIComponent(ownerId)}&tag=${encodeURIComponent(tag)}&offset=${nextOffset}&limit=${limit}>; rel="next"`);
+    }
+    if (links.length) res.set('Link', links.join(', '));
     return res.json({ events: slice, pagination: { total: all.length, offset, limit, hasMore: offset + limit < all.length } });
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao listar eventos' });
+  }
+});
+
+// Histórico de eventos do usuário (definir antes de ":id" para não colidir)
+app.get('/api/events/history', (req, res) => {
+  try {
+    const viewerId = String(req.query.viewerId || '');
+    if (!viewerId) return res.status(400).json({ error: 'viewerId requerido' });
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit || 100)));
+    const offset = Math.max(0, Number(req.query.offset || 0));
+    const all = Array.from(activeEvents.values()).filter(e => e.attendees && e.attendees[viewerId]);
+    const slice = all.slice(offset, offset + limit).map(e => eventPublicView(e, viewerId));
+    const latest = Math.max(0, ...slice.map(e => new Date(e.createdAt || e.dateTime || 0).getTime()));
+    const etag = `"hist-${viewerId}-${offset}-${limit}-${all.length}-${latest}"`;
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.set('ETag', etag);
+    res.set('X-Total-Count', String(all.length));
+    res.set('X-Offset', String(offset));
+    res.set('X-Limit', String(limit));
+    const links = [];
+    if (offset > 0) {
+      const prevOffset = Math.max(0, offset - limit);
+      links.push(`<${req.path}?viewerId=${encodeURIComponent(viewerId)}&offset=${prevOffset}&limit=${limit}>; rel="prev"`);
+    }
+    if (offset + limit < all.length) {
+      const nextOffset = offset + limit;
+      links.push(`<${req.path}?viewerId=${encodeURIComponent(viewerId)}&offset=${nextOffset}&limit=${limit}>; rel="next"`);
+    }
+    if (links.length) res.set('Link', links.join(', '));
+    return res.json({ events: slice });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao listar histórico' });
   }
 });
 
@@ -288,6 +521,7 @@ app.get('/api/events/recommendations', (req, res) => {
     const interests = String(req.query.interests || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
     const limit = Math.max(1, Math.min(100, Number(req.query.limit || 50)));
     const offset = Math.max(0, Number(req.query.offset || 0));
+    res.set('Cache-Control', 'private, max-age=20');
     const all = Array.from(activeEvents.values()).filter(e => {
       if (e.deleted) return false;
       if (e.ownerId === viewerId) return false;
@@ -299,6 +533,21 @@ app.get('/api/events/recommendations', (req, res) => {
       return interests.some(t => etags.includes(t));
     });
     const slice = all.slice(offset, offset + limit).map(e => eventPublicView(e, viewerId));
+    const latest = Math.max(0, ...slice.map(e => new Date(e.createdAt || e.dateTime || 0).getTime()));
+    const etag = `"rec-${offset}-${limit}-${all.length}-${latest}-${interests.join('|')}"`;
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.set('ETag', etag);
+    res.set('X-Total-Count', String(all.length));
+    const links = [];
+    if (offset > 0) {
+      const prevOffset = Math.max(0, offset - limit);
+      links.push(`<${req.path}?viewerId=${encodeURIComponent(viewerId)}&interests=${encodeURIComponent(interests.join(','))}&offset=${prevOffset}&limit=${limit}>; rel="prev"`);
+    }
+    if (offset + limit < all.length) {
+      const nextOffset = offset + limit;
+      links.push(`<${req.path}?viewerId=${encodeURIComponent(viewerId)}&interests=${encodeURIComponent(interests.join(','))}&offset=${nextOffset}&limit=${limit}>; rel="next"`);
+    }
+    if (links.length) res.set('Link', links.join(', '));
     return res.json({ events: slice, pagination: { total: all.length, offset, limit, hasMore: offset + limit < all.length } });
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao recomendar eventos' });
@@ -310,7 +559,14 @@ app.get('/api/events/:id', (req, res) => {
     const viewerId = String(req.query.viewerId || '');
     const ev = activeEvents.get(String(req.params.id));
     if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
-    return res.json({ event: eventPublicView(ev, viewerId) });
+    const pub = eventPublicView(ev, viewerId);
+    const last = new Date(ev.createdAt || ev.dateTime || Date.now());
+    const etag = `"ev-${ev.id}-${new Date(ev.dateTime).getTime()}-${(ev.messages||[]).length}-${(ev.media||[]).length}-${(ev.ratings||[]).length}"`;
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.set('ETag', etag);
+    res.set('Last-Modified', last.toUTCString());
+    res.set('Cache-Control', 'private, max-age=10');
+    return res.json({ event: pub });
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao obter evento' });
   }
@@ -320,20 +576,24 @@ app.post('/api/events/:id/update', async (req, res) => {
   try {
     const id = String(req.params.id);
     const { actorId, updates } = req.body || {};
+    const schemaErrUpdate = ZEventUpdate ? zodValidate(ZEventUpdate, updates || {}) : validateEventUpdatePayload(updates || {});
+    if (schemaErrUpdate) return sendError(res, 400, 'INVALID_PAYLOAD', schemaErrUpdate);
     const ev = activeEvents.get(id);
-    if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
-    if (ev.ownerId !== String(actorId)) return res.status(403).json({ error: 'Apenas o organizador pode alterar' });
+    if (!ev || ev.deleted) return sendError(res, 404, 'NOT_FOUND', 'Evento não encontrado');
+    if (!isValidId(actorId)) return sendError(res, 400, 'INVALID_ID', 'actorId inválido');
+    if (!(await checkIdentity(req, res, actorId))) return;
+    if (ev.ownerId !== String(actorId)) return sendError(res, 403, 'FORBIDDEN', 'Apenas o organizador pode alterar');
     const patch = updates || {};
-    if (patch.name) ev.name = String(patch.name).slice(0, 80);
-    if (patch.description !== undefined) ev.description = String(patch.description || '').slice(0, 2000);
+    if (patch.name) ev.name = sanitizeString(String(patch.name).slice(0, 80));
+    if (patch.description !== undefined) ev.description = sanitizeString(String(patch.description || '').slice(0, 2000));
     if (patch.dateTime) ev.dateTime = new Date(patch.dateTime).toISOString();
-    if (patch.locationText !== undefined) ev.locationText = String(patch.locationText || '').slice(0, 200);
+    if (patch.locationText !== undefined) ev.locationText = sanitizeString(String(patch.locationText || '').slice(0, 200));
     if (typeof patch.lat === 'number') ev.lat = patch.lat;
     if (typeof patch.lng === 'number') ev.lng = patch.lng;
     if (patch.capacity) ev.capacity = Math.max(1, Math.min(10000, Number(patch.capacity)));
-    if (Array.isArray(patch.tags)) ev.tags = patch.tags.slice(0, 20).map(t => String(t).slice(0, 32));
+    if (Array.isArray(patch.tags)) ev.tags = sanitizeArrayOfStrings(patch.tags, 20, 32);
     if (patch.privacy && ['public','private','invite'].includes(String(patch.privacy))) ev.privacy = String(patch.privacy);
-    if (Array.isArray(patch.invitedIds)) ev.invitedIds = patch.invitedIds.map(x => String(x));
+    if (Array.isArray(patch.invitedIds)) ev.invitedIds = sanitizeArrayOfStrings(patch.invitedIds, 200, 64);
     try {
       const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
       const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -354,6 +614,8 @@ app.post('/api/events/:id/delete', async (req, res) => {
     const { actorId } = req.body || {};
     const ev = activeEvents.get(id);
     if (!ev || ev.deleted) return res.json({ ok: true });
+    if (!isValidId(actorId)) return res.status(400).json({ error: 'actorId inválido' });
+    if (!(await checkIdentity(req, res, actorId))) return;
     if (ev.ownerId !== String(actorId)) return res.status(403).json({ error: 'Apenas o organizador pode excluir' });
     ev.deleted = true;
     try {
@@ -375,11 +637,13 @@ app.post('/api/events/:id/attend', async (req, res) => {
     const id = String(req.params.id);
     const { viewerId, status } = req.body || {};
     const ev = activeEvents.get(id);
-    if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
+    if (!ev || ev.deleted) return sendError(res, 404, 'NOT_FOUND', 'Evento não encontrado');
+    if (!isValidId(viewerId)) return sendError(res, 400, 'INVALID_ID', 'viewerId inválido');
+    if (!(await checkIdentity(req, res, viewerId))) return;
     const st = String(status || '').toLowerCase();
-    if (!['yes','no','maybe'].includes(st)) return res.status(400).json({ error: 'status inválido' });
+    if (!['yes','no','maybe'].includes(st)) return sendError(res, 400, 'INVALID_STATUS', 'status inválido');
     const currentCount = Object.values(ev.attendees || {}).filter(v => v === 'yes').length;
-    if (st === 'yes' && currentCount >= ev.capacity) return res.status(409).json({ error: 'Limite de participantes atingido' });
+    if (st === 'yes' && currentCount >= ev.capacity) return sendError(res, 409, 'CAPACITY_FULL', 'Limite de participantes atingido');
     if (!ev.attendees) ev.attendees = {};
     ev.attendees[String(viewerId)] = st;
     try {
@@ -401,8 +665,13 @@ app.get('/api/events/:id/chat', (req, res) => {
     const id = String(req.params.id);
     const ev = activeEvents.get(id);
     if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
+    res.set('Cache-Control', 'private, max-age=5');
     const limit = Math.max(1, Math.min(200, Number(req.query.limit || 100)));
     const msgs = Array.isArray(ev.messages) ? ev.messages.slice(-limit) : [];
+    const lastTs = msgs.length ? msgs[msgs.length - 1].ts : 0;
+    const etag = `"chat-${id}-${limit}-${lastTs}-${msgs.length}"`;
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.set('ETag', etag);
     return res.json({ messages: msgs });
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao listar chat' });
@@ -413,12 +682,16 @@ app.post('/api/events/:id/chat', async (req, res) => {
   try {
     const id = String(req.params.id);
     const { viewerId, text } = req.body || {};
+    const schemaErrChat = ZChat ? zodValidate(ZChat, req.body || {}) : validateChatPayload(req.body || {});
+    if (schemaErrChat) return sendError(res, 400, 'INVALID_PAYLOAD', schemaErrChat);
     const ev = activeEvents.get(id);
-    if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
+    if (!ev || ev.deleted) return sendError(res, 404, 'NOT_FOUND', 'Evento não encontrado');
     const priv = ev.privacy;
+    if (!isValidId(viewerId)) return sendError(res, 400, 'INVALID_ID', 'viewerId inválido');
+    if (!(await checkIdentity(req, res, viewerId))) return;
     const isAllowed = priv === 'public' || ev.ownerId === String(viewerId) || (Array.isArray(ev.invitedIds) && ev.invitedIds.includes(String(viewerId))) || (ev.attendees && ev.attendees[String(viewerId)]);
-    if (!isAllowed) return res.status(403).json({ error: 'Sem permissão para chat' });
-    const msg = { id: `em-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, userId: String(viewerId), text: String(text || '').slice(0, 500), ts: Date.now() };
+    if (!isAllowed) return sendError(res, 403, 'FORBIDDEN', 'Sem permissão para chat');
+    const msg = { id: `em-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, userId: sanitizeString(String(viewerId)).slice(0,64), text: sanitizeString(String(text || '').slice(0, 500)), ts: Date.now() };
     ev.messages = ev.messages || [];
     ev.messages.push(msg);
     try {
@@ -439,12 +712,18 @@ app.post('/api/events/:id/media', async (req, res) => {
   try {
     const id = String(req.params.id);
     const { viewerId, url, caption } = req.body || {};
+    const schemaErrMedia = ZMedia ? zodValidate(ZMedia, req.body || {}) : validateMediaPayload(req.body || {});
+    if (schemaErrMedia) return sendError(res, 400, 'INVALID_PAYLOAD', schemaErrMedia);
     const ev = activeEvents.get(id);
-    if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
+    if (!ev || ev.deleted) return sendError(res, 404, 'NOT_FOUND', 'Evento não encontrado');
     const priv = ev.privacy;
+    if (!isValidId(viewerId)) return sendError(res, 400, 'INVALID_ID', 'viewerId inválido');
+    if (!(await checkIdentity(req, res, viewerId))) return;
     const isAllowed = priv === 'public' || ev.ownerId === String(viewerId) || (Array.isArray(ev.invitedIds) && ev.invitedIds.includes(String(viewerId))) || (ev.attendees && ev.attendees[String(viewerId)]);
-    if (!isAllowed) return res.status(403).json({ error: 'Sem permissão para mídia' });
-    const item = { id: `md-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, userId: String(viewerId), url: String(url || '').slice(0, 500), caption: String(caption || '').slice(0, 200), ts: Date.now() };
+    if (!isAllowed) return sendError(res, 403, 'FORBIDDEN', 'Sem permissão para mídia');
+    let safeUrl = String(url || '').slice(0, 500);
+    try { const u = new URL(safeUrl); if (!/^https?:$/i.test(u.protocol)) safeUrl = ''; } catch { safeUrl = ''; }
+    const item = { id: `md-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, userId: sanitizeString(String(viewerId)).slice(0,64), url: safeUrl, caption: sanitizeString(String(caption || '').slice(0, 200)), ts: Date.now() };
     ev.media = ev.media || [];
     ev.media.push(item);
     try {
@@ -468,6 +747,10 @@ app.get('/api/events/:id/media', (req, res) => {
     if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
     const limit = Math.max(1, Math.min(200, Number(req.query.limit || 100)));
     const list = Array.isArray(ev.media) ? ev.media.slice(-limit) : [];
+    const lastTs = list.length ? list[list.length - 1].ts : 0;
+    const etag = `"media-${id}-${limit}-${lastTs}-${list.length}"`;
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.set('ETag', etag);
     return res.json({ media: list });
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao listar mídia' });
@@ -478,14 +761,18 @@ app.post('/api/events/:id/rate', async (req, res) => {
   try {
     const id = String(req.params.id);
     const { viewerId, stars, comment } = req.body || {};
+    const schemaErrRate = ZRate ? zodValidate(ZRate, req.body || {}) : validateRatePayload(req.body || {});
+    if (schemaErrRate) return sendError(res, 400, 'INVALID_PAYLOAD', schemaErrRate);
     const ev = activeEvents.get(id);
-    if (!ev || ev.deleted) return res.status(404).json({ error: 'Evento não encontrado' });
+    if (!ev || ev.deleted) return sendError(res, 404, 'NOT_FOUND', 'Evento não encontrado');
+    if (!isValidId(viewerId)) return sendError(res, 400, 'INVALID_ID', 'viewerId inválido');
+    if (!(await checkIdentity(req, res, viewerId))) return;
     const eventTime = new Date(ev.dateTime).getTime();
-    if (Date.now() < eventTime) return res.status(409).json({ error: 'Avaliação disponível após o evento' });
+    if (Date.now() < eventTime) return sendError(res, 409, 'INVALID_TIME', 'Avaliação disponível após o evento');
     const attended = ev.attendees && ev.attendees[String(viewerId)] === 'yes';
-    if (!attended) return res.status(403).json({ error: 'Apenas participantes confirmados podem avaliar' });
+    if (!attended) return sendError(res, 403, 'FORBIDDEN', 'Apenas participantes confirmados podem avaliar');
     const s = Math.max(1, Math.min(5, Number(stars || 0)));
-    const r = { id: `rt-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, userId: String(viewerId), stars: s, comment: String(comment || '').slice(0, 500), ts: Date.now() };
+    const r = { id: `rt-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, userId: sanitizeString(String(viewerId)).slice(0,64), stars: s, comment: sanitizeString(String(comment || '').slice(0, 500)), ts: Date.now() };
     ev.ratings = ev.ratings || [];
     const prevIdx = ev.ratings.findIndex(x => x.userId === String(viewerId));
     if (prevIdx >= 0) ev.ratings[prevIdx] = r; else ev.ratings.push(r);
@@ -582,21 +869,31 @@ const userProfiles = new Map();
 const userFriends = new Map();
 
 
-app.get('/api/users/friends', (req, res) => {
+app.get('/api/users/friends', async (req, res) => {
   try {
     const userId = String(req.query.userId || '');
-    if (!userId) return res.status(400).json({ error: 'userId requerido' });
+    if (!userId) return sendError(res, 400, 'MISSING_FIELDS', 'userId requerido');
+    if (!isValidId(userId)) return sendError(res, 400, 'INVALID_ID', 'userId inválido');
+    if (supabaseEnvConfigured()) {
+      const ok = await validateSupabaseToken(req, userId);
+      if (!ok) return sendError(res, 401, 'INVALID_TOKEN', 'Token inválido');
+    } else {
+      const hdr = getHeaderUserId(req);
+      if (hdr && hdr !== userId) return sendError(res, 403, 'FORBIDDEN', 'Cabeçalho X-User-Id não corresponde');
+    }
     const list = Array.from(userFriends.get(userId) || new Set());
     return res.json({ friends: list });
   } catch (err) {
-    return res.status(500).json({ error: 'Erro ao listar amigos' });
+    return sendError(res, 500, 'SERVER_ERROR', 'Erro ao listar amigos');
   }
 });
 
 app.post('/api/users/friends/add', async (req, res) => {
   try {
     const { userId, targetId } = req.body || {};
-    if (!userId || !targetId) return res.status(400).json({ error: 'userId e targetId requeridos' });
+    if (!userId || !targetId) return sendError(res, 400, 'MISSING_FIELDS', 'userId e targetId requeridos');
+    if (!isValidId(userId) || !isValidId(targetId)) return sendError(res, 400, 'INVALID_ID', 'IDs inválidos');
+    if (!(await checkIdentity(req, res, userId))) return;
     const setA = userFriends.get(userId) || new Set();
     const setB = userFriends.get(String(targetId)) || new Set();
     setA.add(String(targetId));
@@ -614,14 +911,16 @@ app.post('/api/users/friends/add', async (req, res) => {
     } catch {}
     return res.json({ ok: true });
   } catch (err) {
-    return res.status(500).json({ error: 'Erro ao adicionar amigo' });
+    return sendError(res, 500, 'SERVER_ERROR', 'Erro ao adicionar amigo');
   }
 });
 
 app.post('/api/users/friends/remove', async (req, res) => {
   try {
     const { userId, targetId } = req.body || {};
-    if (!userId || !targetId) return res.status(400).json({ error: 'userId e targetId requeridos' });
+    if (!userId || !targetId) return sendError(res, 400, 'MISSING_FIELDS', 'userId e targetId requeridos');
+    if (!isValidId(userId) || !isValidId(targetId)) return sendError(res, 400, 'INVALID_ID', 'IDs inválidos');
+    if (!(await checkIdentity(req, res, userId))) return;
     const setA = userFriends.get(userId) || new Set();
     const setB = userFriends.get(String(targetId)) || new Set();
     setA.delete(String(targetId));
@@ -639,20 +938,10 @@ app.post('/api/users/friends/remove', async (req, res) => {
     } catch {}
     return res.json({ ok: true });
   } catch (err) {
-    return res.status(500).json({ error: 'Erro ao remover amigo' });
+    return sendError(res, 500, 'SERVER_ERROR', 'Erro ao remover amigo');
   }
 });
 
-app.get('/api/events/history', (req, res) => {
-  try {
-    const viewerId = String(req.query.viewerId || '');
-    if (!viewerId) return res.status(400).json({ error: 'viewerId requerido' });
-    const list = Array.from(activeEvents.values()).filter(e => e.attendees && e.attendees[viewerId]).map(e => eventPublicView(e, viewerId));
-    return res.json({ events: list });
-  } catch (err) {
-    return res.status(500).json({ error: 'Erro ao listar histórico' });
-  }
-});
 
 app.get('/api/notifications/list', (req, res) => {
   try {
@@ -800,7 +1089,7 @@ function generatePlaceholderImage(prompt) {
 app.post('/api/groq-openai/chat/completions', async (req, res) => {
   try {
     if (!GROQ_API_KEY) {
-      return res.status(400).json({ error: { message: 'GROQ_API_KEY ausente. Defina a variável para habilitar chamadas reais ao Groq.' } });
+      return sendError(res, 400, 'MISSING_TOKEN', 'GROQ_API_KEY ausente. Defina a variável para habilitar chamadas reais ao Groq.');
     }
 
     const { model, messages, max_tokens, temperature } = req.body || {};
@@ -824,14 +1113,14 @@ app.post('/api/groq-openai/chat/completions', async (req, res) => {
     if (!resp.ok) {
       let err;
       try { err = JSON.parse(text); } catch {}
-      return res.status(resp.status).json(err || { error: { message: text } });
+      return res.status(resp.status).json(err || { code: 'UPSTREAM_ERROR', message: text });
     }
 
     const data = JSON.parse(text);
     return res.json(data);
   } catch (err) {
     console.error('Groq proxy error:', err?.message || String(err));
-    return res.status(500).json({ error: { message: err?.message || 'Erro ao chamar Groq' } });
+    return sendError(res, 500, 'SERVER_ERROR', err?.message || 'Erro ao chamar Groq');
   }
 });
 
@@ -840,7 +1129,7 @@ app.post('/api/groq-openai/chat/completions', async (req, res) => {
 app.post('/api/groq-chat', async (req, res) => {
   try {
     if (!GROQ_API_KEY) {
-      return res.status(400).json({ error: { message: 'GROQ_API_KEY ausente. Defina a variável para habilitar chamadas reais ao Groq.' } });
+      return sendError(res, 400, 'MISSING_TOKEN', 'GROQ_API_KEY ausente. Defina a variável para habilitar chamadas reais ao Groq.');
     }
 
     const { model, messages, max_tokens, temperature } = req.body || {};
@@ -864,14 +1153,14 @@ app.post('/api/groq-chat', async (req, res) => {
     if (!resp.ok) {
       let err;
       try { err = JSON.parse(text); } catch {}
-      return res.status(resp.status).json(err || { error: { message: text } });
+      return res.status(resp.status).json(err || { code: 'UPSTREAM_ERROR', message: text });
     }
 
     const data = JSON.parse(text);
     return res.json(data);
   } catch (err) {
     console.error('Groq proxy (/api/groq-chat) error:', err?.message || String(err));
-    return res.status(500).json({ error: { message: err?.message || 'Erro ao chamar Groq' } });
+    return sendError(res, 500, 'SERVER_ERROR', err?.message || 'Erro ao chamar Groq');
   }
 });
 
@@ -1208,7 +1497,7 @@ async function hfPaidEndpointImage(url, prompt) {
 
 app.post('/api/gerar-texto', async (req, res) => {
   if (!HF_TOKEN) {
-    return res.status(500).json({ error: 'HF_TOKEN não configurado no servidor' });
+    return sendError(res, 500, 'MISSING_TOKEN', 'HF_TOKEN não configurado no servidor');
   }
 
   const { tipo, contexto = '' } = req.body || {};
@@ -1306,19 +1595,19 @@ app.post('/api/gerar-texto', async (req, res) => {
     return res.status(502).json({ error: 'Falha na geração com modelos disponíveis' });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Erro ao conectar com a IA' });
+    return sendError(res, 500, 'SERVER_ERROR', 'Erro ao conectar com a IA');
   }
 });
 
 // Rota genérica para prompts livres: /api/hf-text
 app.post('/api/hf-text', async (req, res) => {
   if (!HF_TOKEN) {
-    return res.status(500).json({ error: 'HF_TOKEN não configurado no servidor' });
+    return sendError(res, 500, 'MISSING_TOKEN', 'HF_TOKEN não configurado no servidor');
   }
 
   const { prompt = '', systemMessage = '', maxTokens = 512, temperature = 0.7 } = req.body || {};
   if (!prompt || typeof prompt !== 'string') {
-    return res.status(400).json({ error: 'Campo "prompt" é obrigatório' });
+    return sendError(res, 400, 'MISSING_FIELDS', 'Campo "prompt" é obrigatório');
   }
 
   const safePrompt = String(prompt).slice(0, 300);
@@ -1389,19 +1678,19 @@ app.post('/api/hf-text', async (req, res) => {
     return res.status(502).json({ error: 'Falha na geração com modelos disponíveis' });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: 'Erro ao conectar com a IA' });
+    return sendError(res, 500, 'SERVER_ERROR', 'Erro ao conectar com a IA');
   }
 });
 
 // Rota de geração de imagem via Hugging Face Stable Diffusion
 app.post('/api/gerar-imagem', async (req, res) => {
   if (!HF_TOKEN) {
-    return res.status(500).json({ error: 'HF_TOKEN não configurado no servidor' });
+    return sendError(res, 500, 'MISSING_TOKEN', 'HF_TOKEN não configurado no servidor');
   }
 
   const { prompt = '' } = req.body || {};
   if (!prompt || typeof prompt !== 'string') {
-    return res.status(400).json({ error: 'Campo "prompt" é obrigatório' });
+    return sendError(res, 400, 'MISSING_FIELDS', 'Campo "prompt" é obrigatório');
   }
 
   try {
@@ -1461,7 +1750,6 @@ app.post('/api/gerar-imagem', async (req, res) => {
     return res.json({ imagem: placeholder });
   } catch (error) {
     console.error(error);
-    // Em caso de erro inesperado, ainda retorna placeholder
     const placeholder = generatePlaceholderImage(prompt);
     return res.json({ imagem: placeholder });
   }
@@ -1471,25 +1759,26 @@ app.post('/api/gerar-imagem', async (req, res) => {
 app.get('/api/hero-image', async (req, res) => {
   const prompt = (req.query?.prompt || '').toString();
   if (!prompt) {
-    return res.status(400).json({ error: 'Campo "prompt" é obrigatório' });
+    return sendError(res, 400, 'MISSING_FIELDS', 'Campo "prompt" é obrigatório');
   }
   try {
     const url = await lexicaSearchImage(prompt);
     return res.json({ image: url });
   } catch (err) {
     const msg = err?.message || 'Falha ao buscar imagem';
-    return res.status(502).json({ error: msg });
+    return sendError(res, 502, 'UPSTREAM_ERROR', msg);
   }
 });
 
 // Proxy seguro para imagens do Pollinations (evita ORB/CORB no browser)
 app.get('/api/pollinations-image', async (req, res) => {
   try {
-    const prompt = (req.query?.prompt || '').toString();
-    const width = (req.query?.width || '512').toString();
-    const height = (req.query?.height || '512').toString();
+    let prompt = (req.query?.prompt || '').toString();
+    prompt = sanitizeString(prompt).slice(0, 200);
+    const width = clampNumber(req.query?.width || 512, 16, 1024);
+    const height = clampNumber(req.query?.height || 512, 16, 1024);
     if (!prompt) {
-      return res.status(400).json({ error: 'Campo "prompt" é obrigatório' });
+      return sendError(res, 400, 'MISSING_FIELDS', 'Campo "prompt" é obrigatório');
     }
 
     const remoteUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?n=1&width=${encodeURIComponent(width)}&height=${encodeURIComponent(height)}`;
@@ -1516,7 +1805,7 @@ app.get('/api/pollinations-image', async (req, res) => {
         return res.status(200).send(buf);
       }
     } catch {}
-    return res.status(502).json({ error: 'Falha ao obter imagem do Pollinations' });
+    return sendError(res, 502, 'UPSTREAM_ERROR', 'Falha ao obter imagem do Pollinations');
   }
 });
 
@@ -1525,12 +1814,12 @@ const LOGIN_FAILS = new Map();
 app.post('/api/login-google', async (req, res) => {
   const { credential } = req.body || {};
   if (!credential) {
-    return res.status(400).json({ error: 'Credencial Google ausente' });
+    return sendError(res, 400, 'MISSING_FIELDS', 'Credencial Google ausente');
   }
 
   const clientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || '';
   if (!clientId) {
-    return res.status(500).json({ error: 'GOOGLE_CLIENT_ID não configurado' });
+    return sendError(res, 500, 'MISSING_CONFIG', 'GOOGLE_CLIENT_ID não configurado');
   }
 
   try {
@@ -1538,7 +1827,7 @@ app.post('/api/login-google', async (req, res) => {
     const f = LOGIN_FAILS.get(ip) || { fails: 0, since: Date.now(), lockedUntil: 0 };
     const now = Date.now();
     if (f.lockedUntil && now < f.lockedUntil) {
-      return res.status(429).json({ error: 'Bloqueado temporariamente por falhas de login' });
+      return sendError(res, 429, 'LOCKED', 'Bloqueado temporariamente por falhas de login');
     }
     const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
     const payload = await verifyRes.json();
@@ -1550,7 +1839,7 @@ app.post('/api/login-google', async (req, res) => {
         f.lockedUntil = now + 15 * 60 * 1000;
       }
       LOGIN_FAILS.set(ip, f);
-      return res.status(401).json({ error: message });
+      return sendError(res, 401, 'INVALID_TOKEN', message);
     }
 
     if (payload.aud !== clientId) {
@@ -1559,7 +1848,7 @@ app.post('/api/login-google', async (req, res) => {
         f.lockedUntil = now + 15 * 60 * 1000;
       }
       LOGIN_FAILS.set(ip, f);
-      return res.status(401).json({ error: 'Token inválido para este cliente' });
+      return sendError(res, 401, 'INVALID_TOKEN', 'Token inválido para este cliente');
     }
 
     const user = {
@@ -1584,7 +1873,7 @@ app.post('/api/login-google', async (req, res) => {
     return res.json({ user });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: 'Erro ao validar token Google' });
+    return sendError(res, 500, 'SERVER_ERROR', 'Erro ao validar token Google');
   }
 });
 
@@ -1610,7 +1899,16 @@ app.get('/api/monetization/config', async (_req, res) => {
 app.post('/api/payments/create-checkout-session', (req, res) => {
   try {
     const { productId } = req.body || {};
+    if (!productId) return sendError(res, 400, 'MISSING_FIELDS', 'productId requerido');
     const secretKey = process.env.STRIPE_SECRET_KEY || '';
+    if (supabaseEnvConfigured()) {
+      validateSupabaseToken(req, '').then(ok => {
+        if (!ok) return sendError(res, 401, 'INVALID_TOKEN', 'Token inválido');
+        proceed();
+      }).catch(() => sendError(res, 401, 'INVALID_TOKEN', 'Token inválido'));
+      return;
+    }
+    function proceed() {
     if (secretKey) {
       const stripe = new Stripe(secretKey, { apiVersion: '2023-10-16' });
       const forwardedProto = (req.headers['x-forwarded-proto'] && String(req.headers['x-forwarded-proto'])) || '';
@@ -1643,17 +1941,26 @@ app.post('/api/payments/create-checkout-session', (req, res) => {
     }
     const sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
     return res.json({ ok: true, sessionId });
+    }
   } catch (err) {
     console.error('create-checkout-session error:', err);
-    return res.status(500).json({ ok: false });
+    return sendError(res, 500, 'SERVER_ERROR', 'Erro ao criar sessão de checkout');
   }
 });
 
 app.post('/api/payments/verify', (req, res) => {
   try {
     const { sessionId } = req.body || {};
-    if (!sessionId) return res.status(400).json({ ok: false, error: 'sessionId requerido' });
+    if (!sessionId) return sendError(res, 400, 'MISSING_FIELDS', 'sessionId requerido');
     const secretKey = process.env.STRIPE_SECRET_KEY || '';
+    if (supabaseEnvConfigured()) {
+      validateSupabaseToken(req, '').then(ok => {
+        if (!ok) return sendError(res, 401, 'INVALID_TOKEN', 'Token inválido');
+        proceed();
+      }).catch(() => sendError(res, 401, 'INVALID_TOKEN', 'Token inválido'));
+      return;
+    }
+    function proceed() {
     if (secretKey && sessionId.startsWith('cs_')) {
       const stripe = new Stripe(secretKey, { apiVersion: '2023-10-16' });
       stripe.checkout.sessions.retrieve(String(sessionId)).then(sess => {
@@ -1666,9 +1973,10 @@ app.post('/api/payments/verify', (req, res) => {
       return;
     }
     return res.json({ ok: true });
+    }
   } catch (err) {
     console.error('payments verify error:', err);
-    return res.status(500).json({ ok: false });
+    return sendError(res, 500, 'SERVER_ERROR', 'Erro ao verificar pagamento');
   }
 });
 
@@ -1933,6 +2241,13 @@ app.get('/api/proxy-image', async (req, res) => {
   try {
     const url = String(req.query.url || '');
     if (!url || !/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'Invalid url' });
+    const ALLOWED_IMAGE_PROXY_HOSTS = (process.env.ALLOWED_IMAGE_PROXY_HOSTS || 'image.pollinations.ai,lexica.art').split(',').map(s => s.trim()).filter(Boolean);
+    try {
+      const u = new URL(url);
+      if (!ALLOWED_IMAGE_PROXY_HOSTS.includes(u.hostname)) return res.status(403).json({ error: 'Host not allowed' });
+    } catch {
+      return res.status(400).json({ error: 'Invalid url' });
+    }
     const r = await fetch(url);
     if (!r.ok) return res.status(r.status).end();
     const ct = r.headers.get('content-type') || 'image/jpeg';

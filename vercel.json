@@ -3,21 +3,6 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
-    { "source": "/api/daily/leaderboard", "destination": "/api/daily?action=leaderboard" },
-    { "source": "/api/gerar-texto", "destination": "/api/ai?action=text" },
-    { "source": "/api/groq-chat", "destination": "/api/ai?action=groq-chat" },
-    { "source": "/api/groq-openai/chat/completions", "destination": "/api/ai?action=groq-openai-chat-completions" },
-    { "source": "/api/hf-text", "destination": "/api/ai?action=hf-text" },
-    { "source": "/api/gerar-imagem", "destination": "/api/ai?action=image" },
-    { "source": "/api/hero-image", "destination": "/api/ai?action=hero-image" },
-    { "source": "/api/mission-generate", "destination": "/api/missions?action=generate" },
-    { "source": "/api/mission-resolve", "destination": "/api/missions?action=resolve" },
-    { "source": "/api/daily/submit", "destination": "/api/daily?action=submit" },
-    { "source": "/api/daily-leaderboard", "destination": "/api/daily?action=leaderboard" },
-    { "source": "/api/daily-submit", "destination": "/api/daily?action=submit" },
-    { "source": "/api/tavern-approve", "destination": "/api/tavern?action=approve" },
-    { "source": "/api/tavern-events", "destination": "/api/tavern?action=events" },
-    { "source": "/api/tavern-report", "destination": "/api/tavern?action=report" },
     {
       "source": "/api/(.*)",
       "destination": "/api/$1"

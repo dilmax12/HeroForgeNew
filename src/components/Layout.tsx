@@ -3,6 +3,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useHeroStore } from '../store/heroStore';
 const EnhancedHUDLazy = React.lazy(() => import('./EnhancedHUD'));
 import NotificationSystem, { useNotifications, notificationBus } from './NotificationSystem';
+import OnboardingOverlay from './OnboardingOverlay';
 const QuickNavigationLazy = React.lazy(() => import('./QuickNavigation'));
 import { medievalTheme, getClassIcon, seasonalThemes, getSeasonalButtonGradient } from '../styles/medievalTheme';
 import { rankSystem } from '../utils/rankSystem';
@@ -593,6 +594,8 @@ const Layout = () => {
         {/* Banner de convite removido */}
         <Outlet />
       </main>
+
+      <OnboardingOverlay />
       
       {/* Enhanced HUD - show/hide with toggle */}
       {selectedHero && hudVisible && (

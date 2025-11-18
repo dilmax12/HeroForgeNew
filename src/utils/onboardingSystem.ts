@@ -25,7 +25,7 @@ export const ONBOARDING_FLOWS: OnboardingFlow[] = [
         position: 'bottom',
         action: {
           type: 'navigate',
-          target: '/heroes/new'
+          target: '/create'
         },
         validation: {
           type: 'hero-created'
@@ -36,51 +36,40 @@ export const ONBOARDING_FLOWS: OnboardingFlow[] = [
         }
       },
       {
-        id: 'hero-overview',
-        title: 'Conheça seu Herói',
-        description: 'Vamos explorar as informações do seu herói',
-        content: 'Aqui você pode ver o nível, experiência, ouro e estatísticas do seu herói. Essas informações são atualizadas conforme você completa missões!',
-        targetElement: '[data-testid="hero-stats"]',
-        position: 'right',
-        autoAdvance: true
+        id: 'view-gallery',
+        title: 'Ver Galeria',
+        description: 'Veja e edite seus heróis',
+        content: 'Abra a Galeria para visualizar e personalizar seus heróis e avatares.',
+        targetElement: '[data-testid="open-gallery-button"]',
+        position: 'bottom',
+        action: { type: 'navigate', target: '/gallery' }
       },
       {
         id: 'first-quest',
         title: 'Sua Primeira Missão',
         description: 'Hora de começar a aventura!',
-        content: 'Vamos ao Quadro de Missões para aceitar sua primeira quest. Clique no ícone de pergaminho na navegação rápida!',
-        targetElement: '[data-testid="quick-nav-quests"]',
+        content: 'Abra o Quadro de Missões e aceite sua primeira missão.',
+        targetElement: '[data-testid="open-quests-button"]',
         position: 'top',
-        action: {
-          type: 'navigate',
-          target: '/quests'
-        }
+        action: { type: 'navigate', target: '/quests' }
       },
       {
         id: 'accept-quest',
         title: 'Aceite uma Missão',
         description: 'Escolha uma missão adequada ao seu nível',
-        content: 'Procure por missões com dificuldade "Fácil" ou "Normal". Clique em "Aceitar Missão" para adicioná-la às suas missões ativas!',
-        targetElement: '[data-testid="quest-card"]',
+        content: 'Procure por missões elegíveis e aceite uma para começar a jogar.',
         position: 'left',
-        validation: {
-          type: 'quest-accepted'
-        },
-        rewards: {
-          xp: 25
-        }
+        validation: { type: 'quest-accepted' },
+        rewards: { xp: 25 }
       },
       {
-        id: 'daily-goals',
-        title: 'Metas Diárias',
-        description: 'Ganhe bônus extras todos os dias!',
-        content: 'As metas diárias oferecem recompensas especiais. Complete-as para ganhar XP e ouro extras! Acesse através da navegação rápida.',
-        targetElement: '[data-testid="quick-nav-daily-goals"]',
-        position: 'top',
-        action: {
-          type: 'navigate',
-          target: '/daily-goals'
-        }
+        id: 'evolution-panel',
+        title: 'Evolua seu Herói',
+        description: 'Acompanhe níveis e ranks',
+        content: 'Acesse o painel de evolução para ver seu progresso e conquistas.',
+        targetElement: '[data-testid="open-evolution-button"]',
+        position: 'bottom',
+        action: { type: 'navigate', target: '/evolution' }
       },
       {
         id: 'tutorial-complete',
@@ -107,41 +96,33 @@ export const ONBOARDING_FLOWS: OnboardingFlow[] = [
         id: 'guild-system',
         title: 'Guilda dos Aventureiros',
         description: 'Una-se a outros heróis!',
-        content: 'A Guilda dos Aventureiros é o hub para colaborar, compartilhar missões e competir em rankings especiais.',
-        targetElement: '[data-testid="quick-nav-guilds"]',
+        content: 'A Guilda dos Aventureiros é o hub para colaborar e competir em rankings especiais.',
         position: 'top',
-        action: {
-          type: 'navigate',
-          target: '/guild-hub'
-        }
+        action: { type: 'navigate', target: '/guild-hub' }
       },
       {
         id: 'equipment-system',
         title: 'Sistema de Equipamentos',
         description: 'Melhore suas estatísticas!',
         content: 'Visite a loja para comprar armas, armaduras e acessórios. Equipamentos melhoram suas estatísticas e eficiência em missões.',
-        targetElement: '[data-testid="hero-equipment"]',
-        position: 'right'
+        position: 'right',
+        action: { type: 'navigate', target: '/shop' }
       },
       {
         id: 'achievements',
         title: 'Sistema de Conquistas',
         description: 'Desbloqueie títulos especiais!',
         content: 'Complete desafios específicos para ganhar conquistas e títulos únicos. Alguns títulos oferecem bônus permanentes!',
-        targetElement: '[data-testid="achievements-tab"]',
-        position: 'bottom'
+        position: 'bottom',
+        action: { type: 'navigate', target: '/titles' }
       },
       {
         id: 'leaderboards',
         title: 'Rankings Globais',
         description: 'Compete com outros heróis!',
         content: 'Veja como você se compara a outros jogadores em diferentes categorias: XP, ouro, missões completadas e muito mais!',
-        targetElement: '[data-testid="quick-nav-leaderboards"]',
         position: 'top',
-        action: {
-          type: 'navigate',
-          target: '/leaderboards'
-        }
+        action: { type: 'navigate', target: '/leaderboards' }
       }
     ]
   },

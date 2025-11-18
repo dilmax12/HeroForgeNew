@@ -130,11 +130,12 @@ export const useProgressionStore = create<ProgressionState>()(
         if (!flags.hunting_basic) {
           const req = get().requirements.hunting_basic
           const qc = hero.stats.questsCompleted || 0
-          if (prevLevel < req.minLevel && newLevel >= req.minLevel && qc >= (req.minCompletedQuests || 0)) {
+          const unlocked = prevLevel < req.minLevel && newLevel >= req.minLevel && qc >= (req.minCompletedQuests || 0)
+          if (unlocked) {
             get().setFeatureUnlocked('hunting_basic', hero, 'Alcançou requisitos de caça básica')
+            try { onboardingManager.startFlow('unlock-hunting-basic') } catch {}
+            set({ basicTrainingOnly: false })
           }
-          try { onboardingManager.startFlow('unlock-hunting-basic') } catch {}
-          set({ basicTrainingOnly: false })
         }
         const rankOrder = ['F','E','D','C','B','A','S','SS','SSS']
         const prevIdx = rankOrder.indexOf(prevRank)
