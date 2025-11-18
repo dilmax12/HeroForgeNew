@@ -442,7 +442,7 @@ function App() {
       ];
       cspMeta.content = [
         "default-src 'self'",
-        `frame-src 'self' https://vercel.live https://*.vercel.live https://accounts.google.com ${adsOrigins.join(' ')}`,
+        `frame-src 'self' https://vercel.live https://*.vercel.live https://accounts.google.com https://www.google.com ${adsOrigins.join(' ')}`,
         `connect-src ${connectSrc} ${adsOrigins.join(' ')}`,
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
         `font-src 'self' ${fontOrigins.join(' ')} data:`,

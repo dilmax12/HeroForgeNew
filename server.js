@@ -835,6 +835,46 @@ app.post('/api/groq-openai/chat/completions', async (req, res) => {
   }
 });
 
+// Proxy alternativo simples: /api/groq-chat
+// Aceita o mesmo payload e delega para o endpoint OpenAI-compatible
+app.post('/api/groq-chat', async (req, res) => {
+  try {
+    if (!GROQ_API_KEY) {
+      return res.status(400).json({ error: { message: 'GROQ_API_KEY ausente. Defina a variável para habilitar chamadas reais ao Groq.' } });
+    }
+
+    const { model, messages, max_tokens, temperature } = req.body || {};
+
+    const url = `${GROQ_API_URL}/chat/completions`;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: model || (process.env.VITE_AI_MODEL || 'llama-3.3-70b-versatile'),
+        messages: Array.isArray(messages) ? messages : [],
+        max_tokens: typeof max_tokens === 'number' ? max_tokens : 1500,
+        temperature: typeof temperature === 'number' ? temperature : 0.7
+      })
+    });
+
+    const text = await resp.text();
+    if (!resp.ok) {
+      let err;
+      try { err = JSON.parse(text); } catch {}
+      return res.status(resp.status).json(err || { error: { message: text } });
+    }
+
+    const data = JSON.parse(text);
+    return res.json(data);
+  } catch (err) {
+    console.error('Groq proxy (/api/groq-chat) error:', err?.message || String(err));
+    return res.status(500).json({ error: { message: err?.message || 'Erro ao chamar Groq' } });
+  }
+});
+
 // === Idle Daily: submissão e leaderboard (MVP Dev) ===
 function todayKey() {
   const d = new Date();
