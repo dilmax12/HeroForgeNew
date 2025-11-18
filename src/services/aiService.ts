@@ -100,7 +100,7 @@ class AIService {
     return Date.now() < cache.expiresAt;
   }
 
-  private async makeOpenAITextRequest(request: AITextRequest): Promise<AITextResponse> {
+  private async makeOpenAITextRequest(request: AITextRequest, override?: { baseURL?: string; model?: string }): Promise<AITextResponse> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json'
     };
@@ -109,7 +109,7 @@ class AIService {
       headers['Authorization'] = `Bearer ${this.config.apiKey}`;
     }
 
-    const base = this.config.baseURL || '';
+    const base = (override?.baseURL ?? this.config.baseURL) || '';
     let endpoint = `${base}/chat/completions`;
     if (typeof base === 'string' && base.startsWith('/api/')) {
       // Suporte a dois proxies: /api/groq-chat (POST direto) e /api/groq-openai (OpenAI path)
@@ -136,7 +136,7 @@ class AIService {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          model: this.config.model,
+          model: override?.model || this.config.model,
           messages: [
             ...(request.systemMessage ? [{ role: 'system', content: request.systemMessage }] : []),
             ...(request.context ? [{ role: 'user', content: request.context }] : []),
@@ -217,7 +217,7 @@ class AIService {
   }
 
   private async makeHuggingFaceTextRequest(request: AITextRequest): Promise<AITextResponse> {
-    const endpoint = this.config.baseURL || '/api/hf-text';
+    const endpoint = '/api/hf-text';
     console.debug('[AI][HFText] Request', {
       endpoint,
       model: this.config.model,
@@ -250,6 +250,12 @@ class AIService {
         message: errMsg,
         rawSnippet: typeof textRaw === 'string' ? textRaw.slice(0, 300) : ''
       });
+      if (response.status === 404 || response.status === 405) {
+        try {
+          const alt = await this.makeOpenAITextRequest(request, { baseURL: '/api/groq-openai', model: 'llama-3.1-8b-instant' });
+          return alt;
+        } catch {}
+      }
       throw new AIError({
         code: 'hf_error',
         message: errMsg,
