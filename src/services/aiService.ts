@@ -67,15 +67,18 @@ class AIService {
   }
 
   private loadConfig(): AIConfig {
-    // Força configuração consistente: texto via Groq proxy backend e imagem via rota backend
-    const provider: AIProvider = 'groq';
+    const envAny = (typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined) || {};
+    const providerName = String(envAny.VITE_AI_SERVICE_PROVIDER || '').toLowerCase();
+    const provider: AIProvider = (providerName === 'huggingface' || providerName === 'hf') ? 'huggingface' : (providerName === 'anthropic' ? 'anthropic' : (providerName === 'openai' ? 'openai' : 'groq'));
+    const model = String(envAny.VITE_AI_MODEL || 'llama-3.1-8b-instant');
+    const imageModel = String(envAny.VITE_AI_IMAGE_MODEL || 'stabilityai/sd-turbo');
+    const baseURL = provider === 'huggingface' ? '/api/hf-text' : '/api/groq-openai';
     return {
       provider,
       apiKey: '',
-      model: 'llama-3.1-8b-instant',
-      imageModel: 'stabilityai/sd-turbo',
-      // Sempre usar o proxy Express compatível com OpenAI
-      baseURL: '/api/groq-openai',
+      model,
+      imageModel,
+      baseURL,
       maxTokens: 2000,
       temperature: 0.7
     };
@@ -451,7 +454,6 @@ class AIService {
       if (this.config.provider === 'openai') {
         response = await this.makeOpenAITextRequest(request);
       } else if (this.config.provider === 'groq') {
-        // Groq usa API compatível com OpenAI
         response = await this.makeOpenAITextRequest(request);
       } else if (this.config.provider === 'anthropic') {
         response = await this.makeAnthropicTextRequest(request);
@@ -488,6 +490,12 @@ class AIService {
         provider: (error as any)?.provider || this.config.provider,
         retryable: (error as any)?.retryable
       });
+      if (this.config.provider === 'groq') {
+        try {
+          const resp = await this.makeHuggingFaceTextRequest(request);
+          return resp;
+        } catch {}
+      }
       throw error;
     }
   }
