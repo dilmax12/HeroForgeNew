@@ -1,0 +1,2 @@
+let o=!1;function t(n){if(o||!n)return;const s="adsense-script";if(document.getElementById(s)){o=!0;return}const e=document.createElement("script");e.id=s,e.async=!0,e.src=`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(n)}`,e.crossOrigin="anonymous",e.onload=()=>{o=!0},e.onerror=()=>{o=!0},document.head.appendChild(e)}function d(){try{window.adsbygoogle=window.adsbygoogle||[],window.adsbygoogle.push({})}catch{}}export{t as l,d as p};
+//# sourceMappingURL=adsenseLoader-aaae3e06.js.map
