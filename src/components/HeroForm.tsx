@@ -143,7 +143,7 @@ const HeroForm = () => {
   const handleGenerateName = async () => {
     setLoadingName(true);
     try {
-      const options = generateNameOptions(formData.race);
+      const options = generateNameOptions(formData.race, 5, (formData as any).gender);
       setNameOptions(options);
       setShowNameOptions(true);
     } catch (error) {
@@ -161,7 +161,7 @@ const HeroForm = () => {
   const handleGenerateNameAI = async () => {
     setLoadingNameAI(true);
     try {
-      const nome = await gerarTexto('nome');
+      const nome = await gerarTexto('nome', `sexo: ${(formData as any).gender}; raça: ${formData.race}; classe: ${formData.class}`);
       if (nome) {
         setFormData(prev => ({ ...prev, name: nome }));
         setShowNameOptions(false);
@@ -227,6 +227,7 @@ const HeroForm = () => {
   const [showSuggestionInfo, setShowSuggestionInfo] = useState(true);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [advWeights, setAdvWeights] = useState<Record<string, number>>({ forca:1, destreza:1, constituicao:1, inteligencia:1, sabedoria:1, carisma:1 });
+  const [showSynergyDetails, setShowSynergyDetails] = useState(false);
 
   const handleElementChange = (element: Element) => {
     setFormData(prev => ({ 
@@ -318,7 +319,8 @@ const HeroForm = () => {
   const handleGenerateBattleQuoteAI = async () => {
     setLoadingQuoteAI(true);
     try {
-      const frase = await gerarTexto('frase');
+      const contexto = `${formData.name || 'Herói'}; classe ${formData.class}; sexo ${(formData as any).gender || 'masculino'}; resumo: ${(formData.backstory || '').slice(0, 180)}`;
+      const frase = await gerarTexto('frase', contexto);
       if (frase) {
         setFormData(prev => ({ ...prev, battleQuote: frase }));
         notificationBus.emit({
@@ -349,7 +351,8 @@ const HeroForm = () => {
       const result = await generateHeroWithAI({
         race: formData.race,
         klass: formData.class,
-        attrs: formData.attributes as Record<string, number>
+        attrs: formData.attributes as Record<string, number>,
+        gender: formData.gender
       });
       setFormData(prev => ({
         ...prev,
@@ -387,7 +390,8 @@ const HeroForm = () => {
       const result = await generateHeroWithAI({
         race: formData.race,
         klass: formData.class,
-        attrs: formData.attributes as Record<string, number>
+        attrs: formData.attributes as Record<string, number>,
+        gender: formData.gender
       });
       if (result.image) {
         setFormData(prev => ({ ...prev, image: result.image }));
@@ -601,6 +605,13 @@ const HeroForm = () => {
               )}
             </div>
           </div>
+          <div className="mt-3">
+            <label className="block text-sm font-medium text-gray-300">Sexo</label>
+            <div className="mt-1 flex gap-2">
+              <button type="button" onClick={() => setFormData(prev => ({ ...prev, gender: 'masculino' as any }))} className={`px-3 py-2 rounded ${(((formData as any).gender) || 'masculino') === 'masculino' ? 'bg-indigo-600 text-white' : 'bg-gray-600 text-gray-200'}`}>Masculino</button>
+              <button type="button" onClick={() => setFormData(prev => ({ ...prev, gender: 'feminino' as any }))} className={`px-3 py-2 rounded ${(((formData as any).gender)) === 'feminino' ? 'bg-pink-600 text-white' : 'bg-gray-600 text-gray-200'}`}>Feminino</button>
+            </div>
+          </div>
         </div>
 
         {/* Seção 2: Classe e Skills */}
@@ -648,126 +659,45 @@ const HeroForm = () => {
           </div>
           <div className="mt-3 p-3 rounded bg-gray-700">
             <div className="text-white font-semibold">Sinergias</div>
-            <div className="mt-2 flex items-center gap-2">
-              <label className="text-xs text-gray-300 flex items-center gap-1">
-                <input type="checkbox" checked={disableAutoSuggestion} onChange={(e) => { setDisableAutoSuggestion(e.target.checked); setPrefs({ autoSuggestDisabled: e.target.checked }); }} />
-                Não sugerir automaticamente
-              </label>
-              <button type="button" onClick={handleUndoLastDecision} className={buttonSecondary} aria-label="Desfazer última decisão">Desfazer última decisão</button>
-              <button type="button" onClick={handleRedoLastDecision} className={buttonSecondary}>Refazer</button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={() => setShowSynergyDetails(v => !v)} className={buttonSecondary}>{showSynergyDetails ? 'Ocultar detalhes' : 'Mostrar detalhes'}</button>
             </div>
-            <div className="text-xs text-gray-300 mt-1">Elementos recomendados: {getRecommendedElements(formData.class, formData.race).join(', ')}</div>
-              <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               {getRecommendedElements(formData.class, formData.race).map(el => (
-                <button
-                  key={el}
-                  type="button"
-                  onClick={() => handleElementChange(el as Element)}
-                  onKeyDown={(e) => {
-                    const els = getRecommendedElements(formData.class, formData.race)
-                    const idx = els.indexOf(formData.element)
-                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-                      const next = els[(idx + 1) % els.length]
-                      handleElementChange(next as Element)
-                    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-                      const prev = els[(idx - 1 + els.length) % els.length]
-                      handleElementChange(prev as Element)
-                    }
-                  }}
-                  className={`px-2 py-1 rounded text-xs ${formData.element === el ? 'bg-amber-600 text-white' : 'bg-gray-600 text-gray-200 hover:bg-gray-500'}`}
-                  role="button" aria-selected={formData.element === el} tabIndex={0}
-                >
-                  {el}
-                </button>
+                <button key={el} type="button" onClick={() => handleElementChange(el as Element)} className={`px-2 py-1 rounded text-xs ${formData.element === el ? 'bg-amber-600 text-white' : 'bg-gray-600 text-gray-200 hover:bg-gray-500'}`}>{el}</button>
+              ))}
+              {(CLASS_METADATA[formData.class]?.suggestedRaces || []).map(r => (
+                <button key={r} type="button" onClick={() => handleRaceChange(r as HeroRace)} className={`px-2 py-1 rounded text-xs ${formData.race === r ? 'bg-amber-600 text-white' : 'bg-gray-600 text-gray-200 hover:bg-gray-500'}`}>{r}</button>
               ))}
             </div>
-              {CLASS_METADATA[formData.class]?.suggestedRaces?.length && (
-                <div className="mt-2">
-                  <div className="text-xs text-amber-300">Raças sugeridas:</div>
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    {CLASS_METADATA[formData.class]?.suggestedRaces?.map(r => (
-                      <button
-                        key={r}
-                        type="button"
-                        onClick={() => handleRaceChange(r as HeroRace)}
-                        onKeyDown={(e) => {
-                          const rs = CLASS_METADATA[formData.class]?.suggestedRaces || []
-                          const idx = rs.indexOf(formData.race)
-                          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-                            const next = rs[(idx + 1) % rs.length]
-                            handleRaceChange(next as HeroRace)
-                          } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-                            const prev = rs[(idx - 1 + rs.length) % rs.length]
-                            handleRaceChange(prev as HeroRace)
-                          }
-                        }}
-                        className={`px-2 py-1 rounded text-xs ${formData.race === r ? 'bg-amber-600 text-white' : 'bg-gray-600 text-gray-200 hover:bg-gray-500'}`}
-                        role="button" aria-selected={formData.race === r} tabIndex={0}
-                      >
-                        {r}
-                      </button>
-                    ))}
-                  </div>
+            {showSynergyDetails && (
+              <div className="mt-3 space-y-2 text-xs">
+                {(() => {
+                  const advObj: any = getElementAdvantageInfo(formData.element);
+                  const strong = Array.isArray(advObj?.strong) ? advObj.strong.join(', ') : String(advObj?.strong || '');
+                  const weak = Array.isArray(advObj?.weak) ? advObj.weak.join(', ') : String(advObj?.weak || '');
+                  const neutral = Array.isArray(advObj?.neutral) ? advObj.neutral.join(', ') : String(advObj?.neutral || '');
+                  return <div className="text-gray-400">Forte {strong} • Fraco {weak} • Neutro {neutral}</div>;
+                })()}
+                <div className="p-2 rounded bg-gray-800 text-gray-200">
+                  <div className="font-semibold">Resumo</div>
+                  <div>Elemento: {getRecommendedElements(formData.class, formData.race)[0] || '—'}</div>
+                  <div>Raças: {(CLASS_METADATA[formData.class]?.suggestedRaces || []).join(', ') || '—'}</div>
+                  <div>Plano: {getRecommendedAttributePlan(formData.class).map(p => `${p.attribute}:${p.priority}`).join(' • ')}</div>
                 </div>
-              )}
-              {elementAutoSuggested && (
-                <div className="mt-2 p-2 rounded bg-gray-800 text-xs text-amber-300">
-                  <div className="flex items-center gap-2">
-                    <span>Elemento sugerido automaticamente: {formData.element}</span>
-                    {prevElement && (
-                      <button type="button" onClick={() => handleElementChange(prevElement)} className={buttonSecondary}>Reverter</button>
-                    )}
-                    {showSuggestionInfo && (
-                      <button type="button" onClick={() => setShowSuggestionInfo(false)} className={buttonSecondary}>Entendi</button>
-                    )}
-                  </div>
-                  {showSuggestionInfo && (
-                    <div className="mt-1 text-gray-300">{getElementSuggestionReason(formData.class, formData.race, formData.element)}</div>
-                  )}
+                {(() => { const rc = getRaceCompatibility(formData.class, formData.race as any); return <div className={`${rc.ok ? 'text-emerald-300' : 'text-yellow-300'}`}>Compatibilidade: {rc.message}</div>; })()}
+                <div className="flex flex-wrap gap-2">
+                  {getRecommendedAttributePlan(formData.class).map(p => (
+                    <span key={p.attribute} className="px-2 py-1 rounded bg-gray-600 text-gray-200">{p.attribute}:{p.priority}</span>
+                  ))}
                 </div>
-              )}
-              <div className="mt-3">
-                <button type="button" className={buttonSecondary} aria-expanded={showAdvanced} onClick={() => setShowAdvanced(v => !v)}>
-                  {showAdvanced ? 'Ocultar opções avançadas' : 'Mostrar opções avançadas'}
-                </button>
-                {showAdvanced && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <button type="button" onClick={handleGenerateBattleQuote} className={`${buttonPrimary} flex items-center gap-2`}>
-                      {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
-                      <span>Gerar Frase de Batalha</span>
-                    </button>
-                  </div>
-                )}
+                <div className="flex flex-wrap gap-2">
+                  <label className="flex items-center gap-1 text-gray-300"><input type="checkbox" checked={disableAutoSuggestion} onChange={(e) => { setDisableAutoSuggestion(e.target.checked); setPrefs({ autoSuggestDisabled: e.target.checked }); }} />Não sugerir automaticamente</label>
+                  <button type="button" onClick={handleUndoLastDecision} className={buttonSecondary}>Desfazer</button>
+                  <button type="button" onClick={handleRedoLastDecision} className={buttonSecondary}>Refazer</button>
+                </div>
               </div>
-            {(() => {
-              const advObj: any = getElementAdvantageInfo(formData.element);
-              const strong = Array.isArray(advObj?.strong) ? advObj.strong.join(', ') : String(advObj?.strong || '');
-              const weak = Array.isArray(advObj?.weak) ? advObj.weak.join(', ') : String(advObj?.weak || '');
-              const neutral = Array.isArray(advObj?.neutral) ? advObj.neutral.join(', ') : String(advObj?.neutral || '');
-              return (
-                <div className="text-xs text-gray-400">Vantagens do elemento atual ({formData.element}): Forte contra {strong} • Fraco contra {weak} • Neutro {neutral}</div>
-              );
-            })()}
-            <div className="mt-2 p-2 rounded bg-gray-800 text-xs text-gray-200">
-              <div className="font-semibold">Resumo de recomendações</div>
-              <div className="mt-1">Elemento recomendado: {getRecommendedElements(formData.class, formData.race)[0] || '—'}</div>
-              <div>Raças sugeridas: {(CLASS_METADATA[formData.class]?.suggestedRaces || []).join(', ') || '—'}</div>
-              <div className="mt-1">Plano de atributos recomendado: {getRecommendedAttributePlan(formData.class).map(p => `${p.attribute}:${p.priority}`).join(' • ')}</div>
-              <div className="mt-1 text-gray-400">Atalho: Alt+A aplica recomendações</div>
-            </div>
-            {CLASS_METADATA[formData.class]?.suggestedRaces?.length && (
-              <div className="text-xs text-amber-300 mt-1">Raças sugeridas: {CLASS_METADATA[formData.class]?.suggestedRaces?.join(', ')}</div>
             )}
-            {(() => {
-              const rc = getRaceCompatibility(formData.class, formData.race as any)
-              return <div className={`text-xs mt-1 ${rc.ok ? 'text-emerald-300' : 'text-yellow-300'}`}>Compatibilidade da raça atual: {rc.message}</div>
-            })()}
-            <div className="mt-2 text-xs text-gray-300">Distribuição recomendada de atributos:</div>
-            <ul className="mt-1 text-xs text-gray-400 list-disc pl-5">
-              {getRecommendedAttributePlan(formData.class).map((p) => (
-                <li key={p.attribute}>{p.attribute}: prioridade {p.priority} — {p.hint}</li>
-              ))}
-            </ul>
           </div>
           <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
             {derivedPreview && (
@@ -995,97 +925,9 @@ const HeroForm = () => {
           </div>
         </div>
 
-        {/* Seção 5: Imagem */}
+        {/* Seção 5: História */}
         <div className="bg-gray-700 p-4 rounded-lg">
-          <h3 className="text-xl font-semibold text-amber-400 mb-4">5. Imagem do Herói</h3>
-          <div className="flex gap-4 items-start">
-            <div className="flex-1">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md font-medium transition-colors"
-              >
-                📁 Upload de Imagem
-              </button>
-              <p className="text-xs text-gray-400 mt-1">
-                Formatos aceitos: JPG, PNG, GIF (máx. 5MB)
-              </p>
-            </div>
-
-            <div className="flex-1">
-              <button
-                type="button"
-                onClick={handleGenerateImageAI}
-                disabled={loadingImageAI}
-                className={`w-full px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-60 bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}
-              >
-                {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
-                <span>{loadingImageAI ? 'Gerando...' : '🤖 Gerar Avatar IA'}</span>
-              </button>
-              <p className="text-xs text-gray-400 mt-1">
-                Usa raça, classe e atributos para criar a imagem.
-              </p>
-            </div>
-
-            {formData.image && (
-              <div className="w-24 h-24 bg-gray-600 rounded-md overflow-hidden">
-                <img
-                  src={formData.image.includes('image.pollinations.ai/prompt/')
-                    ? formData.image
-                        .replace('https://image.pollinations.ai/prompt/', '/api/pollinations-image?prompt=')
-                        .replace('?n=1&', '&')
-                    : formData.image}
-                  alt="Preview do herói"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Seção 6: Frase de Batalha */}
-        <div className="bg-gray-700 p-4 rounded-lg">
-          <h3 className="text-xl font-semibold text-amber-400 mb-4">6. Frase de Batalha</h3>
-          <div className="flex gap-2 mb-2">
-            <button
-              type="button"
-              onClick={handleGenerateBattleQuote}
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}
-            >
-              {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
-              <span>🎲 Gerar Aleatória</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleGenerateBattleQuoteAI}
-              disabled={loadingQuoteAI}
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-60 bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}
-            >
-              {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
-              <span>{loadingQuoteAI ? 'Gerando...' : '🤖 Gerar com IA'}</span>
-            </button>
-          </div>
-          <textarea
-            value={formData.battleQuote || ''}
-            onChange={(e) => setFormData({...formData, battleQuote: e.target.value})}
-            rows={2}
-            className="w-full rounded-md bg-gray-600 border-gray-500 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            placeholder="Digite uma frase épica para seu herói..."
-          />
-        </div>
-
-        
-        
-        {/* História */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300">História</label>
+          <h3 className="text-xl font-semibold text-amber-400 mb-4">5. História</h3>
           <div className="flex gap-3 mb-2">
             <button
               type="button"
@@ -1108,25 +950,13 @@ const HeroForm = () => {
               onClick={async () => {
                 setLoadingHFStory(true);
                 try {
-                  const contexto = `${formData.name || 'Herói'}, classe ${formData.class}, raça ${formData.race}, elemento ${formData.element}`;
+                  const contexto = `${formData.name || 'Herói'}, sexo ${ (formData as any).gender || 'masculino' }, classe ${formData.class}, raça ${formData.race}, elemento ${formData.element}`;
                   const historia = await gerarTexto('historia', contexto);
                   setFormData(prev => ({ ...prev, backstory: historia }));
-                  notificationBus.emit({
-                    type: 'achievement',
-                    title: 'História gerada!',
-                    message: 'A história do herói foi atualizada.',
-                    icon: '📖',
-                    duration: 4000
-                  });
+                  notificationBus.emit({ type: 'achievement', title: 'História gerada!', message: 'A história do herói foi atualizada.', icon: '📖', duration: 4000 });
                 } catch (error) {
                   console.error('Erro ao gerar história via IA:', error);
-                  notificationBus.emit({
-                    type: 'quest',
-                    title: 'Falha ao gerar história',
-                    message: 'Verifique a chave de IA e a conexão.',
-                    icon: '⚠️',
-                    duration: 4500
-                  });
+                  notificationBus.emit({ type: 'quest', title: 'Falha ao gerar história', message: 'Verifique a chave de IA e a conexão.', icon: '⚠️', duration: 4500 });
                 } finally {
                   setLoadingHFStory(false);
                 }
@@ -1145,6 +975,48 @@ const HeroForm = () => {
             placeholder="Conte a história do seu herói..."
           />
         </div>
+
+        {/* Seção 6: Frase de Batalha (após história) */}
+        <div className="bg-gray-700 p-4 rounded-lg">
+          <h3 className="text-xl font-semibold text-amber-400 mb-4">6. Frase de Batalha</h3>
+          <div className="flex gap-2 mb-2">
+            <button type="button" onClick={handleGenerateBattleQuote} className={`px-3 py-2 rounded-md text-sm font-medium transition-colors bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}>
+              {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+              <span>🎲 Gerar Aleatória</span>
+            </button>
+            <button type="button" onClick={handleGenerateBattleQuoteAI} disabled={loadingQuoteAI} className={`px-3 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-60 bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}>
+              {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+              <span>{loadingQuoteAI ? 'Gerando...' : '🤖 Gerar com IA'}</span>
+            </button>
+          </div>
+          <textarea value={formData.battleQuote || ''} onChange={(e) => setFormData({...formData, battleQuote: e.target.value})} rows={2} className="w-full rounded-md bg-gray-600 border-gray-500 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Digite uma frase épica conectada à história..." />
+        </div>
+
+        {/* Seção 7: Imagem do Herói (após história) */}
+        <div className="bg-gray-700 p-4 rounded-lg">
+          <h3 className="text-xl font-semibold text-amber-400 mb-4">7. Imagem do Herói</h3>
+          <div className="flex gap-4 items-start">
+            <div className="flex-1">
+              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md font-medium transition-colors">📁 Upload de Imagem</button>
+              <p className="text-xs text-gray-400 mt-1">Formatos aceitos: JPG, PNG, GIF (máx. 5MB)</p>
+            </div>
+            <div className="flex-1">
+              <button type="button" onClick={handleGenerateImageAI} disabled={loadingImageAI} className={`w-full px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-60 bg-gradient-to-r ${getSeasonalButtonGradient(activeSeasonalTheme as any)} text-white hover:brightness-110 flex items-center gap-2`}>
+                {(seasonalThemes as any)[activeSeasonalTheme || '']?.accents?.[0] || ''}
+                <span>{loadingImageAI ? 'Gerando...' : '🤖 Gerar Avatar IA'}</span>
+              </button>
+              <p className="text-xs text-gray-400 mt-1">Usa sexo, raça, classe e (opcional) resumo da história para criar a imagem.</p>
+            </div>
+            {formData.image && (
+              <div className="w-24 h-24 bg-gray-600 rounded-md overflow-hidden">
+                <img src={formData.image.includes('image.pollinations.ai/prompt/') ? formData.image.replace('https://image.pollinations.ai/prompt/', '/api/pollinations-image?prompt=').replace('?n=1&', '&') : formData.image} alt="Preview do herói" className="w-full h-full object-cover" />
+              </div>
+            )}
+          </div>
+        </div>
+
+        
         
         {/* Botão de envio */}
         <div className="flex justify-center">

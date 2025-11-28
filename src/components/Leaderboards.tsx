@@ -49,19 +49,22 @@ const Leaderboards: React.FC = () => {
     const generatedLeaderboards = generateAllLeaderboards(heroes);
     setLeaderboards(generatedLeaderboards);
 
-    const abort = new AbortController();
+    let mounted = true;
     (async () => {
       try {
-        const res = await fetch('/api/daily/leaderboard', { signal: abort.signal });
+        const res = await fetch('/api/daily/leaderboard');
+        if (!mounted) return;
         const data = await res.json();
+        if (!mounted) return;
         setDailyEntries(Array.isArray(data.entries) ? data.entries : []);
       } catch {}
       try {
         const summary = await getOrRunDailyResult(viewHero);
+        if (!mounted) return;
         setDailySummary(summary);
       } catch {}
     })();
-    return () => { try { abort.abort(); } catch {} };
+    return () => { mounted = false; };
   }, [viewHero, heroes]);
 
   if (!viewHero) {

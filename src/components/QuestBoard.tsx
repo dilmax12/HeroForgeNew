@@ -17,6 +17,7 @@ const HeroSelector: React.FC<{
 }> = ({ heroes, onHeroSelect }) => {
   const { getSelectedHero } = useHeroStore();
   const selectedHero = getSelectedHero();
+  const playerHeroes = heroes.filter(h => h.origin !== 'npc');
   const selectedHeroId = selectedHero?.id || null;
 
   const handleClick = (heroId: string) => {
@@ -107,6 +108,7 @@ const QuestBoard: React.FC = () => {
   } = useHeroStore();
   
   const selectedHero = getSelectedHero();
+  const playerHeroes = useMemo(() => (heroes || []).filter(h => h.origin !== 'npc'), [heroes]);
   const availableUniq = useMemo(() => {
     try {
       const seen = new Set<string>();
@@ -140,12 +142,11 @@ const QuestBoard: React.FC = () => {
 
   // Selecionar automaticamente o primeiro herói se não há nenhum selecionado
   useEffect(() => {
-    if (!selectedHero && heroes.length > 0) {
-      console.log('Nenhum herói selecionado, selecionando automaticamente o primeiro:', heroes[0].name);
-      selectHero(heroes[0].id);
-      refreshQuests(heroes[0].progression.level);
+    if (!selectedHero && playerHeroes.length > 0) {
+      selectHero(playerHeroes[0].id);
+      refreshQuests(playerHeroes[0].progression.level);
     }
-  }, [selectedHero?.id, heroes.length]);
+  }, [selectedHero?.id, playerHeroes.length]);
 
   // Monitorar mudanças no herói selecionado
   useEffect(() => {
@@ -175,7 +176,7 @@ const QuestBoard: React.FC = () => {
     selectHero(heroId);
     
     // Atualizar missões para o herói selecionado
-    const selectedHeroData = heroes.find(h => h.id === heroId);
+    const selectedHeroData = playerHeroes.find(h => h.id === heroId);
     if (selectedHeroData) {
       console.log('Atualizando missões para herói:', selectedHeroData.name, 'Level:', selectedHeroData.progression.level);
       refreshQuests(selectedHeroData.progression.level);
@@ -202,7 +203,7 @@ const QuestBoard: React.FC = () => {
           <p className="text-gray-300 mb-6">Selecione um herói para ver as missões disponíveis</p>
         </div>
         
-        <HeroSelector heroes={heroes} onHeroSelect={handleHeroSelect} />
+        <HeroSelector heroes={playerHeroes} onHeroSelect={handleHeroSelect} />
       </div>
     );
   }
@@ -286,8 +287,16 @@ const QuestBoard: React.FC = () => {
     const [streak, setStreak] = useState(0);
     const [error, setError] = useState<string | null>(null);
 
-    const phasesTotal = useMemo(() => Math.max(2, quest.phasesHint || (quest.difficulty === 'epica' ? 4 : 3)), [quest.phasesHint, quest.difficulty]);
-    const staminaCostPerPhase = useMemo(() => (quest.difficulty === 'rapida' ? 2 : 3), [quest.difficulty]);
+    const phasesTotal = useMemo(() => {
+      const r = (hero.rankData?.currentRank || hero.rank || 'F');
+      const low = r === 'F' || r === 'E';
+      const mid = r === 'D';
+      const base = quest.phasesHint || (quest.difficulty === 'epica' ? 6 : (quest.difficulty === 'padrao' ? 4 : 3));
+      if (low && quest.difficulty === 'rapida') return 2;
+      if (mid && quest.difficulty === 'epica') return Math.max(5, base);
+      return Math.max(2, base);
+    }, [hero.rankData?.currentRank, hero.rank, quest.phasesHint, quest.difficulty]);
+    const staminaCostPerPhase = useMemo(() => (quest.difficulty === 'rapida' ? 2 : (quest.difficulty === 'epica' ? 4 : 3)), [quest.difficulty]);
     const biome = quest.biomeHint || 'Floresta Nebulosa';
     const category = quest.categoryHint || (quest.type === 'caca' ? 'controle' : 'controle');
     const cdMsQ = useMemo(() => {
@@ -322,7 +331,9 @@ const QuestBoard: React.FC = () => {
 
     const start = () => {
       if (cdActiveQ) { setError('Cooldown ativo para missões. Aguarde o tempo de recarga.'); return; }
-      if ((hero.stamina?.current || 0) < staminaCostPerPhase) { setError('Stamina insuficiente para iniciar.'); return; }
+      const currentFatigue = Math.max(0, Number(hero.progression?.fatigue || 0));
+      const needed = worldStateManager.computeEffectiveStaminaCost(hero, staminaCostPerPhase);
+      if (currentFatigue + needed > 100) { setError('Fadiga alta — descanse antes de iniciar.'); return; }
       setRunning(true);
       setFinished(false);
       setPhaseIndex(0);
@@ -340,9 +351,11 @@ const QuestBoard: React.FC = () => {
       const help = (hero.stats as any)?.helpStatus;
       const staminaDiscount = help && help.staminaCostReduction ? Math.max(0, Math.min(2, help.staminaCostReduction)) : 0;
       const totalCost = Math.max(1, (staminaCostPerPhase + extraPhaseCost) - staminaDiscount);
-      if ((hero.stamina?.current || 0) < totalCost) { setError('Stamina insuficiente para prosseguir.'); setRunning(false); return; }
+      const needed = worldStateManager.computeEffectiveStaminaCost(hero, totalCost);
+      const currentFatigue = Math.max(0, Number(hero.progression?.fatigue || 0));
+      if (currentFatigue + needed > 100) { setError('Fadiga alta — pare e descanse.'); setRunning(false); return; }
       worldStateManager.consumeStamina(hero, totalCost);
-      updateHero(hero.id, { stamina: hero.stamina });
+      updateHero(hero.id, { progression: hero.progression });
       const base = quest.difficulty === 'epica' ? 0.45 : quest.difficulty === 'dificil' ? 0.6 : quest.difficulty === 'medio' ? 0.7 : 0.8;
       const riskStep = 0.06;
       const attr = hero.attributes;
@@ -353,8 +366,11 @@ const QuestBoard: React.FC = () => {
       const roll = Math.random();
       const success = roll < successChance;
       const mult = computeRewardMultiplier(streak);
-      const xpBase = (quest.baseRewardsHint?.xp || 25);
-      const goldBase = (quest.baseRewardsHint?.gold || 25);
+      const xpBaseRaw = (quest.baseRewardsHint?.xp || 25);
+      const goldBaseRaw = (quest.baseRewardsHint?.gold || 25);
+      const phaseScaling = 1 + Math.max(0, (phasesTotal - 3)) * 0.15;
+      const xpBase = Math.round(xpBaseRaw * phaseScaling);
+      const goldBase = Math.round(goldBaseRaw * phaseScaling);
       const boss = category === 'especial' && phaseIndex + 1 === phasesTotal;
       const bossMult = boss ? 1.5 : 1;
       const buffPct = getMissionBuffPercent(hero);
@@ -382,11 +398,12 @@ const QuestBoard: React.FC = () => {
       const extraIds: string[] = [];
       if (ids.length) {
         const dropChanceBase = boss ? 1 : success ? 0.7 : 0.4;
+        const phaseDropBoost = Math.max(0, Math.min(0.25, (phasesTotal - 3) * 0.05));
         const helpLootBonus = help && help.lootDropBonusPercent ? Math.max(0, Math.min(0.5, help.lootDropBonusPercent)) : 0;
-        const dropChance = Math.min(1, dropChanceBase + helpLootBonus);
-        const hour = new Date().getHours();
-        const isNight = hour < 6 || hour >= 18;
-        const isDay = hour >= 8 && hour < 17;
+        const dropChance = Math.min(1, dropChanceBase + phaseDropBoost + helpLootBonus);
+      const hour = new Date().getHours();
+      const isNight = hour < 6 || hour >= 18;
+      const isDay = hour >= 8 && hour < 17;
         const eligible = ids.filter(id => {
           if (id === 'essencia-lunar') return isNight;
           if (id === 'erva-sangue') return isDay;
@@ -453,8 +470,10 @@ const QuestBoard: React.FC = () => {
         setFinished(true);
         setRunning(false);
         updateDailyGoalProgress(hero.id, 'quest-completed', 1);
-        const map: Record<QuestDifficulty, number> = { rapida: 10, padrao: 20, epica: 50 };
-        const cdMin = map[quest.difficulty] || 15;
+        const r = (hero.rankData?.currentRank || hero.rank || 'F');
+        const low = r === 'F' || r === 'E';
+        const mid = r === 'D';
+        const cdMin = (quest.difficulty === 'rapida' ? (low ? 3 : mid ? 6 : 10) : (quest.difficulty === 'padrao' ? (low ? 8 : mid ? 12 : 20) : (low ? 20 : mid ? 30 : 50)));
         let endsMs = Date.now() + cdMin * 60 * 1000;
         if (help && help.reduceCooldownMinutes) {
           endsMs = Math.max(Date.now(), endsMs - (help.reduceCooldownMinutes * 60 * 1000));
@@ -587,6 +606,23 @@ const QuestBoard: React.FC = () => {
                     <span className="px-2 py-1 rounded-md text-xs font-medium bg-indigo-900/30 text-indigo-300 border border-indigo-600/30 flex items-center gap-1">Progresso {pct}%</span>
                   );
                 } catch { return null; }
+              })()}
+              {(() => {
+                const d = quest.difficulty;
+                const phases = quest.phasesHint ?? (d === 'epica' ? 6 : (d === 'padrao' ? 4 : 3));
+                const cls = d === 'epica'
+                  ? 'bg-purple-900/30 text-purple-300 border border-purple-600/30'
+                  : d === 'padrao'
+                    ? 'bg-amber-900/30 text-amber-300 border border-amber-600/30'
+                    : 'bg-green-900/30 text-green-300 border border-green-600/30';
+                const reason = quest.phasesHint
+                  ? 'definido pela missão'
+                  : (d === 'epica' ? 'dificuldade épica' : d === 'padrao' ? 'dificuldade padrão' : 'dificuldade rápida');
+                return (
+                  <span className={`px-2 py-1 rounded-md text-xs font-medium ${cls}`} title={`Estimativa de ${phases} fases (${reason}).`}>
+                    Fases previstas: {phases}
+                  </span>
+                );
               })()}
             </div>
           </div>
@@ -872,7 +908,12 @@ const ConcludeButton: React.FC<{ heroId: string; questId: string; onConcluded?: 
       completeQuest(heroId, questId, false);
       const current = heroes.find(h => h.id === heroId);
       if (current) {
-        const cdMin = 20;
+        const getQuestById = useHeroStore.getState().getQuestById;
+        const q = getQuestById(questId);
+        const r = (current.rankData?.currentRank || current.rank || 'F');
+        const low = r === 'F' || r === 'E';
+        const mid = r === 'D';
+        const cdMin = (q && q.difficulty === 'rapida' ? (low ? 3 : mid ? 6 : 10) : (q && q.difficulty === 'padrao' ? (low ? 8 : mid ? 12 : 20) : (low ? 20 : mid ? 30 : 50)));
         const ends = new Date(Date.now() + cdMin * 60 * 1000).toISOString();
         updateHero(heroId, { questing: { ...(current.questing || {}), cooldownEndsAt: ends, lastCompletedAt: new Date().toISOString() } });
       }
@@ -907,8 +948,10 @@ const AutoCompleteMission: React.FC<{ hero: Hero; quest: Quest }> = ({ hero, que
       setStarted(true);
       setTimeout(() => {
         completeQuest(hero.id, quest.id, false);
-        const map: Record<QuestDifficulty, number> = { rapida: 10, padrao: 20, epica: 50 };
-        const cdMin = map[quest.difficulty] || 15;
+        const r = (hero.rankData?.currentRank || hero.rank || 'F');
+        const low = r === 'F' || r === 'E';
+        const mid = r === 'D';
+        const cdMin = (quest.difficulty === 'rapida' ? (low ? 3 : mid ? 6 : 10) : (quest.difficulty === 'padrao' ? (low ? 8 : mid ? 12 : 20) : (low ? 20 : mid ? 30 : 50)));
         const ends = new Date(Date.now() + cdMin * 60 * 1000).toISOString();
         updateHero(hero.id, { questing: { ...(hero.questing || {}), cooldownEndsAt: ends, lastCompletedAt: new Date().toISOString() } });
       }, 100);

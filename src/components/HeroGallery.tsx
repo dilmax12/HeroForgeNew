@@ -41,6 +41,9 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
   const [sortBy, setSortBy] = useState<'name' | 'level' | 'rank' | 'createdAt' | 'xp' | 'gold'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [promptHero, setPromptHero] = useState<Hero | null>(null);
+  const [promptText, setPromptText] = useState('');
+  const [generatingImg, setGeneratingImg] = useState(false);
   
   const prefetchRef = useRef<number>(0);
   const listContainerRef = useRef<HTMLDivElement | null>(null);
@@ -186,6 +189,42 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
     setLightboxIndex(idx >= 0 ? idx : null);
     onHeroSelect?.(hero);
   }, [sortedHeroes, onHeroSelect]);
+
+  const openPromptEditor = useCallback((hero: Hero) => {
+    try {
+      const genderTags = (hero as any).gender === 'feminino'
+        ? 'female, woman, heroine, feminine features, soft face, long hair, no beard'
+        : 'male, man, masculine features';
+      const base = `${genderTags}, ${hero.race} ${hero.class}, ${hero.name}, epic fantasy portrait, highly detailed, studio lighting`;
+      const story = (hero.backstory || '').slice(0, 140);
+      const withStory = story ? `${base}, theme: ${story}` : base;
+      setPromptHero(hero);
+      setPromptText(withStory);
+    } catch {
+      setPromptHero(hero);
+      setPromptText(`${hero.name}, ${hero.race} ${hero.class}, epic fantasy portrait`);
+    }
+  }, []);
+
+  const generateFromPrompt = useCallback(async () => {
+    if (!promptHero) return;
+    setGeneratingImg(true);
+    try {
+      const resp = await fetch('/api/gerar-imagem', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: promptText }) });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      const img = data?.imagem || '';
+      if (img) {
+        useHeroStore.getState().updateHero(promptHero.id, { image: img });
+        (window as any).notificationBus?.emit?.({ type: 'item', title: 'Avatar atualizado', message: 'Imagem gerada com novo prompt.', icon: '🖼️', duration: 2500 });
+        setPromptHero(null);
+      }
+    } catch (err) {
+      (window as any).notificationBus?.emit?.({ type: 'quest', title: 'Falha ao gerar imagem', message: String((err as any)?.message || err || 'Erro'), icon: '⚠️', duration: 3500 });
+    } finally {
+      setGeneratingImg(false);
+    }
+  }, [promptHero, promptText]);
 
   
 
@@ -450,7 +489,7 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
               size={viewMode === 'list' ? 'small' : cardSize}
               showDetails={true}
               onEdit={onHeroEdit}
-              onImageChange={onHeroImageChange}
+              onImageChange={openPromptEditor}
               onDelete={() => setConfirmDeleteId(hero.id)}
               index={idx}
             />
@@ -508,6 +547,45 @@ export const HeroGallery: React.FC<HeroGalleryProps> = ({
                 }, 600);
               }} className={`px-3 py-2 rounded ${isDeleting ? 'bg-gray-700 cursor-wait' : 'bg-red-600 hover:bg-red-500'} text-white`}>{isDeleting ? 'Excluindo…' : 'Confirmar'}</button>
               <button onClick={() => setConfirmDeleteId(null)} className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {promptHero && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center" role="dialog" aria-modal="true">
+          <div className="w-full max-w-lg rounded-xl border border-yellow-500/30 bg-black/80 p-5 text-white">
+            <div className="text-lg font-semibold mb-2">Editar Prompt de Imagem</div>
+            <div className="text-sm text-gray-300 mb-3">Herói: {promptHero.name} — {promptHero.race} {promptHero.class}</div>
+            <textarea value={promptText} onChange={(e)=>setPromptText(e.target.value)} rows={4} className="w-full rounded-md bg-gray-700 border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="Escreva o prompt para gerar o avatar" />
+            <div className="mt-4 flex gap-2">
+              <button onClick={generateFromPrompt} disabled={generatingImg || !promptText.trim()} className={`px-3 py-2 rounded ${generatingImg ? 'bg-gray-700 cursor-wait' : 'bg-purple-600 hover:bg-purple-500'} text-white`}>{generatingImg ? 'Gerando…' : 'Gerar'}</button>
+              <button onClick={()=>setPromptHero(null)} className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white">Cancelar</button>
+              <label className="px-3 py-2 rounded bg-green-600 hover:bg-green-500 text-white cursor-pointer">
+                Upload Foto
+                <input type="file" accept="image/*" className="hidden" onChange={async (e)=>{
+                  try {
+                    const f = e.target.files?.[0]; if (!f) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const dataUrl = String(reader.result || '');
+                      useHeroStore.getState().updateHero(promptHero.id, { image: dataUrl });
+                      (window as any).notificationBus?.emit?.({ type: 'item', title: 'Foto carregada', message: 'Imagem do herói atualizada.', icon: '🖼️', duration: 2500 });
+                    };
+                    reader.readAsDataURL(f);
+                  } catch {}
+                }} />
+              </label>
+              <button onClick={()=>{
+                const tpl = 'epic medieval fantasy hero-smith, male character, standing in a mystical forge, glowing magic hammer, runic leather armor, long dark cloak with gold details, blue particles around, cinematic lighting, ultra-detailed, high fantasy, dramatic atmosphere, sharp textures';
+                const nameCtx = `${promptHero?.name || ''}, ${promptHero?.race || ''} ${promptHero?.class || ''}`.trim();
+                setPromptText(`${nameCtx ? nameCtx + ', ' : ''}${tpl}`);
+              }} className="px-3 py-2 rounded bg-amber-600 hover:bg-amber-500 text-white">Template Lexica (Masculino)</button>
+              <button onClick={()=>{
+                const tpl = 'epic medieval fantasy hero-smith, female character, in an ancient enchanted forge, glowing magical hammer or staff, runic armor with silver details, flowing cloak, mystical particles, soft ethereal light, ultra-detailed, high fantasy, elegant and powerful';
+                const nameCtx = `${promptHero?.name || ''}, ${promptHero?.race || ''} ${promptHero?.class || ''}`.trim();
+                setPromptText(`${nameCtx ? nameCtx + ', ' : ''}${tpl}`);
+              }} className="px-3 py-2 rounded bg-pink-600 hover:bg-pink-500 text-white">Template Lexica (Feminino)</button>
             </div>
           </div>
         </div>

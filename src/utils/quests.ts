@@ -263,7 +263,7 @@ export function generateQuest(
       if (loc === 'Porto dos Ventos' || loc === 'Rio Marfim') return 'Rio Marfim';
       return 'Floresta Nebulosa';
     })(),
-    phasesHint: difficulty === 'rapida' ? 2 : difficulty === 'epica' ? 4 : 3,
+    phasesHint: difficulty === 'rapida' ? 3 : difficulty === 'epica' ? 6 : 4,
     baseRewardsHint: { xp: rewards.xp, gold: rewards.gold }
   };
   
@@ -287,9 +287,8 @@ export function generateQuestBoard(heroLevel: number = 1, guildLevel: number = 0
       return steps.includes('create-hero') && steps.includes('accept-quest') && hasTraining;
     } catch { return false; }
   })();
-  if (heroRank === 'F' && !basicsMastered) {
-    return [];
-  }
+  // Para rank F, nunca retornar vazio: priorizar missões de coleta/escolta
+  const preferBasicsOnly = heroRank === 'F' && !basicsMastered;
   
   // 2 missões rápidas
   quests.push(generateQuest('rapida', heroLevel));
@@ -358,8 +357,43 @@ export function generateQuestBoard(heroLevel: number = 1, guildLevel: number = 0
       xp: Math.floor((q.rewards?.xp || 0) * profile.rewardMultiplier)
     }
   }));
+  // Garantir presença de pelo menos uma missão de escolta
+  const hasEscolta = tuned.some(q => q.categoryHint === 'escolta');
+  if (!hasEscolta) {
+    const variables = {
+      location: getRandomElement(LOCATIONS),
+      npc: getRandomElement(NPCS),
+      threat: getRandomElement(THREATS)
+    } as any;
+    const escortId = `quest-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    tuned.push({
+      id: escortId,
+      title: interpolateTemplate('Escolta de {npc}', variables),
+      description: interpolateTemplate('Proteja {npc} durante a viagem até {location}. Há relatos de {threat} na região.', variables),
+      type: 'contrato',
+      difficulty: 'padrao',
+      levelRequirement: Math.max(1, heroLevel - 1),
+      timeLimit: 60,
+      enemies: [{ type: 'Bandido', count: 2, level: 2 }],
+      rewards: applyDifficultyModifier({ gold: 50, xp: 35, glory: 3 }, 'padrao'),
+      repeatable: true,
+      isGuildQuest: false,
+      failurePenalty: undefined,
+      templateId: 'contrato-escolta',
+      categoryHint: 'escolta',
+      phasesHint: 4,
+      baseRewardsHint: { xp: 35, gold: 50 }
+    } as any);
+  }
+
+  // Para rank F com onboarding feito, mostrar coleta e escolta
   if (heroRank === 'F' && basicsMastered) {
-    return tuned.filter(q => q.categoryHint === 'coleta');
+    return tuned.filter(q => q.categoryHint === 'coleta' || q.categoryHint === 'escolta');
+  }
+  // Para rank F sem onboarding feito, restringir a coleta/escolta (não vazio)
+  if (preferBasicsOnly) {
+    const basicList = tuned.filter(q => q.categoryHint === 'coleta' || q.categoryHint === 'escolta');
+    return basicList.length ? basicList : tuned;
   }
   return tuned;
 }

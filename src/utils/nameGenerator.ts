@@ -133,9 +133,18 @@ export const BATTLE_QUOTES: Record<string, string[]> = {
 /**
  * Gera um nome aleatório baseado na raça
  */
-export function generateName(race: HeroRace): string {
+function isLikelyFemale(name: string): boolean {
+  const fSuffix = ['a', 'ia', 'ra', 'na', 'la', 'sa'];
+  const lower = name.toLowerCase();
+  return fSuffix.some(s => lower.endsWith(s));
+}
+
+export function generateName(race: HeroRace, gender?: 'masculino' | 'feminino'): string {
   const pool = NAME_POOLS[race] || NAME_POOLS.humano;
-  const first = pool.first[Math.floor(Math.random() * pool.first.length)];
+  let firsts = pool.first.slice();
+  if (gender === 'feminino') firsts = firsts.filter(isLikelyFemale).length ? firsts.filter(isLikelyFemale) : firsts;
+  if (gender === 'masculino') firsts = firsts.filter(n => !isLikelyFemale(n)).length ? firsts.filter(n => !isLikelyFemale(n)) : firsts;
+  const first = firsts[Math.floor(Math.random() * firsts.length)];
   const last = pool.last[Math.floor(Math.random() * pool.last.length)];
   return `${first} ${last}`;
 }
@@ -151,14 +160,17 @@ export function getBattleQuote(heroClass: string): string {
 /**
  * Gera múltiplas opções de nome para o usuário escolher
  */
-export function generateNameOptions(race: HeroRace, count: number = 3): string[] {
+export function generateNameOptions(race: HeroRace, count: number = 3, gender?: 'masculino' | 'feminino'): string[] {
   const options: string[] = [];
   const pool = NAME_POOLS[race] || NAME_POOLS.humano;
+  let firsts = pool.first.slice();
+  if (gender === 'feminino') firsts = firsts.filter(isLikelyFemale).length ? firsts.filter(isLikelyFemale) : firsts;
+  if (gender === 'masculino') firsts = firsts.filter(n => !isLikelyFemale(n)).length ? firsts.filter(n => !isLikelyFemale(n)) : firsts;
   
   for (let i = 0; i < count; i++) {
     let name: string;
     do {
-      const first = pool.first[Math.floor(Math.random() * pool.first.length)];
+      const first = firsts[Math.floor(Math.random() * firsts.length)];
       const last = pool.last[Math.floor(Math.random() * pool.last.length)];
       name = `${first} ${last}`;
     } while (options.includes(name));

@@ -192,8 +192,8 @@ export const useNotifications = () => {
   const notifyStaminaLow = () => {
     addNotification({
       type: 'stamina',
-      title: 'Stamina Baixa!',
-      message: 'Descanse para recuperar sua energia',
+      title: 'Fadiga Alta!',
+      message: 'Descanse para reduzir sua fadiga',
       duration: 3000
     });
   };

@@ -101,9 +101,9 @@ export const HeroJournal: React.FC<HeroJournalProps> = ({ hero }) => {
             </div>
           </div>
           <div className="bg-gray-700 rounded p-3">
-            <div className="text-gray-400 text-sm">Stamina Atual</div>
-            <div className="text-2xl font-bold text-blue-400">
-              {hero.stamina?.current || 100}/{hero.stamina?.max || 100}
+            <div className="text-gray-400 text-sm">Fadiga Atual</div>
+            <div className="text-2xl font-bold text-amber-400">
+              {Math.max(0, Number(hero.progression?.fatigue || 0))}/100
             </div>
           </div>
         </div>

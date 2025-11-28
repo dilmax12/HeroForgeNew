@@ -30,15 +30,7 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
     generateMissions();
   }, [hero.id]);
 
-  // Atualizar stamina periodicamente
-  useEffect(() => {
-    const interval = setInterval(() => {
-      worldStateManager.updateStamina(hero);
-      updateHero(hero.id, { stamina: hero.stamina });
-    }, 60000); // Atualizar a cada minuto
-
-    return () => clearInterval(interval);
-  }, [hero.id]);
+  
 
   const generateMissions = () => {
     const missions: EnhancedQuest[] = [];
@@ -90,8 +82,7 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
       
       // Atualizar herói com novo WorldState
       updateHero(hero.id, { 
-        worldState: hero.worldState,
-        stamina: hero.stamina 
+        worldState: hero.worldState
       });
 
       // Contabilizar missão narrativa para progresso de rank
@@ -128,8 +119,7 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
     }
   };
 
-  const getStaminaColor = (current: number, max: number) => {
-    const percentage = (current / max) * 100;
+  const getStaminaColor = (percentage: number) => {
     if (percentage > 70) return 'text-green-400';
     if (percentage > 30) return 'text-yellow-400';
     return 'text-red-400';
@@ -163,16 +153,22 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
         }
         return null;
       })()}
-      {/* Header com Stamina */}
+      {/* Header com Fadiga */}
       <div className={`bg-gray-800 rounded-lg p-4 border ${seasonalBorder}`}>
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-white">Missões Narrativas</h2>
           <div className="flex items-center space-x-4">
             <div className="text-right">
-              <div className="text-sm text-gray-400">Stamina</div>
-              <div className={`text-lg font-bold ${getStaminaColor(hero.stamina?.current || 100, hero.stamina?.max || 100)}`}>
-                {hero.stamina?.current || 100} / {hero.stamina?.max || 100}
-              </div>
+              <div className="text-sm text-gray-400">Fadiga</div>
+              {(() => {
+                const fatigue = Math.max(0, Number(hero.progression?.fatigue || 0));
+                const pct = Math.max(0, Math.min(100, Math.round((fatigue / 100) * 100)));
+                return (
+                  <div className={`text-lg font-bold ${getStaminaColor(pct)}`}>
+                    {fatigue} / 100
+                  </div>
+                );
+              })()}
             </div>
             <button
               onClick={generateMissions}
@@ -184,15 +180,19 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
           </div>
         </div>
         
-        {/* Barra de Stamina */}
-        <div className="mt-2 w-full bg-gray-700 rounded-full h-2">
-          <div 
-            className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all duration-300"
-            style={{ 
-              width: `${((hero.stamina?.current || 100) / (hero.stamina?.max || 100)) * 100}%` 
-            }}
-          />
-        </div>
+        {/* Barra de Fadiga */}
+        {(() => {
+          const fatigue = Math.max(0, Number(hero.progression?.fatigue || 0));
+          const pct = Math.max(0, Math.min(100, Math.round((fatigue / 100) * 100)));
+          return (
+            <div className="mt-2 w-full bg-gray-700 rounded-full h-2">
+              <div 
+                className="bg-gradient-to-r from-amber-500 to-red-500 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          );
+        })()}
       </div>
 
       {/* Resultado da Última Missão */}
@@ -249,7 +249,7 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
                 <p className="text-gray-400 text-sm">
                   {mission.location} • Nível {mission.levelRequirement}+ • 
                   <span className={`ml-1 ${canAffordMission(mission) ? 'text-green-400' : 'text-red-400'}`}>
-                    {mission.staminaCost || 30} Stamina
+                    {mission.staminaCost || 30} Fadiga
                   </span>
                 </p>
               </div>
@@ -315,7 +315,7 @@ export const EnhancedQuestBoard: React.FC<EnhancedQuestBoardProps> = ({ hero }) 
                     : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}
               >
-                {!canAffordMission(mission) ? 'Stamina Insuficiente' : 'Ver Opções'}
+                {!canAffordMission(mission) ? 'Fadiga Alta' : 'Ver Opções'}
               </button>
             )}
           </motion.div>

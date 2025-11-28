@@ -4,8 +4,7 @@ import Stripe from 'stripe';
 import dotenv from 'dotenv';
 import { InferenceClient } from '@huggingface/inference';
 import { createClient as createSbClient } from '@supabase/supabase-js';
-let ZOD = null;
-try { ZOD = await import('zod'); } catch {}
+import * as ZOD from 'zod';
 function sendError(res, status, code, message, details){ const body = { code, message }; if (details) body.details = details; return res.status(status).json(body); }
 
 dotenv.config();
@@ -1244,7 +1243,7 @@ app.get('/api/daily/leaderboard', async (_req, res) => {
 // === Criação de Herói via IA (texto + imagem) ===
 app.post('/api/hero-create', async (req, res) => {
   try {
-    const { race = 'humano', klass = 'guerreiro', attrs = {} } = req.body || {};
+    const { race = 'humano', klass = 'guerreiro', attrs = {}, gender = 'masculino' } = req.body || {};
 
     let nameLine = 'Herói Desconhecido';
     let historia = 'Um herói emerge das sombras, buscando seu destino.';
@@ -1253,7 +1252,7 @@ app.post('/api/hero-create', async (req, res) => {
 
     if (HF_TOKEN) {
       try {
-        const promptText = `Você é um narrador épico. Gere:\n- Nome completo (duas palavras: primeiro nome e sobrenome),\n- História de origem 4-6 linhas,\n- Frase de impacto 1 linha.\nContexto: raça: ${race}, classe: ${klass}, atributos: ${JSON.stringify(attrs)}.\nSeja conciso e épico. Saída em texto puro.`;
+        const promptText = `Você é um narrador épico. Gere:\n- Nome completo (duas palavras: primeiro nome e sobrenome),\n- História de origem 4-6 linhas,\n- Frase de impacto 1 linha.\nContexto: sexo: ${gender}, raça: ${race}, classe: ${klass}, atributos: ${JSON.stringify(attrs)}.\nSeja conciso e épico. Saída em texto puro.`;
         const chat = await hfClient.chatCompletion({
           model: MODEL_ID,
           messages: [
@@ -1273,7 +1272,7 @@ app.post('/api/hero-create', async (req, res) => {
       }
     }
 
-    const promptImage = `${nameLine}, ${race} ${klass}, epic fantasy portrait, detailed, studio lighting`;
+    const promptImage = `${nameLine}, ${gender === 'feminino' ? 'female' : 'male'} ${race} ${klass}, epic fantasy portrait, detailed, studio lighting`;
 
   if (!image) {
       if (HF_TOKEN) {
@@ -2257,4 +2256,162 @@ app.get('/api/proxy-image', async (req, res) => {
   } catch (e) {
     res.status(502).json({ error: 'Proxy fetch failed' });
   }
+});
+const ACTION_COSTS = {
+  TRAIN: 10,
+  MISSION_SHORT: 20,
+  MISSION_MEDIUM: 40,
+  MISSION_LONG: 70,
+  DUNGEON_FLOOR: 30,
+  SOCIAL_DEEP: 15,
+  REST: 0
+};
+const WORLD_STATE = { worldDay: 1, lastGlobalTick: Date.now(), activeEvents: [], npcStates: {} };
+const HEROES = new Map();
+const ACTION_LOGS = new Map();
+const DAILY_SUMMARY = new Map();
+function getOrInitHero(id){
+  let h = HEROES.get(id);
+  if(!h){
+    h = { id, playerId: id, name: 'Herói', level: 1, rank: 'F', stamina: 100, maxStamina: 100, lastRestAt: Date.now(), dayCounter: 0 };
+    HEROES.set(id, h);
+  }
+  return h;
+}
+function canPerform(h, actionType){
+  const cost = ACTION_COSTS[actionType] ?? 0;
+  if((h.stamina||0) < cost) return { ok:false, reason:'insufficient_stamina', cost };
+  return { ok:true, cost };
+}
+function logAction(hid, actionType, payload){
+  const arr = ACTION_LOGS.get(hid) || [];
+  arr.push({ id:`a-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, ts:Date.now(), type:actionType, payload });
+  ACTION_LOGS.set(hid, arr);
+  return arr[arr.length-1];
+}
+function processEndOfDayEvents(hero){
+  WORLD_STATE.worldDay += 1;
+  WORLD_STATE.lastGlobalTick = Date.now();
+  const weekly = WORLD_STATE.worldDay % 7 === 0;
+  const events = [];
+  if(weekly){ events.push('evento_semanal'); }
+  WORLD_STATE.npcStates = WORLD_STATE.npcStates || {};
+  const npcList = ['Lyra','Gorin','Elara','Aldric'];
+  npcList.forEach(n => {
+    const moods = ['friendly','neutral','hostile','mysterious'];
+    const nextMood = moods[Math.floor(Math.random()*moods.length)];
+    WORLD_STATE.npcStates[n] = { mood: nextMood, lastSeenDay: WORLD_STATE.worldDay };
+  });
+  const summary = { events, newQuests:[{ id:`q-${Date.now()}`, title:'Patrulhar arredores', description:'Investigue rumores próximos', levelRequirement:hero.level, rewards:{ gold:5, xp:15 }, difficulty:'padrao', type:'exploracao', repeatable:false }], npcMessages:['Lyra quer falar amanhã'] };
+  DAILY_SUMMARY.set(hero.id, summary);
+  return summary;
+}
+export function srvCanPerformAction(hero, actionKey, req){
+  const cost = ACTION_COSTS[actionKey] ?? 0;
+  if((hero.stamina||0) < cost) return { ok:false, reason:'insufficient_stamina', cost, current: hero.stamina };
+  if(req?.minLevel && Number(hero.level||1) < Number(req.minLevel)) return { ok:false, reason:'level_required' };
+  return { ok:true, cost };
+}
+export async function srvPerformAction(heroId, actionKey, payload){
+  const h = getOrInitHero(String(heroId));
+  const check = srvCanPerformAction(h, actionKey);
+  if(!check.ok) return { ok:false, reason:check.reason };
+  h.stamina = Math.max(0, (h.stamina||0) - (check.cost||0));
+  const act = logAction(h.id, actionKey, payload);
+  return { ok:true, hero:h, actionId:act.id };
+}
+export async function srvRest(heroId, restType){
+  const h = getOrInitHero(String(heroId));
+  if (h.missionActive) return { ok:false, error:'hero_busy' };
+  h.stamina = h.maxStamina;
+  h.lastRestAt = Date.now();
+  h.dayCounter = Math.max(0, (h.dayCounter||0) + 1);
+  const summary = processEndOfDayEvents(h);
+  return { ok:true, summary };
+}
+app.get('/api/hero/:id/status', (req,res)=>{
+  const h = getOrInitHero(String(req.params.id));
+  res.json({ id:h.id, stamina:h.stamina, maxStamina:h.maxStamina, lastRestAt:h.lastRestAt, dayCounter:h.dayCounter, actionsAvailable:Object.keys(ACTION_COSTS) });
+});
+app.post('/api/hero/:id/can-perform', (req,res)=>{
+  const h = getOrInitHero(String(req.params.id));
+  const type = String(req.body?.actionType||'');
+  if(!type) return res.status(400).json({ error:'actionType requerido' });
+  const r = canPerform(h,type);
+  res.json({ ok:r.ok, reason:r.reason, cost:r.cost, stamina:h.stamina });
+});
+app.post('/api/hero/:id/perform-action', (req,res)=>{
+  const h = getOrInitHero(String(req.params.id));
+  const type = String(req.body?.actionType||'');
+  const payload = req.body?.payload || {};
+  if(!type) return res.status(400).json({ error:'actionType requerido' });
+  const r = canPerform(h,type);
+  if(!r.ok) return res.status(409).json({ ok:false, reason:r.reason, cost:r.cost, stamina:h.stamina });
+  h.stamina = Math.max(0, (h.stamina||0) - (r.cost||0));
+  const act = logAction(h.id,type,payload);
+  res.json({ ok:true, newStamina:h.stamina, actionId:act.id });
+});
+app.post('/api/hero/:id/action', async (req,res)=>{
+  const heroId = String(req.params.id);
+  const actionKey = String(req.body?.actionKey||'');
+  const payload = req.body?.payload || {};
+  if(!actionKey) return res.status(400).json({ error:'actionKey requerido' });
+  const out = await srvPerformAction(heroId, actionKey, payload);
+  if(!out.ok) return res.status(409).json(out);
+  res.json({ ok:true, hero: out.hero, actionId: out.actionId });
+});
+app.get('/api/hero/:id/daily-summary', (req,res)=>{
+  const h = getOrInitHero(String(req.params.id));
+  const sum = DAILY_SUMMARY.get(h.id) || { events:[], newQuests:[], npcMessages:[] };
+  res.json(sum);
+});
+app.get('/api/guild/board', (req,res)=>{
+  const heroId = String(req.query?.heroId||'');
+  const h = heroId ? getOrInitHero(heroId) : null;
+  const base = { id:`escort-caravana`, title:'Escoltar Caravana', description:'Leve a caravana até a cidade próxima', levelRequirement: h ? h.level : 1, rewards:{ gold:20, xp:25 }, difficulty:'padrao', type:'historia', repeatable:false };
+  const key = h ? `${h.id}:${base.id}` : '';
+  const availableDay = key ? Number(MISSION_COOLDOWNS.get(key) || 0) : 0;
+  const isLocked = availableDay && Number(WORLD_STATE.worldDay || 1) < availableDay;
+  const quests = isLocked ? [] : [base];
+  const cooldownInfo = isLocked ? { missionId: base.id, availableOnDay: availableDay, currentDay: Number(WORLD_STATE.worldDay || 1) } : null;
+  res.json({ quests, cooldownInfo });
+});
+app.post('/api/hero/:id/dungeon/start', (req,res)=>{
+  const h = getOrInitHero(String(req.params.id));
+  const floors = Math.max(1, Math.min(50, Number(req.body?.floors||1)));
+  const risk = !!req.body?.risk;
+  const cost = floors * ACTION_COSTS.DUNGEON_FLOOR;
+  if((h.stamina||0) < cost && !risk) return res.status(409).json({ ok:false, reason:'insufficient_stamina', required:cost, stamina:h.stamina });
+  const penalty = (h.stamina||0) < cost ? Math.min(0.5, (cost - h.stamina)/cost) : 0;
+  h.stamina = Math.max(0, (h.stamina||0) - Math.min(h.stamina||0, cost));
+  const runId = `d-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+  res.json({ ok:true, runId, floors, penalty, stamina:h.stamina });
+});
+app.post('/api/hero/:id/rest', (req,res)=>{
+  const h = getOrInitHero(String(req.params.id));
+  const restType = String(req.body?.restType||'guild');
+  h.stamina = h.maxStamina;
+  h.lastRestAt = Date.now();
+  h.dayCounter = Math.max(0, (h.dayCounter||0) + 1);
+  if (restType === 'inn') {
+    h.innBuffXpPercent = 10;
+    h.innBuffUsesRemaining = 1;
+  }
+  const summary = processEndOfDayEvents(h);
+  res.json({ ok:true, stamina:h.stamina, dayCounter:h.dayCounter, summary });
+});
+app.post('/api/hero/:id/consume-inn-xp-buff', (req,res)=>{
+  const h = getOrInitHero(String(req.params.id));
+  const rem = Number(h.innBuffUsesRemaining||0);
+  const perc = rem>0 ? Number(h.innBuffXpPercent||10) : 0;
+  if (rem>0) { h.innBuffUsesRemaining = rem - 1; }
+  res.json({ percent: perc, remaining: Number(h.innBuffUsesRemaining||0) });
+});
+app.post('/api/hero/:id/rest-item', (req,res)=>{
+  const h = getOrInitHero(String(req.params.id));
+  const itemId = String(req.body?.itemId||'');
+  if(!itemId) return res.status(400).json({ error:'itemId requerido' });
+  const restore = itemId==='pocao-energia' ? 50 : h.maxStamina;
+  h.stamina = Math.min(h.maxStamina, (h.stamina||0) + restore);
+  res.json({ ok:true, stamina:h.stamina });
 });

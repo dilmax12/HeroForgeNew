@@ -42,23 +42,11 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
 
   // UI: contadores e pulsos de recuperação
   const [nextHpMpSeconds, setNextHpMpSeconds] = useState<number | null>(null);
-  const [nextStaminaSeconds, setNextStaminaSeconds] = useState<number | null>(null);
   const [trainingSeconds, setTrainingSeconds] = useState<number | null>(null);
   const [hpPulse, setHpPulse] = useState<number>(0);
   const [mpPulse, setMpPulse] = useState<number>(0);
 
-  // Usar stamina do objeto de estado do herói para evitar duplicidade
-  const maxStamina = hero.stamina?.max ?? 100;
-  const currentStamina = hero.stamina?.current ?? 0;
-  const staminaPercentage = Math.max(0, Math.min(100, (currentStamina / maxStamina) * 100));
   
-  
-  
-  const getStaminaColor = (percentage: number) => {
-    if (percentage >= 70) return 'bg-green-500';
-    if (percentage >= 30) return 'bg-yellow-500';
-    return 'bg-red-500';
-  };
 
   const getXPColor = (progress: number) => {
     if (progress >= 80) return 'bg-blue-500';
@@ -147,14 +135,7 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
       const lastAct = latest.stats?.lastActiveAt ? new Date(latest.stats.lastActiveAt).getTime() : now;
       const ttnHpMp = Math.max(0, 60000 - ((now - lastAct) % 60000));
       setNextHpMpSeconds(Math.ceil(ttnHpMp / 1000));
-      // Stamina: baseado em lastRecovery
-      if (latest.stamina?.lastRecovery) {
-        const lr = new Date(latest.stamina.lastRecovery).getTime();
-        const ttnSt = Math.max(0, 60000 - ((now - lr) % 60000));
-        setNextStaminaSeconds(Math.ceil(ttnSt / 1000));
-      } else {
-        setNextStaminaSeconds(null);
-      }
+      
       // Treino: baseado em stats.trainingActiveUntil
       if (latest.stats?.trainingActiveUntil) {
         const until = new Date(latest.stats.trainingActiveUntil).getTime();
@@ -313,7 +294,7 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
                 const red = worldStateManager.getMountStaminaReduction(hero);
                 if (!red) return null;
                 const pct = Math.round(red * 100);
-                return <div className="mt-1 text-[11px] text-emerald-300">Redução de custo de stamina: {pct}%</div>
+                return <div className="mt-1 text-[11px] text-emerald-300">Redução de custo de fadiga por ação: {pct}%</div>
               })()}
               <div className="mt-2 flex items-center gap-2">
                 <button onClick={() => setActiveMount(undefined)} className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-white text-[11px]">Desativar</button>
@@ -463,20 +444,7 @@ const EnhancedHUD: React.FC<EnhancedHUDProps> = ({ hero }) => {
         
       </div>
 
-      {/* Stamina */}
-      <div className="mb-3">
-        <div className="flex justify-between items-center mb-1">
-          <span className="text-green-400 text-xs font-medium">Stamina</span>
-          <span className="text-gray-300 text-xs">{currentStamina}/{maxStamina}</span>
-        </div>
-        <div className="w-full bg-gray-700 rounded-full h-2">
-          <div 
-            className={`h-2 rounded-full transition-all duration-300 ${getStaminaColor(staminaPercentage)}`}
-            style={{ width: `${staminaPercentage}%` }}
-          />
-        </div>
-        
-      </div>
+      
 
       {/* Treino Ativo */}
       {trainingSeconds !== null && (

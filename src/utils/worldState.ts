@@ -330,30 +330,11 @@ export class WorldStateManager {
         current: Math.max(0, Math.min(100, currentValue)),
         max: 100,
         lastRecovery: now.toISOString(),
-        // Recuperação padrão: pontos por minuto
-        recoveryRate: 5
+        recoveryRate: 0
       };
       return;
     }
-
-    // Recuperação por minuto: recoveryRate = pontos/minuto
-    const lastRecovery = new Date(hero.stamina.lastRecovery);
-    const minutesElapsed = (now.getTime() - lastRecovery.getTime()) / (1000 * 60);
-
-    if (minutesElapsed >= 1 && hero.stamina.current < hero.stamina.max) {
-      const settings = getGameSettings();
-      let ratePerMinute = (settings?.regenStaminaPerMin ?? hero.stamina.recoveryRate ?? 5);
-      const statsAny = (hero.stats as any) || {};
-      const restBuffUntil = statsAny.restBuffActiveUntil ? new Date(statsAny.restBuffActiveUntil).getTime() : 0;
-      const inDungeon = Boolean(statsAny.inDungeon);
-      if (restBuffUntil && Date.now() < restBuffUntil) ratePerMinute = Math.round(ratePerMinute * (settings?.restBuffStaminaMultiplier ?? 2));
-      if (inDungeon) ratePerMinute = Math.max(1, Math.floor(ratePerMinute * (settings?.dungeonRegenMultiplier ?? 0.5)));
-      const wholeMinutes = Math.min(5, Math.floor(minutesElapsed));
-      const recoveryAmount = Math.max(ratePerMinute, wholeMinutes * ratePerMinute);
-      hero.stamina.current = Math.min(hero.stamina.max, hero.stamina.current + recoveryAmount);
-      // Atualiza lastRecovery para agora após aplicar a recuperação
-      hero.stamina.lastRecovery = now.toISOString();
-    }
+    hero.stamina.lastRecovery = hero.stamina.lastRecovery || now.toISOString();
   }
 
   /**
@@ -421,20 +402,18 @@ export class WorldStateManager {
   }
 
   canAcceptQuest(hero: Hero, staminaCost: number): boolean {
-    this.updateStamina(hero);
     const effective = this.computeEffectiveStaminaCost(hero, staminaCost);
-    return (hero.stamina?.current || 100) >= effective;
+    const currentFatigue = Math.max(0, Number(hero.progression?.fatigue || 0));
+    return currentFatigue + effective <= 100;
   }
 
   consumeStamina(hero: Hero, amount: number): boolean {
-    if (!this.canAcceptQuest(hero, amount)) {
+    const effective = this.computeEffectiveStaminaCost(hero, amount);
+    const currentFatigue = Math.max(0, Number(hero.progression?.fatigue || 0));
+    if (currentFatigue + effective > 100) {
       return false;
     }
-
-    if (hero.stamina) {
-      const effective = this.computeEffectiveStaminaCost(hero, amount);
-      hero.stamina.current -= effective;
-    }
+    hero.progression = { ...(hero.progression || {}), fatigue: currentFatigue + effective };
     return true;
   }
  
@@ -463,6 +442,50 @@ export class WorldStateManager {
     const red = this.getMountStaminaReduction(hero);
     const eff = Math.round(baseCost * (1 - red));
     return Math.max(1, eff);
+  }
+
+  getQuestBaseStaminaCost(quest: any): number {
+    const d = String(quest?.difficulty || '').toLowerCase();
+    if (d === 'facil') return 20;
+    if (d === 'medio' || d === 'padrao') return 40;
+    if (d === 'dificil') return 60;
+    if (d === 'epica' || d === 'épica') return 80;
+    return 30;
+  }
+
+  rest(hero: Hero, type: 'guild' | 'inn' | 'item', amount?: number): void {
+    const now = new Date().toISOString();
+    const dayKey = new Date().toDateString();
+    if (type === 'item') {
+      const statsAny = (hero.stats as any) || {};
+      if (statsAny.energyPotionDay === dayKey) return;
+      statsAny.energyPotionDay = dayKey;
+      const currentFatigue = Math.max(0, Number(hero.progression?.fatigue || 0));
+      const recover = Math.max(1, amount || 50);
+      const nextFatigue = Math.max(0, currentFatigue - recover);
+      hero.progression = { ...(hero.progression || {}), fatigue: nextFatigue };
+      hero.stats = { ...(hero.stats || {}), ...statsAny } as any;
+    } else {
+      const statsAny = (hero.stats as any) || {};
+      hero.progression = { ...(hero.progression || {}), fatigue: 0 };
+      statsAny.lastRestAt = now;
+      statsAny.daysAdvanced = Math.max(0, Number(statsAny.daysAdvanced || 0)) + 1;
+      if (type === 'inn') {
+        statsAny.innBuffXpPercent = Math.max(0, Number(statsAny.innBuffXpPercent || 5));
+        statsAny.innBuffUsesRemaining = 1;
+      }
+      hero.stats = { ...(hero.stats || {}), ...statsAny } as any;
+      try {
+        this.rotateDailyWorld(hero);
+      } catch {}
+    }
+  }
+
+  rotateDailyWorld(hero: Hero): void {
+    const ws = hero.worldState || this.initializeWorldState();
+    ws.worldEvents = ws.worldEvents || [];
+    ws.worldEvents.push({ type: 'day_advanced', ts: new Date().toISOString() } as any);
+    hero.worldState = ws as any;
   }
 }
 

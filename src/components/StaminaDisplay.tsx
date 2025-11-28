@@ -7,14 +7,17 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useHeroStore } from '../store/heroStore';
 import { worldStateManager } from '../utils/worldState';
+ 
 
 export const StaminaDisplay: React.FC = () => {
-  const { getSelectedHero, updateHero } = useHeroStore();
+  const { getSelectedHero, updateHero, gainGold } = useHeroStore();
   const [currentTime, setCurrentTime] = useState(Date.now());
   const selectedHero = getSelectedHero();
   const trainingUntilISO = selectedHero?.stats?.trainingActiveUntil;
   const trainingName = selectedHero?.stats?.trainingActiveName;
   const [trainingSeconds, setTrainingSeconds] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  
 
   // Atualizar o tempo a cada segundo
   useEffect(() => {
@@ -25,18 +28,7 @@ export const StaminaDisplay: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Atualizar stamina do herói baseado no tempo
-  useEffect(() => {
-    if (selectedHero) {
-      const prevCurrent = selectedHero.stamina?.current;
-      worldStateManager.updateStamina(selectedHero);
-      const nextCurrent = selectedHero.stamina?.current;
-
-      if (typeof prevCurrent === 'number' && typeof nextCurrent === 'number' && nextCurrent !== prevCurrent) {
-        updateHero(selectedHero.id, { stamina: selectedHero.stamina });
-      }
-    }
-  }, [currentTime, selectedHero, updateHero]);
+  
 
   // Atualizar contador de treino baseado no tempo atual
   useEffect(() => {
@@ -60,21 +52,11 @@ export const StaminaDisplay: React.FC = () => {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  if (!selectedHero || !selectedHero.stamina) {
+  if (!selectedHero) {
     return null;
   }
-
-  const { current, max, lastRecovery, recoveryRate } = selectedHero.stamina;
-  const percentage = (current / max) * 100;
-  
-  // Calcular tempo até próxima recuperação
-  const lastRecoveryMs = new Date(lastRecovery).getTime();
-  const timeSinceLastRecovery = currentTime - lastRecoveryMs;
-  const timeToNextRecovery = Math.max(0, 60000 - (timeSinceLastRecovery % 60000)); // 1 minuto em ms
-  const minutesToNext = Math.floor(timeToNextRecovery / 60000);
-  const secondsToNext = Math.floor((timeToNextRecovery % 60000) / 1000);
-  const ratePerMinute = recoveryRate || 2;
-  const minutesToFull = current < max ? Math.ceil((max - current) / ratePerMinute) : 0;
+  const currentFatigue = Math.max(0, Number(selectedHero.progression?.fatigue || 0));
+  const percentage = Math.max(0, Math.min(100, (currentFatigue / 100) * 100));
 
   const getStaminaColor = () => {
     if (percentage >= 80) return 'from-green-500 to-green-600';
@@ -83,20 +65,20 @@ export const StaminaDisplay: React.FC = () => {
     return 'from-red-500 to-red-600';
   };
 
-  const canDoMission = (cost: number) => current >= cost;
+  
 
   return (
     <div className="bg-gray-800 rounded-lg p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-lg font-semibold text-white flex items-center">
-          ⚡ Stamina
+          😴 Fadiga
         </h3>
         <div className="text-sm text-gray-300">
-          {current}/{max}
+          {currentFatigue}/100
         </div>
       </div>
 
-      {/* Barra de Stamina */}
+      {/* Barra de Fadiga */}
       <div className="relative h-4 bg-gray-700 rounded-full overflow-hidden mb-3">
         <motion.div
           className={`h-full bg-gradient-to-r ${getStaminaColor()}`}
@@ -109,104 +91,54 @@ export const StaminaDisplay: React.FC = () => {
         </div>
       </div>
 
-      {/* Informações de Recuperação */}
+      {/* Informações de Fadiga */}
       <div className="space-y-2 text-sm">
-        <div className="flex justify-between text-gray-300">
-          <span>Taxa de Recuperação:</span>
-          <span>{ratePerMinute}/min</span>
-        </div>
-        
-        {current < max && (
-          <div className="flex justify-between text-gray-300">
-            <span>Próxima Recuperação:</span>
-            <span className="font-mono">
-              {minutesToNext.toString().padStart(2, '0')}:
-              {secondsToNext.toString().padStart(2, '0')}
-            </span>
-          </div>
-        )}
-
-        {current < max && (
-          <div className="flex justify-between text-gray-300">
-            <span>Tempo para encher:</span>
-            <span className="font-mono">~ {minutesToFull} min</span>
-          </div>
-        )}
+        <div className="text-gray-300">Fadiga aumenta ao realizar ações e treinos.</div>
+        <div className="text-gray-400">Descanse na taverna para reduzir a fadiga.</div>
       </div>
 
-      {/* Custos de Missão */}
+      {/* Descanso na Taverna */}
       <div className="mt-4 pt-3 border-t border-gray-700">
-        <h4 className="text-sm font-semibold text-white mb-2">Custos de Missão:</h4>
+        <h4 className="text-sm font-semibold text-white mb-2">Descanso na Taverna:</h4>
         <div className="grid grid-cols-3 gap-2 text-xs">
           {[
-            { name: 'Fácil', cost: 20 },
-            { name: 'Média', cost: 40 },
-            { name: 'Difícil', cost: 60 }
-          ].map(({ name, cost }) => (
-            <div
-              key={name}
-              className={`p-2 rounded text-center ${
-                canDoMission(cost)
-                  ? 'bg-green-900 text-green-300 border border-green-500'
-                  : 'bg-red-900 text-red-300 border border-red-500'
-              }`}
+            { label: 'Soneca', cost: 15, recovery: 15 },
+            { label: 'Noite', cost: 30, recovery: 30 },
+            { label: 'Luxo', cost: 60, recovery: 60 }
+          ].map(o => (
+            <button
+              key={o.label}
+              disabled={busy || currentFatigue <= 0}
+              onClick={() => { 
+                if (busy) return; 
+                setBusy(true); 
+                const h = { ...selectedHero } as any;
+                worldStateManager.rest(h, 'item', o.recovery);
+                updateHero(selectedHero.id, { progression: h.progression, stats: h.stats });
+                gainGold(selectedHero.id, -(o.cost));
+                setBusy(false); 
+              }}
+              className={`p-2 rounded ${currentFatigue>0?'bg-amber-700 hover:bg-amber-800 text-white border border-amber-500':'bg-gray-700 text-gray-400 border border-gray-600'} text-center`}
             >
-              <div className="font-semibold">{name}</div>
-              <div>{cost} ⚡</div>
-            </div>
+              <div className="font-semibold">{o.label}</div>
+              <div>-{o.recovery} • {o.cost} 🪙</div>
+            </button>
           ))}
         </div>
       </div>
 
-      {/* Ações de Stamina */}
-      <div className="mt-4 space-y-2">
-        <button
-          onClick={() => {
-            // Simular descanso em cidade (recuperação completa)
-            const fullStamina = {
-              ...selectedHero.stamina,
-              current: max,
-              lastRecovery: new Date(currentTime).toISOString()
-            };
-            updateHero(selectedHero.id, { stamina: fullStamina });
-          }}
-          className="w-full px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
-        >
-          🏠 Descansar na Cidade (Recuperação Completa)
-        </button>
-        
-        <button
-          onClick={() => {
-            // Simular uso de item premium (recuperação instantânea)
-            const premiumStamina = {
-              ...selectedHero.stamina,
-              current: Math.min(max, current + 50),
-              lastRecovery: new Date(currentTime).toISOString()
-            };
-            updateHero(selectedHero.id, { stamina: premiumStamina });
-          }}
-          disabled={current >= max}
-          className="w-full px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors text-sm disabled:bg-gray-600 disabled:cursor-not-allowed"
-        >
-          💎 Usar Poção de Energia (+50 ⚡)
-        </button>
-      </div>
+      
 
-      {/* Status de Stamina */}
+      {/* Status de Fadiga */}
       <div className="mt-3 text-center">
-        {current === max && (
-          <div className="text-green-400 text-sm font-semibold">
-            ✨ Stamina Completa!
-          </div>
-        )}
-        {current < 20 && (
+        {currentFatigue >= 80 && (
           <div className="text-red-400 text-sm font-semibold">
-            ⚠️ Stamina Baixa - Descanse!
+            ⚠️ Fadiga muito alta — descanse!
           </div>
         )}
-        {current >= 20 && current < max && (
+        {currentFatigue > 0 && currentFatigue < 80 && (
           <div className="text-yellow-400 text-sm">
-            🔄 Recuperando...
+            🔔 Fadiga presente — considere descansar.
           </div>
         )}
         {trainingSeconds !== null && (
@@ -215,6 +147,7 @@ export const StaminaDisplay: React.FC = () => {
           </div>
         )}
       </div>
+      
     </div>
   );
 };

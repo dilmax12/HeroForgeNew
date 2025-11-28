@@ -9,6 +9,7 @@ export async function generateHeroWithAI(params: {
   race: string;
   klass: string;
   attrs: Record<string, number>;
+  gender?: 'masculino' | 'feminino';
 }): Promise<HeroCreateResponse> {
   const resp = await fetch('/api/hero-create', {
     method: 'POST',

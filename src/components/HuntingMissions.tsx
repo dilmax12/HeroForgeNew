@@ -76,8 +76,8 @@ export default function HuntingMissions() {
     if (!canEnter) { setError('Rank insuficiente para esta missão de caça.'); return }
     if (cdActive) { setError('Cooldown ativo para Missões de Caça. Aguarde o tempo de recarga.'); return }
     const needed = worldStateManager.computeEffectiveStaminaCost(hero, staminaCostPerPhase)
-    const currentStamina = (hero.stamina as any)?.current ?? (hero.stamina as any) ?? 0
-    if (currentStamina < needed) { setError('Stamina insuficiente para iniciar a caçada.'); return }
+    const currentFatigue = Math.max(0, Number(hero.progression?.fatigue || 0))
+    if (currentFatigue + needed > 100) { setError('Fadiga alta — descanse antes de iniciar.'); return }
     setRunning(true)
     setFinished(false)
     setPhaseIndex(0)
@@ -121,10 +121,10 @@ export default function HuntingMissions() {
     const extraPhaseCost = mission.rankRequired === 'F' ? 0 : (phaseIndex >= 2 ? 1 : 0)
     const totalCost = staminaCostPerPhase + extraPhaseCost
     const needed = worldStateManager.computeEffectiveStaminaCost(hero, totalCost)
-    const currentStamina = (hero.stamina as any)?.current ?? (hero.stamina as any) ?? 0
-    if (currentStamina < needed) { setError('Stamina insuficiente para prosseguir.'); setRunning(false); return }
+    const currentFatigue = Math.max(0, Number(hero.progression?.fatigue || 0))
+    if (currentFatigue + needed > 100) { setError('Fadiga alta — pare e descanse.'); setRunning(false); return }
     worldStateManager.consumeStamina(hero, totalCost)
-    updateHero(hero.id, { stamina: hero.stamina })
+    updateHero(hero.id, { progression: hero.progression })
     const base = mission.difficulty === 'epica' ? 0.45 : mission.difficulty === 'dificil' ? 0.6 : mission.difficulty === 'medio' ? 0.7 : 0.8
     const riskStep = 0.06
     // Bônus por classe/atributo
@@ -368,7 +368,7 @@ export default function HuntingMissions() {
               {mission.rankRequired === 'F' && (mission.category === 'escolta' || mission.category === 'controle') && (
                 <div className="text-emerald-300 text-xs">Bônus Novato ativo para {mission.category}.</div>
               )}
-              <div className="text-gray-400 text-xs">Custo estimado de stamina: {staminaCostPerPhase} × {mission.phases} + {Math.max(0, mission.phases - 2)} = {staminaCostPerPhase * mission.phases + Math.max(0, mission.phases - 2)}</div>
+              <div className="text-gray-400 text-xs">Custo estimado de fadiga: {staminaCostPerPhase} × {mission.phases} + {Math.max(0, mission.phases - 2)} = {staminaCostPerPhase * mission.phases + Math.max(0, mission.phases - 2)}</div>
               {(() => {
                 const red = worldStateManager.getMountStaminaReduction(hero as any);
                 if (!red) return null;
@@ -407,8 +407,8 @@ export default function HuntingMissions() {
               <button onClick={reroll} disabled={!hero || running || cdActive} className="ml-2 px-3 py-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50">Nova Missão</button>
               <button onClick={() => setShowDetails(v => !v)} className="ml-2 px-3 py-2 rounded bg-gray-700 text-white hover:bg-gray-600">{showDetails ? 'Ocultar Detalhes' : 'Detalhes da Missão'}</button>
               {!canEnter && <div className="mt-2 text-sm text-red-300">Rank insuficiente para esta missão.</div>}
-              {hero && (((hero.stamina as any)?.current ?? (hero.stamina as any) ?? 0) < worldStateManager.computeEffectiveStaminaCost(hero as any, staminaCostPerPhase)) && <div className="mt-2 text-sm text-amber-300">Stamina insuficiente para iniciar. Restaure energia antes de prosseguir.</div>}
-              {hero && estimatedTotalStamina > (((hero.stamina as any)?.current ?? (hero.stamina as any) ?? 0)) && <div className="mt-2 text-sm text-amber-300">Atenção: stamina atual pode não ser suficiente para todas as fases.</div>}
+              {hero && (()=>{ const cf=Math.max(0, Number(hero.progression?.fatigue||0)); const need=worldStateManager.computeEffectiveStaminaCost(hero as any, staminaCostPerPhase); return cf+need>100 })() && <div className="mt-2 text-sm text-amber-300">Fadiga alta para iniciar. Descanse antes.</div>}
+              {hero && (()=>{ const cf=Math.max(0, Number(hero.progression?.fatigue||0)); const need=estimatedTotalStamina; return cf+need>100 })() && <div className="mt-2 text-sm text-amber-300">Atenção: orçamento de fadiga pode não cobrir todas as fases.</div>}
               {canEnter && mission.rankRequired === 'F' && <div className="mt-2 text-sm text-emerald-300">Missão inicial liberada para Novatos (Rank F).</div>}
               {cdActive && <div className="mt-2 text-sm text-amber-300">Cooldown ativo: aguarde {Math.ceil(cdMs/60000)} min.</div>}
               {error && <div className="mt-2 text-sm text-red-300">{error}</div>}

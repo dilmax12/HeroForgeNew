@@ -288,7 +288,7 @@ const Layout = () => {
     return unsubscribe;
   }, [addNotification]);
 
-  // Tick global de regeneração: mantém HP, Mana e Stamina atualizando mesmo com HUD oculto
+  // Tick global de regeneração: mantém HP e Mana atualizando mesmo com HUD oculto
   useEffect(() => {
     if (!selectedHero) return;
     const interval = setInterval(() => {
@@ -296,11 +296,10 @@ const Layout = () => {
         const h = {
           ...selectedHero,
           derivedAttributes: { ...selectedHero.derivedAttributes },
-          stamina: { ...(selectedHero.stamina as any) },
           stats: { ...selectedHero.stats }
         } as any;
         try { (worldStateManager as any).updateVitals?.(h); } catch {}
-        try { worldStateManager.updateStamina(h); } catch {}
+        
         try {
           if (h.activePetId && Array.isArray(h.pets)) {
             const idx = h.pets.findIndex((p: any) => p.id === h.activePetId);
@@ -318,7 +317,7 @@ const Layout = () => {
         } catch {}
         const prev = (useHeroStore.getState().heroes || []).find(x => x.id === h.id);
         const mergedStats = { ...(prev?.stats || {}), lastActiveAt: h.stats.lastActiveAt } as any;
-        updateHero(h.id, { derivedAttributes: h.derivedAttributes, stamina: h.stamina, stats: mergedStats });
+        updateHero(h.id, { derivedAttributes: h.derivedAttributes, stats: mergedStats });
       } catch {}
     }, 60_000);
     return () => clearInterval(interval);

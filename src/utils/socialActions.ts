@@ -41,11 +41,11 @@ export function actionPedirAjuda(npc: Hero, player: Hero) {
     if (pick === 'ambush_shield') helpStatus.ambushReductionPercent = level === 3 ? 0.5 : level === 2 ? 0.35 : 0.2;
     if (pick === 'reduce_cooldown') helpStatus.reduceCooldownMinutes = level === 3 ? 12 : level === 2 ? 8 : 5;
     if (pick === 'stamina_refill') {
-      const st = { ...(player.stamina || { current: 0, max: 100, recoveryRate: 5, lastRecovery: new Date().toISOString() }) } as any;
       const refill = level === 3 ? 30 : level === 2 ? 20 : 10;
-      st.current = Math.min(st.max || 100, (st.current || 0) + refill);
+      const cur = Math.max(0, Number(player.progression?.fatigue || 0));
+      const next = Math.max(0, cur - refill);
       helpStatus.staminaRefillAmount = refill;
-      useHeroStore.getState().updateHero(player.id, { stamina: st });
+      useHeroStore.getState().updateHero(player.id, { progression: { ...(player.progression || {}), fatigue: next } });
     }
     const stats = { ...(player.stats || {}) } as any;
     stats.helpStatus = helpStatus;
@@ -53,7 +53,7 @@ export function actionPedirAjuda(npc: Hero, player: Hero) {
     const msg = pick === 'boost_xp'
       ? `+${Math.round((helpStatus.boostXpPercent || 0)*100)}% XP na próxima missão`
       : pick === 'stamina_refill'
-      ? `Stamina +${helpStatus.staminaRefillAmount || 10}`
+      ? `Fadiga -${helpStatus.staminaRefillAmount || 10}`
       : pick === 'reduce_cooldown'
       ? `Cooldown -${helpStatus.reduceCooldownMinutes || 5} min na próxima missão`
       : pick === 'boost_initiative'
@@ -63,7 +63,7 @@ export function actionPedirAjuda(npc: Hero, player: Hero) {
       : pick === 'success_boost'
       ? `+${Math.round((helpStatus.successBoostPercent || 0)*100)}% chance de sucesso nas fases`
       : pick === 'stamina_discount'
-      ? `Custo de Stamina reduzido em ${helpStatus.staminaCostReduction || 1}`
+      ? `Custo de Fadiga reduzido em ${helpStatus.staminaCostReduction || 1}`
       : pick === 'loot_bonus'
       ? `Chance de loot +${Math.round((helpStatus.lootDropBonusPercent || 0)*100)}%`
       : `Proteção contra emboscada (${Math.round((helpStatus.ambushReductionPercent || 0)*100)}% menos risco/dano)`;

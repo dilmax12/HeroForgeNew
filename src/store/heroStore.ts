@@ -21,7 +21,7 @@ import { eventManager } from '../utils/eventSystem';
 import { logActivity } from '../utils/activitySystem';
 import { trackMetric } from '../utils/metricsSystem';
 import { supabase } from '../lib/supabaseClient';
-import { saveHero } from '../services/heroesService';
+import { saveHero, canPerformAction, performAction, consumeInnXpBuff } from '../services/heroesService';
 import { notificationBus } from '../components/NotificationSystem';
 import { rankSystem } from '../utils/rankSystem';
 import { RANK_XP_BONUS_PERCENT } from '../types/ranks';
@@ -55,6 +55,8 @@ interface HeroState {
   activitiesLog: Array<{ ts: string; type: 'dialogue' | 'rumor' | 'tip' | 'event'; location?: 'tavern' | 'guild'; npcId?: string; text: string; importance?: 'low' | 'normal' | 'high' }>;
   lastAutoInteractionAt?: string;
   dedupeNPCs: () => { checked: number; removed: number };
+  staminaModal?: { required: number; actionType: string; message?: string };
+  setStaminaModal: (modal?: { required: number; actionType: string; message?: string }) => void;
   // Mascotes e Ovos
   generateEggForSelected: (rarity?: import('../types/hero').EggRarity) => boolean;
   identifyEggForSelected: (eggId: string) => boolean;
@@ -77,7 +79,7 @@ interface HeroState {
   
   // === SISTEMA DE MISSÕES ===
   refreshQuests: (heroLevel?: number) => void;
-  acceptQuest: (heroId: string, questId: string) => boolean;
+  acceptQuest: (heroId: string, questId: string) => Promise<boolean>;
   completeQuest: (heroId: string, questId: string, autoResolve?: boolean) => CombatResult | null;
   abandonQuest: (heroId: string, questId: string) => boolean;
   clearActiveQuests: (heroId: string) => boolean;
@@ -108,7 +110,7 @@ interface HeroState {
   renameMountForSelected: (mountId: string, newName: string) => boolean;
   setMountNoteForSelected: (mountId: string, note: string) => boolean;
   buyMountOffer: (heroId: string, type: import('../types/hero').Mount['type'], rarity: import('../types/hero').MountRarity, price: number) => boolean;
-  trainMountForSelected: (costGold?: number, bonusSpeed?: number, minutes?: number) => boolean;
+  trainMountForSelected: (costGold?: number, bonusSpeed?: number, minutes?: number) => Promise<boolean>;
   importMountsForSelected: (json: string) => boolean;
   releaseCommonMounts: () => boolean;
   addMountToSelected: (mount: import('../types/hero').Mount) => boolean;
@@ -201,12 +203,13 @@ interface HeroState {
   ensureNPCAdventurersSeedExists: (targetCount?: number) => void;
   startNPCSimulation: () => void;
   stopNPCSimulation: () => void;
+  seedRandomHatred: (count?: number) => void;
   getDuelInvitesForHero: (heroId: string) => { npcId: string; type: 'treino' | 'honra' | 'recompensas'; expiresAt: string; levelDiff: number }[];
   acceptDuelInvite: (heroId: string, npcId: string) => boolean;
   declineDuelInvite: (heroId: string, npcId: string) => boolean;
   setDuelOverlay: (overlay?: any) => void;
   setNPCInteractionOverlay: (overlay?: any) => void;
-  respondToNPCInteraction: (choice: 'accept' | 'decline' | 'later') => void;
+  respondToNPCInteraction: (choice: 'accept' | 'decline' | 'later') => Promise<void>;
   setPartyInviteTerms: (partyId: string, targetHeroId: string, terms: { duration: 'one_mission' | 'days'; days?: number; rewardShare?: number; leaderPref?: 'inviter' | 'invitee' | 'none' }) => void;
   recordActivity: (entry: { type: 'dialogue' | 'rumor' | 'tip' | 'event'; location?: 'tavern' | 'guild'; npcId?: string; text: string; importance?: 'low' | 'normal' | 'high' }) => void;
   triggerAutoInteraction: (location: 'tavern' | 'guild') => void;
@@ -588,6 +591,7 @@ export const useHeroStore = create<HeroState>()(
       guilds: [],
       parties: [],
       referralInvites: [],
+      staminaModal: undefined,
       
       dmOverrideLine: undefined,
       
@@ -806,6 +810,37 @@ export const useHeroStore = create<HeroState>()(
         for (let i = 0; i < needed; i++) { get().createNPCAdventurer({}); }
         try { get().dedupeNPCs(); } catch {}
       },
+      seedRandomHatred: (count = 3) => {
+        const player = get().getSelectedHero();
+        if (!player) return;
+        get().ensureNPCAdventurersSeedExists(Math.max(count, 5));
+        const npcs = get().heroes.filter(h => h.origin === 'npc');
+        if (npcs.length === 0) return;
+        const pickCount = Math.min(count, npcs.length);
+        const pool = npcs.slice();
+        const chosen: typeof npcs = [];
+        for (let i = 0; i < pickCount; i++) {
+          const idx = Math.floor(Math.random() * pool.length);
+          chosen.push(pool.splice(idx, 1)[0]);
+        }
+        const ws = player.worldState || require('../utils/worldState').worldStateManager.initializeWorldState();
+        ws.npcStatus = ws.npcStatus || {} as any;
+        chosen.forEach(npc => {
+          const relMap = { ...(npc.socialRelations || {}) } as Record<string, number>;
+          const val = Math.max(-100, Math.min(-60, -60 - Math.floor(Math.random() * 40))); // -60 .. -100
+          relMap[player.id] = val;
+          npc.socialRelations = relMap;
+          try { get().updateHero(npc.id, { socialRelations: relMap, npcMood: 'irritado' } as any); } catch {}
+          (ws.npcStatus as any)[npc.id] = {
+            alive: true,
+            relationToPlayer: val,
+            lastInteraction: new Date().toISOString(),
+            currentLocation: 'taverna'
+          };
+        });
+        try { get().updateHero(player.id, { worldState: ws } as any); } catch {}
+        try { notificationBus.emit({ type: 'quest', title: 'Rivalidades', message: `${chosen.length} NPC(s) agora te odeiam`, icon: '⚠️', duration: 2500 }); } catch {}
+      },
       startNPCSimulation: () => {
         const anySelf = useHeroStore as unknown as { _npcTimer?: any };
         if (anySelf._npcTimer) return;
@@ -842,12 +877,29 @@ export const useHeroStore = create<HeroState>()(
       setNPCInteractionOverlay: (overlay) => {
         set({ npcInteractionOverlay: overlay });
       },
-      respondToNPCInteraction: (choice) => {
+      setStaminaModal: (modal) => {
+        set({ staminaModal: modal });
+      },
+      respondToNPCInteraction: async (choice) => {
         const overlay = get().npcInteractionOverlay;
         if (!overlay) return;
         const player = get().getSelectedHero();
         const npc = get().heroes.find(h => h.id === overlay.npcId);
         if (!player || !npc) { set({ npcInteractionOverlay: undefined }); return; }
+        if (choice === 'accept') {
+          try {
+            const check = await canPerformAction(player.id, 'SOCIAL_DEEP');
+            if (!check.ok) {
+            try { notificationBus.emit({ type: 'stamina', title: 'Fadiga alta', message: `Interação profunda requer ${check.cost} ⚡. Descanse para reduzir fadiga.`, duration: 2500, icon: '💤' }); } catch {}
+              set({ npcInteractionOverlay: undefined });
+              set({ staminaModal: { required: check.cost, actionType: 'SOCIAL_DEEP' } });
+              return;
+            }
+            const perf = await performAction(player.id, 'SOCIAL_DEEP', { npcId: npc.id });
+            const st = player.stamina || { current: 100, max: 100 } as any;
+            get().updateHero(player.id, { stamina: { ...st, current: perf.newStamina } });
+          } catch {}
+        }
         let mood: 'amigável' | 'neutro' | 'hostil' = 'neutro';
         if (choice === 'accept') mood = 'amigável';
         else if (choice === 'decline') mood = 'hostil';
@@ -1671,9 +1723,21 @@ export const useHeroStore = create<HeroState>()(
         return true;
       },
 
-      trainMountForSelected: (costGold = 150, bonusSpeed = 1, minutes = 30) => {
+      trainMountForSelected: async (costGold = 150, bonusSpeed = 1, minutes = 30) => {
         const hero = get().getSelectedHero();
         if (!hero) return false;
+        const stCost = 10;
+        try {
+          const check = await canPerformAction(hero.id, 'TRAIN');
+          if (!check.ok) {
+            try { notificationBus.emit({ type: 'stamina', title: 'Fadiga alta', message: `Treino requer ${check.cost} ⚡. Descanse para reduzir fadiga.`, duration: 2500, icon: '💤' }); } catch {}
+            set({ staminaModal: { required: check.cost, actionType: 'TRAIN' } });
+            return false;
+          }
+          const perf = await performAction(hero.id, 'TRAIN', {});
+          const st = hero.stamina || { current: 100, max: 100 } as any;
+          get().updateHero(hero.id, { stamina: { ...st, current: perf.newStamina } });
+        } catch {}
         let gold = hero.progression.gold || 0;
         let durMin = minutes;
         let cost = costGold;
@@ -2337,7 +2401,7 @@ export const useHeroStore = create<HeroState>()(
         set({ availableQuests: filtered, questCatalog: nextCatalog });
       },
 
-      acceptQuest: (heroId: string, questId: string) => {
+      acceptQuest: async (heroId: string, questId: string) => {
         console.log('🔍 acceptQuest chamada:', { heroId, questId });
         const state = get();
         const hero = state.heroes.find(h => h.id === heroId);
@@ -2369,6 +2433,19 @@ export const useHeroStore = create<HeroState>()(
           try { notificationBus.emit({ type: 'quest', title: 'Limite de missões', message: 'Máximo de 3 missões ativas.', duration: 2500, icon: '⛔' }); } catch {}
           return false;
         }
+        try {
+          const diff = String(quest.difficulty || '').toLowerCase();
+          const actionType = diff === 'facil' ? 'MISSION_SHORT' : (diff === 'medio' || diff === 'padrao') ? 'MISSION_MEDIUM' : (diff === 'dificil' ? 'MISSION_LONG' : 'MISSION_MEDIUM');
+          const check = await canPerformAction(heroId, actionType);
+          if (!check.ok) {
+            try { notificationBus.emit({ type: 'stamina', title: 'Fadiga alta', message: `Custo: ${check.cost} ⚡ — descanse para reduzir fadiga.`, duration: 3000, icon: '💤' }); } catch {}
+            set({ staminaModal: { required: check.cost, actionType } });
+            return false;
+          }
+          const perf = await performAction(heroId, actionType, { questId });
+          const st = hero.stamina || { current: 100, max: 100 } as any;
+          get().updateHero(heroId, { stamina: { ...st, current: perf.newStamina } });
+        } catch {}
         console.log('✅ Todos os requisitos atendidos, adicionando missão às ativas');
         get().updateHero(heroId, { activeQuests: [...hero.activeQuests, questId] });
         set((s) => ({ questCatalog: { ...s.questCatalog, [questId]: quest } }));
@@ -2396,22 +2473,7 @@ export const useHeroStore = create<HeroState>()(
         
         let combatResult: CombatResult | null = null;
 
-        // Aplicar fadiga da missão (redução de stamina)
-        {
-          const stateRef = get();
-          const currentHero = stateRef.heroes.find(h => h.id === heroId);
-          if (currentHero) {
-            const now = new Date().toISOString();
-            const current = currentHero.stamina?.current ?? 100;
-            const rate = currentHero.stamina?.recoveryRate ?? 10;
-            const max = currentHero.stamina?.max ?? 100;
-            const newStamina = Math.max(0, current - 20); // custo base da missão
-            stateRef.updateHero(heroId, {
-              stamina: { current: newStamina, max, lastRecovery: now, recoveryRate: rate },
-              updatedAt: now
-            });
-          }
-        }
+        
         
         // Resolver combate se houver inimigos
         if (quest.enemies && quest.enemies.length > 0) {
@@ -2707,7 +2769,14 @@ export const useHeroStore = create<HeroState>()(
         const synergyPercent = computeSynergyBonus(hero) * 100;
         const currentRank = rankSystem.calculateRank(hero);
         const rankPercent = RANK_XP_BONUS_PERCENT[currentRank] || 0;
-        const effectiveXP = Math.floor(xp * (1 + (buffPercent + synergyPercent + rankPercent) / 100));
+        let extraPercent = 0;
+        const statsAny = (hero.stats as any) || {};
+        if ((statsAny.innBuffUsesRemaining || 0) > 0 && (statsAny.innBuffXpPercent || 0) > 0) {
+          extraPercent += Math.max(0, Number(statsAny.innBuffXpPercent || 0));
+          statsAny.innBuffUsesRemaining = Math.max(0, Number(statsAny.innBuffUsesRemaining || 1) - 1);
+          get().updateHero(heroId, { stats: { ...hero.stats, ...statsAny } });
+        }
+        const effectiveXP = Math.floor(xp * (1 + (buffPercent + synergyPercent + rankPercent + extraPercent) / 100));
 
         const newXP = Math.max(0, hero.progression.xp + effectiveXP);
         const newLevel = checkLevelUp(newXP, hero.progression.level);
@@ -2864,8 +2933,78 @@ export const useHeroStore = create<HeroState>()(
             get().updateHero(heroId, { rankData: initializedRankData });
             updatedHero.rankData = initializedRankData;
           }
-          const newRankData = rankSystem.updateRankData(updatedHero, updatedHero.rankData);
+          const prevRankData = updatedHero.rankData;
+          const prevRank = prevRankData.currentRank;
+          const prevUnlockedNames = new Set((prevRankData.unlockedRewards || []).map(r => r.name));
+          const newRankData = rankSystem.updateRankData(updatedHero, prevRankData);
           get().updateHero(heroId, { rankData: newRankData });
+
+          // Aplicar recompensas materiais na promoção
+          if (newRankData.currentRank !== prevRank) {
+            const newlyUnlocked = (newRankData.unlockedRewards || []).filter(r => !prevUnlockedNames.has(r.name));
+            let inv = updatedHero.inventory || { items: {} } as any;
+            let stats = updatedHero.stats || {} as any;
+
+            const grantItem = (id: string, name: string, slot?: string, rarity: string = 'comum', description?: string, icon?: string) => {
+              const item = { id, name, description: description || name, type: 'cosmetic', rarity, icon: icon || '🎁', slot } as any;
+              inv.customItems = { ...(inv.customItems || {}), [id]: item };
+              inv.items = { ...(inv.items || {}), [id]: Math.max(0, (inv.items?.[id] || 0)) + 1 };
+              if (slot === 'cape') inv.equippedCape = inv.equippedCape || id;
+              if (slot === 'chest') inv.equippedChest = inv.equippedChest || id;
+              if (slot === 'helm') inv.equippedHelm = inv.equippedHelm || id;
+            };
+
+            newlyUnlocked.forEach(r => {
+              const n = r.name.toLowerCase();
+              if (n === 'capa verde') grantItem('capa-verde', 'Capa Verde', 'cape', 'comum', 'Capa do rank E', '🧥');
+              if (n === 'armadura roxa') grantItem('armadura-roxa', 'Armadura Roxa', 'chest', 'raro', 'Armadura do rank C', '⚔️');
+              if (n === 'capa de campeão') grantItem('capa-campeao', 'Capa de Campeão', 'cape', 'raro', 'Capa do rank A', '🎭');
+              if (n === 'traje ícone imortal' || n === 'traje icone imortal') grantItem('traje-icone-imortal', 'Traje Ícone Imortal', 'chest', 'épico', 'Traje do rank SS', '👗');
+              if (n === 'coroa do mito absoluto') grantItem('coroa-mito-absoluto', 'Coroa do Mito Absoluto', 'helm', 'lendário', 'Coroa do rank SSS', '👑');
+
+              if (n.includes('xp bonus')) {
+                const rankPercent = RANK_XP_BONUS_PERCENT[newRankData.currentRank] || 0;
+                stats.rankXpBonusPercent = rankPercent;
+              }
+              if (n.includes('gold bonus')) {
+                const goldPercent = Number(n.match(/\+?(\d+)%/)?.[1] || 10);
+                stats.rankGoldBonusPercent = Math.max(Number(stats.rankGoldBonusPercent || 0), goldPercent);
+              }
+              if (n === 'título de guardião' || n === 'titulo de guardiao') {
+                const titles = updatedHero.progression.titles || [];
+                const id = 'guardiao';
+                if (!titles.includes(id)) {
+                  get().updateHero(heroId, { progression: { ...updatedHero.progression, titles: [...titles, id] } });
+                }
+              }
+              if (n === 'efeito lendário') {
+                const auras = Array.isArray(stats.rankVisualAuras) ? stats.rankVisualAuras : [];
+                stats.rankVisualAuras = Array.from(new Set([...auras, 'legendary']));
+              }
+              if (n === 'aura dourada') {
+                const auras = Array.isArray(stats.rankVisualAuras) ? stats.rankVisualAuras : [];
+                stats.rankVisualAuras = Array.from(new Set([...auras, 'gold']));
+              }
+              if (n === 'aura mítica') {
+                const auras = Array.isArray(stats.rankVisualAuras) ? stats.rankVisualAuras : [];
+                stats.rankVisualAuras = Array.from(new Set([...auras, 'mythic']));
+              }
+              if (n === 'missões especiais' || n === 'missoes especiais') {
+                stats.rankAccessSpecialMissions = true;
+              }
+              if (n === 'acesso total') {
+                stats.rankAccessTotal = true;
+              }
+              if (n === 'convite para missões míticas' || n === 'convite para missoes miticas') {
+                stats.rankAccessMythicMissions = true;
+              }
+              if (n === 'história épica ia' || n === 'historia epica ia' || n === 'lenda personalizada') {
+                stats.rankLegendUnlocked = true;
+              }
+            });
+            get().updateHero(heroId, { inventory: inv, stats });
+            try { notificationBus.emit({ type: 'achievement', title: 'Recompensas de Rank aplicadas', message: `Itens e bônus liberados para rank ${newRankData.currentRank}`, duration: 3000, icon: '🎁' }); } catch {}
+          }
           try { useProgressionStore.getState().evaluateUnlocks(updatedHero, hero); } catch {}
         }
         
@@ -2904,11 +3043,12 @@ export const useHeroStore = create<HeroState>()(
       gainGold: (heroId: string, gold: number) => {
         const hero = get().heroes.find(h => h.id === heroId);
         if (!hero) return;
-        
+        const bonusPercent = Number((hero.stats as any)?.rankGoldBonusPercent || 0);
+        const effectiveGold = Math.floor(gold * (1 + bonusPercent / 100));
         get().updateHero(heroId, {
           progression: {
             ...hero.progression,
-            gold: Math.max(0, hero.progression.gold + gold)
+            gold: Math.max(0, hero.progression.gold + effectiveGold)
           }
         });
         
@@ -2926,18 +3066,18 @@ export const useHeroStore = create<HeroState>()(
         }
         
         // Update daily goals progress
-        if (gold > 0) {
-          get().updateDailyGoalProgress(heroId, 'gold-earned', gold);
+        if (effectiveGold > 0) {
+          get().updateDailyGoalProgress(heroId, 'gold-earned', effectiveGold);
         }
         
         // Update event progress
-        if (gold > 0) {
-          eventManager.updateEventProgress(heroId, 'gold-earned', gold);
+        if (effectiveGold > 0) {
+          eventManager.updateEventProgress(heroId, 'gold-earned', effectiveGold);
         }
         
         // Track gold gained metrics
-        if (gold > 0) {
-          trackMetric.goldGained(heroId, gold);
+        if (effectiveGold > 0) {
+          trackMetric.goldGained(heroId, effectiveGold);
         }
       },
       
@@ -4362,7 +4502,10 @@ export const useHeroStore = create<HeroState>()(
       
       getSelectedHero: () => {
         const { heroes, selectedHeroId } = get();
-        return heroes.find(hero => hero.id === selectedHeroId) || heroes[0];
+        const selected = heroes.find(h => h.id === selectedHeroId && h.origin !== 'npc');
+        if (selected) return selected;
+        const firstPlayer = heroes.find(h => h.origin !== 'npc');
+        return firstPlayer || heroes[0];
       },
       
       getHeroQuests: (heroId: string) => {

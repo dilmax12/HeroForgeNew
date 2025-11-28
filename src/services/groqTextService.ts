@@ -1,6 +1,6 @@
 import { aiService } from './aiService';
 
-export type TextoTipo = 'missao' | 'historia' | 'frase' | 'nome';
+export type TextoTipo = 'missao' | 'historia' | 'frase' | 'nome' | 'translate';
 
 function buildParams(tipo: TextoTipo, contexto = ''): {
   systemMessage: string;
@@ -14,7 +14,7 @@ function buildParams(tipo: TextoTipo, contexto = ''): {
         systemMessage:
           'Gere NOME COMPLETO de herói medieval em PT-BR. Responda SOMENTE com duas palavras: primeiro nome e sobrenome, sem aspas, sem pontuação.',
         prompt:
-          'Forneça apenas "Nome Sobrenome" épico medieval/fantasia, exatamente duas palavras. Sem epítetos, sem vírgulas, sem explicações.',
+          `Forneça apenas "Nome Sobrenome" épico medieval/fantasia, exatamente duas palavras. Sem epítetos, sem vírgulas, sem explicações. Contexto: ${contexto || 'herói desconhecido'}.`,
         maxTokens: 12,
         temperature: 0.9
       };
@@ -32,7 +32,7 @@ function buildParams(tipo: TextoTipo, contexto = ''): {
         systemMessage:
           'Você é um narrador mestre e gera uma história épica medieval em PT-BR (100–200 palavras).',
         prompt:
-          `Escreva uma história épica medieval sobre o herói. Contexto: ${contexto || 'herói desconhecido'}. Foque em emoção, imagens vívidas e progresso do herói.`,
+          `Escreva uma história épica medieval sobre o herói. Contexto: ${contexto || 'herói desconhecido'}. Use o sexo quando fornecido para ajustar pronomes e detalhes. Foque em emoção, imagens vívidas e progresso do herói.`,
         maxTokens: 350,
         temperature: 0.8
       };
@@ -45,6 +45,13 @@ function buildParams(tipo: TextoTipo, contexto = ''): {
           `Gere uma missão medieval fantasiosa de dificuldade moderada. Contexto: ${contexto || 'nenhum'}. Inclua título, objetivo principal e recompensa curta.`,
         maxTokens: 200,
         temperature: 0.7
+      };
+    case 'translate':
+      return {
+        systemMessage: 'Translate the provided Portuguese text to natural English suitable for an AI image prompt. Return only the translated text.',
+        prompt: String(contexto || ''),
+        maxTokens: 300,
+        temperature: 0.3
       };
   }
 }
@@ -85,4 +92,12 @@ export async function gerarTexto(tipo: TextoTipo, contexto = ''): Promise<string
     default:
       return 'Missão: Patrulhar os arredores e investigar pegadas suspeitas. Recompensa: 50 ouro e experiência. Dificuldade: normal.';
   }
+}
+
+export async function translateToEnglish(text: string): Promise<string> {
+  try {
+    const { systemMessage, prompt, maxTokens, temperature } = buildParams('translate', text);
+    const resp = await aiService.generateTextSafe({ systemMessage, prompt, maxTokens, temperature });
+    return (resp.text || '').trim();
+  } catch { return ''; }
 }

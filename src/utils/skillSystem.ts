@@ -375,61 +375,101 @@ export const PROGRESSION_SKILLS: Record<HeroClass, Array<{ level: number; skills
     { level: 3, skills: [{ id: 'tempestade-arcana', name: 'Tempestade Arcana', description: 'Dano em área arcano', type: 'attack', cost: 6, basePower: 18, element: 'light', target: 'aoe', cooldown: 3 }] },
     { level: 5, skills: [{ id: 'congelar', name: 'Congelar', description: 'Stun de gelo por 1 turno', type: 'buff', cost: 5, duration: 1, target: 'single', effects: { debuff: { special: 'freeze_stun' } } }] },
     { level: 7, skills: [{ id: 'amplificar-magia', name: 'Amplificar Magia', description: 'Buff mágico avançado', type: 'buff', cost: 5, duration: 2, target: 'ally', effects: { buff: { attribute: 'inteligencia', percentage: 20 } } }] },
-    { level: 10, skills: [{ id: 'cometa-arcano', name: 'Cometa Arcano', description: 'Ultimate de alto dano arcano em área', type: 'attack', cost: 8, basePower: 30, element: 'light', target: 'aoe', cooldown: 4 }] }
+    { level: 10, skills: [{ id: 'cometa-arcano', name: 'Cometa Arcano', description: 'Ultimate de alto dano arcano em área', type: 'attack', cost: 8, basePower: 30, element: 'light', target: 'aoe', cooldown: 4 }] },
+    { level: 12, skills: [{ id: 'campo-anti-magia', name: 'Campo Anti-Magia', description: 'Reduz efeitos mágicos inimigos', type: 'support', cost: 6, target: 'aoe', effects: { special: 'anti_magic_field' } }] },
+    { level: 15, skills: [{ id: 'chama-eterea', name: 'Chama Etérea', description: 'Ataque contínuo de fogo', type: 'attack', cost: 7, basePower: 24, element: 'fire', target: 'single', effects: { debuff: { special: 'burn_dot' } } }] },
+    { level: 18, skills: [{ id: 'tempestade-gelo', name: 'Tempestade de Gelo', description: 'Área com slow forte', type: 'attack', cost: 8, basePower: 26, element: 'ice', target: 'aoe', cooldown: 4 }] },
+    { level: 20, skills: [{ id: 'apoteose-arcana', name: 'Apoteose Arcana', description: 'Ultimate final: grande poder arcano', type: 'attack', cost: 10, basePower: 38, element: 'light', target: 'aoe', cooldown: 5 }] }
   ],
   bardo: [
     { level: 3, skills: [{ id: 'cancao-coragem', name: 'Canção da Coragem', description: 'Aumenta ataque do grupo', type: 'buff', cost: 4, duration: 2, target: 'ally', effects: { buff: { attribute: 'forca', percentage: 15 } } }] },
     { level: 5, skills: [{ id: 'balada-cura', name: 'Balada da Cura', description: 'Cura leve por 3 turnos', type: 'support', cost: 5, duration: 3, target: 'ally', effects: { heal: 10 } }] },
     { level: 7, skills: [{ id: 'grito-multidao', name: 'Grito da Multidão', description: 'Debuff inimigos em área', type: 'buff', cost: 5, duration: 2, target: 'aoe', effects: { debuff: { attribute: 'destreza', percentage: 10 } } }] },
-    { level: 10, skills: [{ id: 'sinfonia-final', name: 'Sinfonia Final', description: 'Ultimate: buff + dano em área', type: 'attack', cost: 7, basePower: 20, element: 'physical', target: 'aoe', cooldown: 4 }] }
+    { level: 10, skills: [{ id: 'sinfonia-final', name: 'Sinfonia Final', description: 'Ultimate: buff + dano em área', type: 'attack', cost: 7, basePower: 20, element: 'physical', target: 'aoe', cooldown: 4 }] },
+    { level: 12, skills: [{ id: 'harmonia-guardia', name: 'Harmonia do Guardião', description: 'Reduz dano recebido', type: 'buff', cost: 4, duration: 2, target: 'ally', effects: { special: 'damage_reduction_10' } }] },
+    { level: 15, skills: [{ id: 'coro-heroico', name: 'Coro Heroico', description: 'Aumenta todos atributos por curto período', type: 'buff', cost: 6, duration: 2, target: 'ally', effects: { buff: { attribute: 'carisma', percentage: 20 } } }] },
+    { level: 18, skills: [{ id: 'ritmo-desorientador', name: 'Ritmo Desorientador', description: 'Debuff forte de precisão inimiga', type: 'buff', cost: 5, duration: 2, target: 'aoe', effects: { debuff: { special: 'accuracy_down' } } }] },
+    { level: 20, skills: [{ id: 'orquestra-epica', name: 'Orquestra Épica', description: 'Ultimate final: grande suporte + dano', type: 'attack', cost: 9, basePower: 28, element: 'physical', target: 'aoe', cooldown: 5 }] }
   ],
   monge: [
     { level: 3, skills: [{ id: 'punhos-elementais', name: 'Punhos Elementais', description: 'Ataques com fogo/terra', type: 'attack', cost: 5, basePower: 16, element: 'earth', target: 'single' }] },
     { level: 5, skills: [{ id: 'passo-vento', name: 'Passo do Vento', description: 'Velocidade + esquiva', type: 'buff', cost: 4, duration: 2, target: 'self', effects: { special: 'evasion_up' } }] },
     { level: 7, skills: [{ id: 'palma-sagrada', name: 'Palma Sagrada', description: 'Dano de luz', type: 'attack', cost: 5, basePower: 18, element: 'light', target: 'single' }] },
-    { level: 10, skills: [{ id: 'punho-dragao', name: 'Punho do Dragão', description: 'Ultimate físico poderoso', type: 'attack', cost: 8, basePower: 28, element: 'physical', target: 'single', cooldown: 4 }] }
+    { level: 10, skills: [{ id: 'punho-dragao', name: 'Punho do Dragão', description: 'Ultimate físico poderoso', type: 'attack', cost: 8, basePower: 28, element: 'physical', target: 'single', cooldown: 4 }] },
+    { level: 12, skills: [{ id: 'muralha-chi', name: 'Muralha de Chi', description: 'Escudo que absorve dano', type: 'buff', cost: 5, duration: 2, target: 'self', effects: { special: 'shield_medium' } }] },
+    { level: 15, skills: [{ id: 'sequencia-lotus', name: 'Sequência de Lótus', description: 'Combo multi-golpes', type: 'attack', cost: 7, basePower: 22, element: 'physical', target: 'single', effects: { special: 'multi_hit' } }] },
+    { level: 18, skills: [{ id: 'serenidade-plena', name: 'Serenidade Plena', description: 'Reduz cooldowns e regenera', type: 'support', cost: 6, target: 'self', effects: { special: 'reduce_cd_regen' } }] },
+    { level: 20, skills: [{ id: 'ascese', name: 'Ascese', description: 'Ultimate: grande buff pessoal', type: 'buff', cost: 9, duration: 3, target: 'self', effects: { buff: { attribute: 'constituicao', percentage: 30 } } }] }
   ],
   assassino: [
     { level: 3, skills: [{ id: 'veneno-mortal', name: 'Veneno Mortal', description: 'Dano contínuo', type: 'buff', cost: 4, duration: 3, target: 'single', effects: { debuff: { special: 'poison_dot' } } }] },
     { level: 5, skills: [{ id: 'surpresa-fatal', name: 'Surpresa Fatal', description: 'Crítico garantido próximo ataque', type: 'buff', cost: 4, duration: 1, target: 'self', effects: { special: 'guaranteed_crit' } }] },
     { level: 7, skills: [{ id: 'sombra-replicante', name: 'Sombra Replicante', description: 'Cria clone que distrai', type: 'support', cost: 5, target: 'ally', effects: { special: 'decoy_clone' } }] },
-    { level: 10, skills: [{ id: 'execucao-perfeita', name: 'Execução Perfeita', description: 'Ultimate: alto dano single', type: 'attack', cost: 8, basePower: 30, element: 'dark', target: 'single', cooldown: 4 }] }
+    { level: 10, skills: [{ id: 'execucao-perfeita', name: 'Execução Perfeita', description: 'Ultimate: alto dano single', type: 'attack', cost: 8, basePower: 30, element: 'dark', target: 'single', cooldown: 4 }] },
+    { level: 12, skills: [{ id: 'lâmina-silenciosa', name: 'Lâmina Silenciosa', description: 'Ataque com bleed', type: 'attack', cost: 6, basePower: 20, element: 'physical', target: 'single', effects: { debuff: { special: 'bleed_dot' } } }] },
+    { level: 15, skills: [{ id: 'passo-sombra', name: 'Passo da Sombra', description: 'Teleporta e ganha dano bônus', type: 'support', cost: 5, target: 'self', effects: { special: 'shadow_step' } }] },
+    { level: 18, skills: [{ id: 'cadeia-golpes', name: 'Cadeia de Golpes', description: 'Combo com chance de reset', type: 'attack', cost: 7, basePower: 24, element: 'physical', target: 'single', effects: { special: 'combo_reset_chance' } }] },
+    { level: 20, skills: [{ id: 'matança-precisa', name: 'Matança Precisa', description: 'Ultimate final: crítico massivo', type: 'attack', cost: 9, basePower: 36, element: 'dark', target: 'single', cooldown: 5 }] }
   ],
   paladino: [
     { level: 3, skills: [{ id: 'martelo-divino', name: 'Martelo Divino', description: 'Dano + stun', type: 'attack', cost: 6, basePower: 18, element: 'light', target: 'single', effects: { special: 'stun_1' } }] },
     { level: 5, skills: [{ id: 'lagrima-luz', name: 'Lágrima da Luz', description: 'Cura média', type: 'support', cost: 5, target: 'ally', effects: { heal: 20 } }] },
     { level: 7, skills: [{ id: 'protecao-guardiao', name: 'Proteção do Guardião', description: 'Escudo forte', type: 'buff', cost: 5, duration: 2, target: 'ally', effects: { special: 'strong_shield' } }] },
-    { level: 10, skills: [{ id: 'ascensao-divina', name: 'Ascensão Divina', description: 'Ultimate sagrado', type: 'attack', cost: 8, basePower: 28, element: 'light', target: 'aoe', cooldown: 4 }] }
+    { level: 10, skills: [{ id: 'ascensao-divina', name: 'Ascensão Divina', description: 'Ultimate sagrado', type: 'attack', cost: 8, basePower: 28, element: 'light', target: 'aoe', cooldown: 4 }] },
+    { level: 12, skills: [{ id: 'benção-paladina', name: 'Benção Paladina', description: 'Buff de defesa forte', type: 'buff', cost: 6, duration: 2, target: 'ally', effects: { buff: { attribute: 'constituicao', percentage: 25 } } }] },
+    { level: 15, skills: [{ id: 'julgar', name: 'Julgar', description: 'Ataque que reduz dano inimigo', type: 'attack', cost: 6, basePower: 22, element: 'light', target: 'single', effects: { debuff: { special: 'damage_down' } } }] },
+    { level: 18, skills: [{ id: 'voto-guardião', name: 'Voto do Guardião', description: 'Protege aliado com escudo', type: 'support', cost: 6, target: 'ally', effects: { special: 'link_shield' } }] },
+    { level: 20, skills: [{ id: 'luz-redentora', name: 'Luz Redentora', description: 'Ultimate final: cura + dano sagrado', type: 'attack', cost: 10, basePower: 34, element: 'light', target: 'aoe', cooldown: 5 }] }
   ],
   clerigo: [
     { level: 3, skills: [{ id: 'aura-fe', name: 'Aura de Fé', description: 'Buff de grupo', type: 'buff', cost: 4, duration: 2, target: 'ally', effects: { special: 'group_buff' } }] },
     { level: 5, skills: [{ id: 'bencao-ancestrais', name: 'Benção dos Ancestrais', description: 'Aumenta XP ganho', type: 'support', cost: 4, target: 'ally', effects: { special: 'xp_bonus_10' } }] },
     { level: 7, skills: [{ id: 'escudo-purificador', name: 'Escudo Purificador', description: 'Remove debuffs', type: 'support', cost: 4, target: 'ally', effects: { special: 'cleanse' } }] },
-    { level: 10, skills: [{ id: 'milagre-supremo', name: 'Milagre Supremo', description: 'Ultimate: grande cura', type: 'support', cost: 8, target: 'ally', effects: { heal: 40 } }] }
+    { level: 10, skills: [{ id: 'milagre-supremo', name: 'Milagre Supremo', description: 'Ultimate: grande cura', type: 'support', cost: 8, target: 'ally', effects: { heal: 40 } }] },
+    { level: 12, skills: [{ id: 'prece-salvação', name: 'Prece da Salvação', description: 'Ressuscita aliado caído (limitações)', type: 'support', cost: 9, target: 'ally', effects: { special: 'revive_weak' } }] },
+    { level: 15, skills: [{ id: 'luz-serena', name: 'Luz Serena', description: 'Cura em área moderada', type: 'support', cost: 6, target: 'aoe', effects: { heal: 18 } }] },
+    { level: 18, skills: [{ id: 'selo-purificação', name: 'Selo de Purificação', description: 'Remove debuffs em área', type: 'support', cost: 6, target: 'aoe', effects: { special: 'mass_cleanse' } }] },
+    { level: 20, skills: [{ id: 'milagre-apoteose', name: 'Milagre da Apoteose', description: 'Ultimate final: grande cura + buff', type: 'support', cost: 10, target: 'aoe', effects: { heal: 45, buff: { attribute: 'sabedoria', percentage: 20 } } }] }
   ],
   barbaro: [
     { level: 3, skills: [{ id: 'furia-totemica', name: 'Fúria Totêmica', description: 'Aumenta dano em área', type: 'buff', cost: 5, duration: 2, target: 'self', effects: { special: 'aoe_damage_up' } }] },
     { level: 5, skills: [{ id: 'sangue-berserker', name: 'Sangue do Berserker', description: 'Aumenta crit + dodge', type: 'buff', cost: 4, duration: 2, target: 'self', effects: { special: 'crit_dodge_up' } }] },
     { level: 7, skills: [{ id: 'cortar-esmagar', name: 'Cortar e Esmagar', description: 'Ataque em área', type: 'attack', cost: 6, basePower: 20, element: 'physical', target: 'aoe' }] },
-    { level: 10, skills: [{ id: 'ira-tita', name: 'Ira do Titã', description: 'Ultimate físico', type: 'attack', cost: 8, basePower: 30, element: 'physical', target: 'aoe', cooldown: 4 }] }
+    { level: 10, skills: [{ id: 'ira-tita', name: 'Ira do Titã', description: 'Ultimate físico', type: 'attack', cost: 8, basePower: 30, element: 'physical', target: 'aoe', cooldown: 4 }] },
+    { level: 12, skills: [{ id: 'rasgar-armadura', name: 'Rasgar Armadura', description: 'Reduz armadura inimiga', type: 'attack', cost: 6, basePower: 22, element: 'physical', target: 'single', effects: { debuff: { special: 'armor_break' } } }] },
+    { level: 15, skills: [{ id: 'grito-intimidador', name: 'Grito Intimidador', description: 'Debuff de dano em área', type: 'buff', cost: 5, duration: 2, target: 'aoe', effects: { debuff: { special: 'damage_down' } } }] },
+    { level: 18, skills: [{ id: 'frenesi-sangrento', name: 'Frenesi Sangrento', description: 'Buff de dano com risco', type: 'buff', cost: 6, duration: 2, target: 'self', effects: { special: 'damage_up_taken_up' } }] },
+    { level: 20, skills: [{ id: 'terremoto-selvagem', name: 'Terremoto Selvagem', description: 'Ultimate final: área muito forte', type: 'attack', cost: 10, basePower: 36, element: 'earth', target: 'aoe', cooldown: 5 }] }
   ],
   lanceiro: [
     { level: 3, skills: [{ id: 'lanca-elemental', name: 'Lança Elemental', description: 'Ataque elemental', type: 'attack', cost: 5, basePower: 18, element: 'thunder', target: 'single' }] },
     { level: 5, skills: [{ id: 'perfuracao-tripla', name: 'Perfuração Tripla', description: 'Três golpes rápidos', type: 'attack', cost: 6, basePower: 8, element: 'physical', target: 'single', effects: { special: 'triple_strike' } }] },
     { level: 7, skills: [{ id: 'posicionamento-perfeito', name: 'Posicionamento Perfeito', description: 'Buff de precisão', type: 'buff', cost: 4, duration: 2, target: 'self', effects: { special: 'precision_up' } }] },
-    { level: 10, skills: [{ id: 'impacto-celeste', name: 'Impacto Celeste', description: 'Ultimate de salto', type: 'attack', cost: 8, basePower: 28, element: 'physical', target: 'aoe', cooldown: 4 }] }
+    { level: 10, skills: [{ id: 'impacto-celeste', name: 'Impacto Celeste', description: 'Ultimate de salto', type: 'attack', cost: 8, basePower: 28, element: 'physical', target: 'aoe', cooldown: 4 }] },
+    { level: 12, skills: [{ id: 'investida-raio', name: 'Investida do Raio', description: 'Ataque de trovão veloz', type: 'attack', cost: 6, basePower: 22, element: 'thunder', target: 'single' }] },
+    { level: 15, skills: [{ id: 'postura-fortificada', name: 'Postura Fortificada', description: 'Grande defesa temporária', type: 'buff', cost: 6, duration: 2, target: 'self', effects: { buff: { attribute: 'constituicao', percentage: 25 } } }] },
+    { level: 18, skills: [{ id: 'lança-eterna', name: 'Lança Etérea', description: 'Ataque que atravessa múltiplos', type: 'attack', cost: 7, basePower: 24, element: 'physical', target: 'aoe' }] },
+    { level: 20, skills: [{ id: 'juízo-do-céu', name: 'Juízo do Céu', description: 'Ultimate final: trovão em área', type: 'attack', cost: 10, basePower: 35, element: 'thunder', target: 'aoe', cooldown: 5 }] }
   ],
   druida: [
     { level: 3, skills: [{ id: 'transformacao-parcial', name: 'Transformação Parcial', description: 'Buff de força', type: 'buff', cost: 4, duration: 2, target: 'self', effects: { buff: { attribute: 'forca', percentage: 20 } } }] },
     { level: 5, skills: [{ id: 'erupcao-espinhos', name: 'Erupção de Espinhos', description: 'Ataque em área de terra', type: 'attack', cost: 5, basePower: 18, element: 'earth', target: 'aoe' }] },
     { level: 7, skills: [{ id: 'semente-vida', name: 'Semente de Vida', description: 'Cura contínua', type: 'support', cost: 5, duration: 3, target: 'ally', effects: { special: 'heal_over_time' } }] },
-    { level: 10, skills: [{ id: 'forma-primordial', name: 'Forma Primordial', description: 'Ultimate de transformação', type: 'buff', cost: 8, duration: 3, target: 'self', effects: { special: 'primal_form' } }] }
+    { level: 10, skills: [{ id: 'forma-primordial', name: 'Forma Primordial', description: 'Ultimate de transformação', type: 'buff', cost: 8, duration: 3, target: 'self', effects: { special: 'primal_form' } }] },
+    { level: 12, skills: [{ id: 'pele-casca', name: 'Pele de Casca', description: 'Buff de armadura natural', type: 'buff', cost: 5, duration: 2, target: 'self', effects: { special: 'natural_armor' } }] },
+    { level: 15, skills: [{ id: 'chamado-ancião', name: 'Chamado do Ancião', description: 'Invoca entidade poderosa', type: 'support', cost: 7, target: 'ally', effects: { special: 'summon_ancient' } }] },
+    { level: 18, skills: [{ id: 'tempestade-folhas', name: 'Tempestade de Folhas', description: 'Ataque em área de natureza', type: 'attack', cost: 7, basePower: 24, element: 'earth', target: 'aoe' }] },
+    { level: 20, skills: [{ id: 'equilibrio-primordial', name: 'Equilíbrio Primordial', description: 'Ultimate final: cura + controle', type: 'support', cost: 10, target: 'aoe', effects: { heal: 30, debuff: { special: 'root' } } }] }
   ],
   feiticeiro: [
     { level: 3, skills: [{ id: 'explosao-abissal', name: 'Explosão Abissal', description: 'Ataque de trevas em área', type: 'attack', cost: 6, basePower: 18, element: 'dark', target: 'aoe' }] },
     { level: 5, skills: [{ id: 'servos-escuridao', name: 'Servos da Escuridão', description: 'Invoca servos', type: 'support', cost: 6, target: 'ally', effects: { special: 'summon_servants' } }] },
     { level: 7, skills: [{ id: 'marca-negra', name: 'Marca Negra', description: 'Debuff forte', type: 'buff', cost: 5, duration: 2, target: 'single', effects: { debuff: { special: 'strong_debuff' } } }] },
-    { level: 10, skills: [{ id: 'circulo-profano', name: 'Círculo Profano', description: 'Ultimate de trevas', type: 'attack', cost: 8, basePower: 30, element: 'dark', target: 'aoe', cooldown: 4 }] }
+    { level: 10, skills: [{ id: 'circulo-profano', name: 'Círculo Profano', description: 'Ultimate de trevas', type: 'attack', cost: 8, basePower: 30, element: 'dark', target: 'aoe', cooldown: 4 }] },
+    { level: 12, skills: [{ id: 'correntes-umbras', name: 'Correntes Umbras', description: 'Controle em área', type: 'buff', cost: 6, duration: 1, target: 'aoe', effects: { debuff: { special: 'bind_area' } } }] },
+    { level: 15, skills: [{ id: 'pacto-sombra', name: 'Pacto da Sombra', description: 'Buff de poder com custo', type: 'buff', cost: 6, duration: 2, target: 'self', effects: { special: 'power_up_health_down' } }] },
+    { level: 18, skills: [{ id: 'colheita-almas', name: 'Colheita de Almas', description: 'Roubo de vida em área', type: 'attack', cost: 8, basePower: 26, element: 'dark', target: 'aoe' }] },
+    { level: 20, skills: [{ id: 'apoteose-profana', name: 'Apoteose Profana', description: 'Ultimate final: trevas supremas', type: 'attack', cost: 10, basePower: 38, element: 'dark', target: 'aoe', cooldown: 5 }] }
   ]
 };
 

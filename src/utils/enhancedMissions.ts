@@ -286,9 +286,9 @@ export class EnhancedMissionGenerator {
   private calculateStaminaCost(difficulty: string): number {
     switch (difficulty) {
       case 'facil': return 20;
-      case 'medio': return 35;
-      case 'dificil': return 50;
-      case 'epica': return 70;
+      case 'medio': return 40;
+      case 'dificil': return 60;
+      case 'epica': return 80;
       default: return 30;
     }
   }
@@ -357,16 +357,16 @@ export class EnhancedMissionGenerator {
       throw new Error('Escolha não encontrada');
     }
 
-    // Verificar stamina
+    // Verificar fadiga
     if (!worldStateManager.canAcceptQuest(hero, mission.staminaCost || 30)) {
       return {
         success: false,
-        results: { error: 'Stamina insuficiente' },
-        narrative: 'Você está muito cansado para aceitar esta missão. Descanse um pouco.'
+        results: { error: 'Fadiga alta' },
+        narrative: 'Sua fadiga está alta para aceitar esta missão. Descanse um pouco.'
       };
     }
 
-    // Consumir stamina
+    // Consumir fadiga
     worldStateManager.consumeStamina(hero, mission.staminaCost || 30);
 
     // Processar escolha

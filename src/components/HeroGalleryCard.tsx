@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Hero, HeroClass, Element } from '../types/hero';
+import React, { useMemo, useState, useEffect } from 'react';
+import type { Hero, HeroClass, Element } from '../types/hero';
 import { getRankIcon } from '../styles/medievalTheme';
 import { useHeroStore } from '../store/heroStore';
 import { useGameSettingsStore } from '../store/gameSettingsStore';
@@ -18,23 +18,31 @@ interface HeroGalleryCardProps {
   index?: number;
 }
 
-// Mapeamento de classes para ícones
-const CLASS_ICONS: Record<HeroClass, React.ReactNode> = {
+// Mapeamento de classes para ícones (parcial — fallback aplicado no uso)
+const CLASS_ICONS: Partial<Record<HeroClass, React.ReactNode>> = {
   guerreiro: <Sword className="w-4 h-4" />,
   mago: <Wand2 className="w-4 h-4" />,
   ladino: <UserX className="w-4 h-4" />,
   clerigo: <Heart className="w-4 h-4" />,
   patrulheiro: <Target className="w-4 h-4" />,
   paladino: <Crown className="w-4 h-4" />,
-  arqueiro: <Target className="w-4 h-4" />
+  arqueiro: <Target className="w-4 h-4" />,
+  bardo: <Star className="w-4 h-4" />,
+  monge: <Heart className="w-4 h-4" />,
+  assassino: <UserX className="w-4 h-4" />,
+  barbaro: <Sword className="w-4 h-4" />,
+  lanceiro: <Sword className="w-4 h-4" />,
+  druida: <Heart className="w-4 h-4" />,
+  feiticeiro: <Wand2 className="w-4 h-4" />
 };
 
 // Gradientes baseados nos elementos
 const ELEMENT_GRADIENTS: Record<Element, string> = {
   fire: 'from-red-900/20 via-orange-800/30 to-yellow-700/20',
-  ice: 'from-blue-900/20 via-cyan-800/30 to-blue-700/20',
+  water: 'from-blue-900/20 via-cyan-800/30 to-blue-700/20',
+  earth: 'from-green-900/20 via-stone-800/30 to-green-700/20',
+  air: 'from-slate-900/20 via-sky-800/30 to-slate-700/20',
   thunder: 'from-purple-900/20 via-yellow-800/30 to-blue-700/20',
-  earth: 'from-green-900/20 via-brown-800/30 to-green-700/20',
   light: 'from-yellow-900/20 via-white/30 to-yellow-700/20',
   dark: 'from-purple-900/20 via-gray-800/30 to-black/20',
   physical: 'from-gray-900/20 via-slate-800/30 to-gray-700/20'
@@ -43,9 +51,10 @@ const ELEMENT_GRADIENTS: Record<Element, string> = {
 // Cores dos elementos para bordas e acentos
 const ELEMENT_COLORS: Record<Element, string> = {
   fire: 'border-red-500/50 shadow-red-500/20',
-  ice: 'border-blue-500/50 shadow-blue-500/20',
-  thunder: 'border-yellow-500/50 shadow-yellow-500/20',
+  water: 'border-blue-500/50 shadow-blue-500/20',
   earth: 'border-green-500/50 shadow-green-500/20',
+  air: 'border-sky-500/50 shadow-sky-500/20',
+  thunder: 'border-yellow-500/50 shadow-yellow-500/20',
   light: 'border-yellow-400/50 shadow-yellow-400/20',
   dark: 'border-purple-500/50 shadow-purple-500/20',
   physical: 'border-gray-500/50 shadow-gray-500/20'
@@ -63,7 +72,7 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const { selectHero, getSelectedHero } = useHeroStore();
+  const { selectHero, getSelectedHero, updateHero } = useHeroStore();
   const selectedHero = getSelectedHero();
   const isNPC = hero.origin === 'npc';
   const perf = useGameSettingsStore(s => ({ rm: s.reducedMotionEnabled, sd: s.saveDataEnabled, net: s.networkEffectiveType }));
@@ -132,6 +141,34 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
     } catch {}
   };
 
+  // Fallback: se a imagem do Pollinations falhar, tenta gerar via /api/gerar-imagem com o mesmo prompt
+  useEffect(() => {
+    if (!imageError) return;
+    (async () => {
+      try {
+        const raw = hero.image || '';
+        let prompt = '';
+        if (raw.includes('image.pollinations.ai/prompt/')) {
+          try { prompt = decodeURIComponent(raw.split('image.pollinations.ai/prompt/')[1].split('?')[0] || ''); } catch {}
+        } else if (raw.includes('/api/pollinations-image?prompt=')) {
+          try { const q = new URL(raw, window.location.origin); prompt = decodeURIComponent(q.searchParams.get('prompt') || ''); } catch {}
+        }
+        if (!prompt) {
+          const genderTag = (hero as any).gender === 'feminino' ? 'female' : 'male';
+          prompt = `${hero.name || 'Hero'}, ${genderTag} ${hero.race} ${hero.class}, epic fantasy portrait, detailed, studio lighting`;
+        }
+        const resp = await fetch('/api/gerar-imagem', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
+        if (resp.ok) {
+          const data = await resp.json();
+          const img = data?.imagem || '';
+          if (img) updateHero(hero.id, { image: img });
+        }
+      } catch {}
+    })();
+  }, [imageError]);
+
+  
+
   const imageSrcSet = useMemo(() => {
     try {
       const raw = hero.image || '';
@@ -158,29 +195,7 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
     } catch { return undefined as any; }
   }, [hero.image]);
 
-  const generateAIPrompt = () => {
-    const classPrompts = {
-      guerreiro: 'heroic warrior with detailed armor',
-      mago: 'wise sorcerer with mystical robes',
-      ladino: 'stealthy rogue with dark clothing',
-      clerigo: 'holy cleric with sacred vestments',
-      patrulheiro: 'skilled ranger with nature-themed gear',
-      paladino: 'noble paladin with shining armor',
-      arqueiro: 'agile archer with elegant bow'
-    };
-
-    const elementPrompts = {
-      fire: 'surrounded by flames and ember effects, warm orange lighting',
-      ice: 'with frost and ice crystals, cool blue atmosphere',
-      thunder: 'with lightning and electric energy, dynamic blue-yellow glow',
-      earth: 'with stone and nature elements, earthy brown-green tones',
-      light: 'bathed in radiant holy light, golden divine atmosphere',
-      dark: 'shrouded in shadows and dark energy, purple-black aura',
-      physical: 'with metallic armor and weapons, neutral lighting'
-    };
-
-    return `Medieval fantasy hero card design, half-body portrait of a ${classPrompts[hero.class]} ${elementPrompts[hero.element]}, inside a golden runic frame, parchment background with soft magical effects, elegant minimal UI, cinematic lighting, digital art, immersive and atmospheric style.`;
-  };
+  
 
   return (
     <div
@@ -309,7 +324,7 @@ export const HeroGalleryCard: React.FC<HeroGalleryCardProps> = ({
             {/* Classe e Elemento */}
             <div className="flex items-center justify-between text-sm text-gray-300">
               <div className="flex items-center space-x-1 min-w-0 flex-1">
-                {CLASS_ICONS[hero.class]}
+                {CLASS_ICONS[hero.class] ?? <Sword className="w-4 h-4" />}
                 <span className="capitalize truncate">{hero.class}</span>
               </div>
               <div className="flex items-center space-x-1 ml-2">

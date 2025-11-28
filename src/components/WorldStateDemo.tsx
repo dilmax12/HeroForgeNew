@@ -50,7 +50,7 @@ export const WorldStateDemo: React.FC = () => {
       // Atualizar herói
       updateHero(selectedHero.id, { 
         worldState: selectedHero.worldState,
-        stamina: selectedHero.stamina 
+        progression: selectedHero.progression 
       });
     }
 

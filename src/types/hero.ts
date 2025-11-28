@@ -583,6 +583,7 @@ export interface Equipment {
 export interface Hero {
   id: string;
   name: string;
+  gender?: 'masculino' | 'feminino';
   race: HeroRace;
   class: HeroClass;
   level: number;
@@ -758,6 +759,7 @@ export interface HeroCreationData {
   name: string;
   race: HeroRace;
   class: HeroClass;
+  gender?: 'masculino' | 'feminino';
   attributes: HeroAttributes;
   element: Element;
   skills: Skill[];

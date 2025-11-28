@@ -24,6 +24,7 @@ export default function AdminDashboard() {
   const sellItem = useHeroStore(s => s.sellItem);
   const refreshQuests = useHeroStore(s => s.refreshQuests);
   const selectedHero = getSelectedHero();
+  const seedRandomHatred = useHeroStore(s => (s as any).seedRandomHatred);
 
   // Settings
   const settings = useGameSettingsStore(s => ({
@@ -796,7 +797,7 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
             />
           </div>
           <div className="bg-white p-4 rounded-lg border border-gray-200 min-h-[96px]">
-            <label className="block text-sm text-gray-600 mb-2">Regeneração de Stamina (pontos por minuto)</label>
+            <label className="block text-sm text-gray-600 mb-2">Fadiga é gerida por descanso</label>
             <input
               type="number"
               min={0}
@@ -832,7 +833,7 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
             <input type="number" step={0.1} className="w-full bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" value={Number(settings.restBuffHpMpMultiplier ?? 1.5)} onChange={(e) => updateSettings({ restBuffHpMpMultiplier: Number(e.target.value) })} />
           </div>
           <div className="bg-white p-4 rounded-lg border border-gray-200 min-h-[96px]">
-            <label className="block text-sm text-gray-600 mb-2">Multiplicador de descanso (Stamina)</label>
+            <label className="block text-sm text-gray-600 mb-2">Multiplicador de descanso (HP/MP)</label>
             <input type="number" step={0.1} className="w-full bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" value={Number(settings.restBuffStaminaMultiplier ?? 2)} onChange={(e) => updateSettings({ restBuffStaminaMultiplier: Number(e.target.value) })} />
           </div>
           <div className="bg-white p-4 rounded-lg border border-gray-200 min-h-[96px]">
@@ -866,9 +867,9 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
             <ul className="mt-2 text-sm text-gray-900">
               <li>HP: {cycles.hpToFull} min</li>
               <li>MP: {cycles.mpToFull} min</li>
-              <li>Stamina: {cycles.stToFullBase} min</li>
+              <li>Fadiga: sem regeneração automática</li>
             </ul>
-            <div className="text-xs text-gray-500 mt-2">Recuperação em 15 min de cooldown de masmorra: +{cycles.stRecoveryInDungeon15} stamina</div>
+            <div className="text-xs text-gray-500 mt-2">Dica: gerencie fadiga com descanso adequado</div>
           </div>
           <div className="bg-white p-4 rounded-lg border border-gray-200">
             <div className="text-sm text-gray-600">Cooldowns alvo</div>
@@ -1205,8 +1206,9 @@ Falha na ${dungeonName}: ${(dungeonFailRate * 100).toFixed(1)}%`;
             <input type="number" defaultValue={npcSettings.npcDuelLevelDiffMax} onChange={(e) => setTmpNpc({ ...tmpNpc, npcDuelLevelDiffMax: Number(e.target.value) })} className="w-full bg-white text-gray-900 border border-gray-300 rounded px-2 py-1" />
           </div>
         </div>
-        <div className="mt-3">
+        <div className="mt-3 flex gap-2">
           <button onClick={applyNpcSettings} className="px-3 py-2 bg-white text-indigo-700 border border-indigo-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">Aplicar ajustes</button>
+          <button onClick={() => seedRandomHatred(4)} className="px-3 py-2 bg-white text-red-700 border border-red-300 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500">Semear ódio aleatório</button>
         </div>
       </div>
 

@@ -71,3 +71,57 @@ export async function listHeroesByUser(userId: string): Promise<StoredHero[]> {
   }
   return (Array.isArray(data) ? data : []) as StoredHero[];
 }
+
+export async function getHeroStatus(heroId: string): Promise<{ id: string; stamina: number; maxStamina: number; lastRestAt: number; dayCounter: number; actionsAvailable: string[] }> {
+  const res = await fetch(`/api/hero/${encodeURIComponent(heroId)}/status`, { method: 'GET' });
+  if (!res.ok) throw new Error('status_error');
+  return res.json();
+}
+
+export async function canPerformAction(heroId: string, actionType: string): Promise<{ ok: boolean; reason?: string; cost: number; stamina: number }> {
+  const res = await fetch(`/api/hero/${encodeURIComponent(heroId)}/can-perform`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ actionType }) });
+  if (!res.ok) throw new Error('can_perform_error');
+  return res.json();
+}
+
+export async function performAction(heroId: string, actionType: string, payload: any = {}): Promise<{ ok: boolean; newStamina: number; actionId: string }> {
+  const res = await fetch(`/api/hero/${encodeURIComponent(heroId)}/perform-action`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ actionType, payload }) });
+  if (!res.ok) throw new Error('perform_error');
+  return res.json();
+}
+
+export async function restHero(heroId: string, restType: 'guild' | 'inn' = 'guild'): Promise<{ ok: boolean; stamina: number; dayCounter: number; summary: any }> {
+  const res = await fetch(`/api/hero/${encodeURIComponent(heroId)}/rest`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ restType }) });
+  if (!res.ok) throw new Error('rest_error');
+  return res.json();
+}
+
+export async function restItem(heroId: string, itemId: string): Promise<{ ok: boolean; stamina: number }> {
+  const res = await fetch(`/api/hero/${encodeURIComponent(heroId)}/rest-item`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId }) });
+  if (!res.ok) throw new Error('rest_item_error');
+  return res.json();
+}
+
+export async function consumeInnXpBuff(heroId: string): Promise<{ percent: number; remaining: number }> {
+  const res = await fetch(`/api/hero/${encodeURIComponent(heroId)}/consume-inn-xp-buff`, { method: 'POST' });
+  if (!res.ok) throw new Error('inn_buff_error');
+  return res.json();
+}
+
+export async function performActionUnified(heroId: string, actionKey: string, payload: any = {}): Promise<{ ok: boolean; hero: any; actionId: string }> {
+  const res = await fetch(`/api/hero/${encodeURIComponent(heroId)}/action`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ actionKey, payload }) });
+  if (!res.ok) throw new Error('perform_unified_error');
+  return res.json();
+}
+
+export async function getDailySummary(heroId: string): Promise<any> {
+  const res = await fetch(`/api/hero/${encodeURIComponent(heroId)}/daily-summary`, { method: 'GET' });
+  if (!res.ok) throw new Error('daily_summary_error');
+  return res.json();
+}
+
+export async function listGuildBoard(heroId: string): Promise<{ quests: any[] }> {
+  const res = await fetch(`/api/guild/board?heroId=${encodeURIComponent(heroId)}`, { method: 'GET' });
+  if (!res.ok) throw new Error('guild_board_error');
+  return res.json();
+}
